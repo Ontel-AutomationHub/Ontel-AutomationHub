@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Automation Hub</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 1400px;
+            width: 100%;
+        }
+
+        .header {
+            background: white;
+            padding: 50px 40px;
+            border-radius: 30px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 3.5em;
+            color: #333;
+            margin-bottom: 15px;
+            font-weight: 800;
+        }
+
+        .header p {
+            font-size: 1.3em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .version-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-size: 0.95em;
+            margin-top: 15px;
+            font-weight: 600;
+        }
+
+        .categories-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 40px;
+            margin-bottom: 30px;
+        }
+
+        .category-card {
+            background: white;
+            border-radius: 30px;
+            padding: 0;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .category-card:hover {
+            transform: translateY(-15px) scale(1.02);
+            box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+        }
+
+        .category-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .category-card:hover::before {
+            opacity: 1;
+        }
+
+        .logo-container {
+            background: #000;
+            padding: 60px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 250px;
+        }
+
+        .logo-container img {
+            max-width: 100%;
+            height: auto;
+            max-height: 150px;
+            object-fit: contain;
+        }
+
+        .card-content {
+            padding: 40px;
+            text-align: center;
+        }
+
+        .category-title {
+            font-size: 2em;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .category-description {
+            font-size: 1.1em;
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .tools-count {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 25px;
+            display: inline-block;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .click-hint {
+            margin-top: 20px;
+            color: #999;
+            font-size: 0.9em;
+            font-style: italic;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            padding: 30px 20px;
+            margin-top: 20px;
+        }
+
+        .footer p {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 1100px) {
+            .categories-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Pulse animation for attracting clicks */
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            }
+            50% {
+                box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4);
+            }
+            100% {
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            }
+        }
+
+        .category-card {
+            animation: pulse 3s infinite;
+        }
+
+        .category-card:hover {
+            animation: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 QA Automation Hub</h1>
+            <p>Your Central Command for Quality Assurance Tools</p>
+            <div class="version-badge">Version 1.0 - Updated: February 10, 2026</div>
+        </div>
+
+        <div class="categories-grid">
+            <!-- T-Mobile Card -->
+            <div class="category-card" onclick="window.location.href='tmobile.html'">
+                <div class="logo-container">
+                    <img src="images/T-Mobile.png" alt="T-Mobile Logo">
+                </div>
+                <div class="card-content">
+                    <h2 class="category-title">T-Mobile Automations</h2>
+                    <p class="category-description">
+                        Comprehensive tools for T-Mobile project reviews, quality checks, and automated reporting.
+                    </p>
+                    <div class="tools-count">5 Tools Available</div>
+                    <p class="click-hint">👆 Click to explore T-Mobile tools</p>
+                </div>
+            </div>
+
+            <!-- FTTH Card -->
+            <div class="category-card" onclick="window.location.href='ftth.html'">
+                <div class="logo-container">
+                    <img src="images/FTTH.png" alt="FTTH Logo">
+                </div>
+                <div class="card-content">
+                    <h2 class="category-title">FTTH Automations</h2>
+                    <p class="category-description">
+                        Fiber to the Home quality assurance tools for installation reviews and compliance.
+                    </p>
+                    <div class="tools-count">4 Tools Available</div>
+                    <p class="click-hint">👆 Click to explore FTTH tools</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🔧 Managed by QA Team | Auto-updates when new tools are added</p>
+            <p style="margin-top: 10px; font-size: 0.95em; opacity: 0.9;">
+                Last sync: <span id="lastSync"></span>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Display last sync time
+        document.getElementById('lastSync').textContent = new Date().toLocaleString();
+
+        // Auto-refresh sync time every 5 minutes
+        setInterval(function() {
+            document.getElementById('lastSync').textContent = new Date().toLocaleString();
+        }, 300000);
+    </script>
+</body>
+</html>
