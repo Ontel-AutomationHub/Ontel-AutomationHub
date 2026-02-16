@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FTTH Automations - QA Hub</title>
+    <title>Documents & Testing Tools - FTTH QA</title>
     <style>
         * {
             margin: 0;
@@ -45,7 +45,7 @@
         }
 
         .header h1 {
-            font-size: 2.5em;
+            font-size: 2.2em;
             color: #0077B6;
             margin-bottom: 5px;
         }
@@ -56,7 +56,7 @@
         }
 
         .back-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #00B4D8 0%, #0077B6 100%);
             color: white;
             border: none;
             padding: 12px 30px;
@@ -71,7 +71,7 @@
 
         .back-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            box-shadow: 0 5px 20px rgba(0,180,216,0.3);
         }
 
         .tools-grid {
@@ -113,7 +113,7 @@
         }
 
         .tool-title {
-            font-size: 1.5em;
+            font-size: 1.4em;
             font-weight: 700;
             color: #333;
             margin-bottom: 10px;
@@ -122,8 +122,25 @@
         .tool-description {
             color: #666;
             line-height: 1.6;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             font-size: 0.95em;
+        }
+
+        .tool-usage {
+            background: #f0f9ff;
+            border-left: 3px solid #0077B6;
+            padding: 10px 15px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+            font-size: 0.85em;
+            color: #0077B6;
+            line-height: 1.5;
+        }
+
+        .tool-usage strong {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 0.9em;
         }
 
         .tool-status {
@@ -137,11 +154,6 @@
         .status-active {
             background: #d4edda;
             color: #155724;
-        }
-
-        .status-coming {
-            background: #fff3cd;
-            color: #856404;
         }
 
         .launch-button {
@@ -163,9 +175,14 @@
             box-shadow: 0 5px 15px rgba(0, 180, 216, 0.3);
         }
 
-        .launch-button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+        .tool-count {
+            background: rgba(0, 119, 182, 0.1);
+            color: #0077B6;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-left: 10px;
         }
 
         .footer {
@@ -182,68 +199,33 @@
             <div class="header-left">
                 <img src="images/FTTH.png" alt="FTTH" class="logo-small">
                 <div>
-                    <h1>FTTH Automations</h1>
-                    <p>4 tools for fiber installation quality assurance &#8226; 2 Active</p>
+                    <h1>Documents & Testing Tools</h1>
+                    <p>Document automation and testing tools for FTTH workflows <span class="tool-count">1 Tool</span></p>
                 </div>
             </div>
-            <a href="index.html" class="back-button">&#8592; Back to Hub</a>
+            <a href="ftth.html" class="back-button">&#8592; Back to FTTH</a>
         </div>
 
         <div class="tools-grid">
-            <!-- Tool 1: Call-outs Tools -->
-            <div class="tool-card" onclick="window.location.href='ftth-callouts.html'">
-                <div class="tool-icon">&#128203;</div>
-                <div class="tool-title">Call-outs Tools</div>
+            <!-- Tool 1: FTTH Photo to Map -->
+            <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/eee45855-8da3-46b8-9832-ed770fcb5e8f', '_blank')">
+                <div class="tool-icon">&#128506;</div>
+                <div class="tool-title">FTTH Photo to Map</div>
                 <div class="tool-description">
-                    Generate standardized call-out reports and extract callout data from screenshots for field crew coordination.
+                    Plot FTTH installation photos on an interactive map using EXIF geolocation data for visual project documentation.
+                </div>
+                <div class="tool-usage">
+                    <strong>&#128161; How to use:</strong>
+                    Drag and drop the photos, and they will be placed on the map. Just make sure the photos have EXIF data.
                 </div>
                 <span class="tool-status status-active">Active</span>
-                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='ftth-callouts.html'">Open Tools</button>
-            </div>
-
-            <!-- Tool 2: Data Post-Fill Extractor -->
-            <div class="tool-card" onclick="launchTool('data-postfill')">
-                <div class="tool-icon">&#128269;</div>
-                <div class="tool-title">Data Post-Fill Extractor</div>
-                <div class="tool-description">
-                    Extract and compile post-installation data from completed fiber projects for final reporting.
-                </div>
-                <span class="tool-status status-coming">Coming Soon</span>
-                <button class="launch-button" disabled>Launch Tool</button>
-            </div>
-
-            <!-- Tool 3: Documents & Testing Tools -->
-            <div class="tool-card" onclick="window.location.href='ftth-docs-tools.html'">
-                <div class="tool-icon">&#128221;</div>
-                <div class="tool-title">Documents & Testing Tools</div>
-                <div class="tool-description">
-                    Document automation, photo-to-map mapping, and quality assurance tools for FTTH installations.
-                </div>
-                <span class="tool-status status-active">Active</span>
-                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='ftth-docs-tools.html'">Open Tools</button>
-            </div>
-
-            <!-- Tool 4: Review Generator -->
-            <div class="tool-card" onclick="launchTool('ftth-review-generator')">
-                <div class="tool-icon">&#9989;</div>
-                <div class="tool-title">Review Generator</div>
-                <div class="tool-description">
-                    Automated fiber installation review with intelligent analysis of OTDR results, photos, and compliance checks.
-                </div>
-                <span class="tool-status status-coming">Coming Soon</span>
-                <button class="launch-button" disabled>Launch Tool</button>
+                <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/eee45855-8da3-46b8-9832-ed770fcb5e8f', '_blank')">Launch Tool</button>
             </div>
         </div>
 
         <div class="footer">
-            <p>&#128295; FTTH Automation Tools | Managed by QA Team</p>
+            <p>&#128221; Documents & Testing Tools | FTTH QA Automation Suite</p>
         </div>
     </div>
-
-    <script>
-        function launchTool(toolId) {
-            alert('Tool "' + toolId + '" is coming soon!\n\nWe will add the actual automation here.');
-        }
-    </script>
 </body>
 </html>

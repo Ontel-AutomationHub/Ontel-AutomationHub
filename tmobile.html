@@ -183,7 +183,7 @@
                 <img src="images/T-Mobile.png" alt="T-Mobile" class="logo-small">
                 <div>
                     <h1>T-Mobile Automations</h1>
-                    <p>5 tools to streamline your QA workflow &#8226; 3 Active</p>
+                    <p>5 tools to streamline your QA workflow &#8226; 4 Active</p>
                 </div>
             </div>
             <a href="index.html" class="back-button">&#8592; Back to Hub</a>
@@ -223,15 +223,15 @@
                 <button class="launch-button" onclick="event.stopPropagation(); window.location.href='tmobile-docs-tools.html'">Open Tools</button>
             </div>
 
-            <!-- Tool 4: Review Generator -->
-            <div class="tool-card" onclick="launchTool('review-generator')">
+            <!-- Tool 4: COP Review Tools -->
+            <div class="tool-card" onclick="window.location.href='tmobile-cop-review.html'">
                 <div class="tool-icon">&#9989;</div>
-                <div class="tool-title">Review Generator</div>
+                <div class="tool-title">COP Review Tools</div>
                 <div class="tool-description">
-                    Automated review creation with intelligent analysis of project files, photos, and test results.
+                    Tools to aid COP review workflows including status tracking, summary generation, and review analysis.
                 </div>
-                <span class="tool-status status-coming">Coming Soon</span>
-                <button class="launch-button" disabled>Launch Tool</button>
+                <span class="tool-status status-active">Active</span>
+                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='tmobile-cop-review.html'">Open Tools</button>
             </div>
 
             <!-- Tool 5: Crew Certifications Database -->
@@ -253,7 +253,6 @@
 
     <script>
         function launchTool(toolId) {
-            // Placeholder for tool launch
             alert('Tool "' + toolId + '" is coming soon!\n\nWe will add the actual automation here.');
         }
     </script>
