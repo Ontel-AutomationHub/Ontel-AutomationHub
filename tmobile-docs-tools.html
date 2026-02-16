@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documents & Testing Tools - T-Mobile QA</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: linear-gradient(135deg, #E20074 0%, #FF007A 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: white; padding: 40px; border-radius: 20px; margin-bottom: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: space-between; }
+        .header-left { display: flex; align-items: center; }
+        .logo-small { height: 60px; margin-right: 25px; }
+        .header h1 { font-size: 2.2em; color: #E20074; margin-bottom: 5px; }
+        .header p { color: #666; font-size: 1.1em; }
+        .back-button { background: linear-gradient(135deg, #E20074 0%, #FF007A 100%); color: white; border: none; padding: 12px 30px; border-radius: 25px; font-size: 1em; font-weight: 600; cursor: pointer; transition: all 0.3s; text-decoration: none; display: inline-block; }
+        .back-button:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(226,0,116,0.3); }
+        .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 25px; margin-bottom: 30px; }
+        .tool-card { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: all 0.3s; cursor: pointer; position: relative; overflow: hidden; }
+        .tool-card:hover { transform: translateY(-8px); box-shadow: 0 15px 40px rgba(0,0,0,0.3); }
+        .tool-card::before { content: ''; position: absolute; top: 0; left: 0; width: 5px; height: 100%; background: linear-gradient(135deg, #E20074 0%, #FF007A 100%); }
+        .tool-icon { font-size: 3em; margin-bottom: 15px; }
+        .tool-title { font-size: 1.4em; font-weight: 700; color: #333; margin-bottom: 10px; }
+        .tool-description { color: #666; line-height: 1.6; margin-bottom: 20px; font-size: 0.95em; }
+        .tool-status { display: inline-block; padding: 8px 15px; border-radius: 20px; font-size: 0.85em; font-weight: 600; }
+        .status-active { background: #d4edda; color: #155724; }
+        .status-ongoing { background: #cce5ff; color: #004085; }
+        .launch-button { background: linear-gradient(135deg, #E20074 0%, #FF007A 100%); color: white; border: none; padding: 12px 25px; border-radius: 25px; font-size: 0.95em; font-weight: 600; cursor: pointer; margin-top: 15px; width: 100%; transition: all 0.3s; }
+        .launch-button:hover { transform: scale(1.02); box-shadow: 0 5px 15px rgba(226, 0, 116, 0.3); }
+        .tool-count { background: rgba(226, 0, 116, 0.1); color: #E20074; padding: 4px 12px; border-radius: 12px; font-size: 0.85em; font-weight: 600; margin-left: 10px; }
+        .footer { text-align: center; color: white; padding: 20px; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <img src="images/T-Mobile.png" alt="T-Mobile" class="logo-small">
+                <div>
+                    <h1>Documents & Testing Tools</h1>
+                    <p>Document automation, standards references, and test verification <span class="tool-count">3 Tools</span></p>
+                </div>
+            </div>
+            <a href="tmobile.html" class="back-button">&#8592; Back to T-Mobile</a>
+        </div>
+        <div class="tools-grid">
+            <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/1185e12e-5806-4837-9635-6fd7f53307f3', '_blank')">
+                <div class="tool-icon">&#129525;</div>
+                <div class="tool-title">NCC Cable Color Visualizer</div>
+                <div class="tool-description">Visual reference tool for NCC cable color identification. Quickly verify cable colors against standard coding for accurate installations.</div>
+                <span class="tool-status status-active">Active</span>
+                <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/1185e12e-5806-4837-9635-6fd7f53307f3', '_blank')">Launch Tool</button>
+            </div>
+            <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/f27a4538-a059-4f48-b1e9-2344f1469cb1', '_blank')">
+                <div class="tool-icon">&#127912;</div>
+                <div class="tool-title">National Color Coding Standard</div>
+                <div class="tool-description">Complete reference for the national color coding standard. Look up fiber strand colors, buffer tube sequences, and cable identification.</div>
+                <span class="tool-status status-active">Active</span>
+                <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/f27a4538-a059-4f48-b1e9-2344f1469cb1', '_blank')">Launch Tool</button>
+            </div>
+            <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/9b960095-38e4-4da0-a3a9-a38c4870e6bf', '_blank')">
+                <div class="tool-icon">&#128269;</div>
+                <div class="tool-title">Fiber OPM Test Fraud Detector</div>
+                <div class="tool-description">AI-powered analysis tool to detect potentially falsified or manipulated Optical Power Meter (OPM) test results in fiber documentation.</div>
+                <span class="tool-status status-ongoing">Ongoing</span>
+                <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/9b960095-38e4-4da0-a3a9-a38c4870e6bf', '_blank')">Launch Tool</button>
+            </div>
+        </div>
+        <div class="footer"><p>&#128221; Documents & Testing Tools | T-Mobile QA Automation Suite</p></div>
+    </div>
+</body>
+</html>
