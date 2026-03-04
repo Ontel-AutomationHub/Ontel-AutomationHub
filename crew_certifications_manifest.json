@@ -1,11 +1,11 @@
 {
-  "generated": "2026-03-04T14:21:53.403Z",
+  "generated": "2026-03-04T15:20:18.638Z",
   "folderName": "Crew Certificates",
   "stats": {
     "markets": 12,
     "companies": 73,
     "crews": 155,
-    "files": 258,
+    "files": 259,
     "expired": 45,
     "expiringSoon": 5
   },
@@ -3241,6 +3241,22 @@
       "size": 1103409,
       "createdDate": "2026-02-11",
       "modifiedDate": "2026-02-11"
+    },
+    {
+      "market": "Other Markets",
+      "company": "Vertex Unlimited",
+      "crewName": "Pavel Panasevich",
+      "fileName": "Rigger_01072027.jpeg",
+      "certificateType": "Competent Rigger Certifications",
+      "expirationDate": "01/07/2027",
+      "daysUntilExpiration": 309,
+      "expired": false,
+      "fileUrl": "https://drive.google.com/file/d/1sV9zGeMevGUZY4qk9-7X5X18gJ17xcSh/view",
+      "fileId": "1sV9zGeMevGUZY4qk9-7X5X18gJ17xcSh",
+      "mimeType": "image/jpeg",
+      "size": 26718,
+      "createdDate": "2026-03-04",
+      "modifiedDate": "2026-03-04"
     },
     {
       "market": "Other Markets",
