@@ -210,17 +210,17 @@
                 <img src="images/FTTH.png" alt="FTTH" class="logo-small">
                 <div>
                     <h1>Redline Extractor</h1>
-                    <p>Redline extraction and generation tools for field coordination <span class="tool-count">1 Tool</span></p>
+                    <p>Redline extraction and generation tools for field coordination <span class="tool-count">2 Tools</span></p>
                 </div>
             </div>
             <a href="ftth.html" class="back-button">&#8592; Back to FTTH</a>
         </div>
 
         <div class="tools-grid">
-            <!-- Tool 1: Redline Notes Generator -->
+            <!-- Tool 1: Redline Notes Generator (Image upload) -->
             <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/4e1aec5e-95e6-4916-86c4-f811d78334a9', '_blank')">
                 <div class="tool-icon">&#9986;</div>
-                <div class="tool-title">Redline Notes Generator</div>
+                <div class="tool-title">Redline Notes Generator (Image upload)</div>
                 <div class="tool-description">
                     Extract redline data from screenshots. Paste snipped images to quickly digitize redline information with editing capabilities.
                 </div>
@@ -230,6 +230,21 @@
                 </div>
                 <span class="tool-status status-active">Active</span>
                 <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/4e1aec5e-95e6-4916-86c4-f811d78334a9', '_blank')">Launch Tool</button>
+            </div>
+
+            <!-- Tool 2: Redline Notes Generator (PDF upload) -->
+            <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/3dd38e60-c86a-4fae-904d-4f9988814cd7', '_blank')">
+                <div class="tool-icon">&#128196;</div>
+                <div class="tool-title">Redline Notes Generator (PDF upload)</div>
+                <div class="tool-description">
+                    Extract redline notes directly from PDF construction drawings. Upload PDF files to automatically parse and digitize annotation data.
+                </div>
+                <div class="tool-usage">
+                    <strong>&#128161; How to use:</strong>
+                    Upload a redlined PDF construction drawing to extract FreeText annotations and generate structured redline notes.
+                </div>
+                <span class="tool-status status-active">Active</span>
+                <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/3dd38e60-c86a-4fae-904d-4f9988814cd7', '_blank')">Launch Tool</button>
             </div>
         </div>
 
