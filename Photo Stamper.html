@@ -1,0 +1,2574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EXIF Photo Stamper</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=Roboto+Mono:wght@400;700&family=Share+Tech+Mono&family=IBM+Plex+Mono&family=Oswald:wght@400;600&family=Anton&family=Bebas+Neue&family=Rajdhani:wght@500;700&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #e0e0e0; height: 100vh; width: 100vw; overflow: hidden; display: flex; flex-direction: column; }
+
+/* ── TOP BAR ── */
+.topbar {
+  display:flex; align-items:stretch; justify-content:space-between;
+  background:#0a0a0a; border-bottom:1px solid #1e1e1e;
+  flex-shrink:0; width:100%; position:relative; overflow:hidden;
+  min-height:48px;
+}
+.topbar::before {
+  content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:linear-gradient(180deg,#f0b429 0%,#e8960a 100%);
+}
+.topbar-left {
+  display:flex; align-items:center; gap:0; padding-left:16px;
+}
+.topbar-logo {
+  display:flex; flex-direction:column; justify-content:center; padding:0 16px 0 4px;
+  border-right:1px solid #1e1e1e;
+}
+.topbar-wordmark {
+  font-family:'Courier New',monospace; font-size:0.78rem; font-weight:700;
+  letter-spacing:0.22em; text-transform:uppercase; color:#f0b429;
+  line-height:1.1;
+}
+.topbar-wordmark span { color:#555; font-weight:400; }
+.topbar-tagline {
+  font-size:0.52rem; color:#333; letter-spacing:0.14em;
+  text-transform:uppercase; margin-top:2px;
+}
+.topbar-tags {
+  display:flex; align-items:center; gap:6px; padding:0 16px;
+}
+.topbar-tag {
+  font-size:0.55rem; letter-spacing:0.12em; text-transform:uppercase;
+  color:#3a3a3a; border:1px solid #1e1e1e; padding:2px 7px;
+  font-family:'Courier New',monospace; white-space:nowrap;
+}
+.topbar-btns {
+  display:flex; align-items:center; gap:8px; padding:0 14px;
+}
+.btn {
+  padding:0.35rem 1rem; background:#f0b429; color:#0a0a0a;
+  border:none; font-family:'Courier New',monospace; font-size:0.65rem;
+  letter-spacing:0.15em; text-transform:uppercase; cursor:pointer;
+  transition:all 0.15s; white-space:nowrap; position:relative;
+  clip-path:polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
+}
+.btn:hover { background:#ffc940; transform:translateY(-1px); }
+.btn:disabled { background:#1a1a1a; color:#333; cursor:not-allowed; transform:none; clip-path:none; border:1px solid #222; }
+.btn.outline {
+  background:transparent; color:#f0b429; border:1px solid #2a2a2a;
+  clip-path:none;
+}
+.btn.outline:hover { background:#111; border-color:#f0b429; transform:none; }
+.btn.outline:disabled { border-color:#1e1e1e; color:#333; background:transparent; cursor:not-allowed; }
+
+/* ── MAIN GRID ── */
+.main { display:grid; grid-template-columns:260px 1fr 280px; grid-template-rows:1fr 180px; grid-template-areas:"files preview exif" "upload stamp exif"; width:100%; flex:1; min-height:0; overflow:hidden; }
+
+/* ── PANEL HEADERS ── */
+.panel-hdr { font-size:0.68rem; letter-spacing:0.18em; text-transform:uppercase; color:#555; padding:0.45rem 0.8rem; border-bottom:1px solid #1a1a1a; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; background:#0d0d0d; }
+.section { padding:0.7rem 0.8rem; }
+.sec { font-size:0.68rem; color:#555; letter-spacing:0.15em; text-transform:uppercase; margin:0.7rem 0 0.4rem; }
+.sec:first-child { margin-top:0; }
+.hint { font-size:0.68rem; color:#444; font-style:italic; padding:0.3rem 0; }
+
+/* ── FILE LIST ── */
+.left-files { grid-area:files; display:flex; flex-direction:column; overflow:hidden; border-right:1px solid #1e1e1e; background:#0d0d0d; }
+.file-scroll { overflow-y:auto; flex:1; }
+.file-scroll::-webkit-scrollbar { width:3px; }
+.file-scroll::-webkit-scrollbar-track { background:#0a0a0a; }
+.file-scroll::-webkit-scrollbar-thumb { background:#2a2a2a; border-radius:2px; }
+.group-header { display:flex; align-items:center; gap:5px; padding:4px 8px 3px; cursor:pointer; border-bottom:1px solid #1a1a1a; user-select:none; position:sticky; top:0; background:#0d0d0d; z-index:1; }
+.group-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.group-name { font-size:0.70rem; color:#ccc; letter-spacing:0.06em; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.group-count { font-size:0.65rem; color:#555; flex-shrink:0; }
+.group-chevron { font-size:0.6rem; color:#555; flex-shrink:0; transition:transform 0.15s; }
+.group-header.collapsed .group-chevron { transform:rotate(-90deg); }
+.group-files { overflow:hidden; }
+.group-files .file-item { padding-left:14px; }
+.group-dl-btn { font-size:0.6rem; color:#555; background:transparent; border:1px solid #222; padding:1px 4px; cursor:pointer; font-family:'Courier New',monospace; transition:color 0.15s,border-color 0.15s; }
+.group-dl-btn:hover { color:#f0b429; border-color:#f0b429; }
+.group-rm-btn { font-size:0.6rem; color:#555; background:transparent; border:1px solid #222; padding:1px 4px; cursor:pointer; font-family:'Courier New',monospace; transition:color 0.15s,border-color 0.15s; margin-left:2px; }
+.group-rm-btn:hover { color:#e24b4a; border-color:#e24b4a; }
+.file-item { display:flex; align-items:center; gap:5px; padding:4px 8px; font-size:0.68rem; border-bottom:1px solid #141414; cursor:pointer; transition:background 0.1s; }
+.file-item:hover { background:#131313; }
+.file-item.on { background:#1a1300; }
+.fn { color:#888; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
+.file-item.on .fn { color:#f0b429; }
+.fsz { color:#333; flex-shrink:0; font-size:0.65rem; }
+.file-active-dot { width:4px; height:4px; border-radius:50%; background:#f0b429; flex-shrink:0; opacity:0; }
+.file-item.on .file-active-dot { opacity:1; }
+.file-item-thumb { width:28px; height:28px; object-fit:cover; flex-shrink:0; border:1px solid #1e1e1e; }
+.file-remove { display:none; margin-left:auto; flex-shrink:0; background:transparent; border:none; color:#444; font-size:0.75rem; cursor:pointer; padding:0 2px; line-height:1; transition:color 0.15s; }
+.file-item:hover .file-remove { display:block; }
+.file-remove:hover { color:#e24b4a; }
+.file-stamp-chk { flex-shrink:0; width:13px; height:13px; accent-color:#f0b429; cursor:pointer; margin:0; }
+.file-item.unstamped .fn { opacity:0.45; }
+.file-item.unstamped .file-item-thumb { opacity:0.35; }
+.file-move-btn { display:none; flex-shrink:0; background:transparent; border:none; color:#444; font-size:0.7rem; cursor:pointer; padding:0 2px; line-height:1; transition:color 0.15s; }
+.file-item:hover .file-move-btn { display:block; }
+.file-move-btn:hover { color:#f0b429; }
+/* Drag handle */
+.drag-handle { flex-shrink:0; color:#2a2a2a; font-size:0.7rem; cursor:grab; padding:0 3px; line-height:1; user-select:none; transition:color 0.15s; }
+.file-item:hover .drag-handle { color:#444; }
+.drag-handle:active { cursor:grabbing; }
+/* Drag states */
+.file-item.dragging { opacity:0.35; background:#0a0a0a; }
+.file-item.drag-over-top { border-top:2px solid #f0b429; }
+.file-item.drag-over-bottom { border-bottom:2px solid #f0b429; }
+.group-header.drag-over { background:#1a1300; border:1px dashed #f0b429; }
+.drop-zone-ungrouped { height:4px; transition:height 0.15s, background 0.15s; }
+.drop-zone-ungrouped.drag-over { height:24px; background:rgba(240,180,41,0.12); border:1px dashed #f0b429; }
+/* New group drop zone */
+.drop-zone-newgroup { margin:6px 6px 4px; border:1px dashed #1e1e1e; padding:6px 8px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; min-height:28px; cursor:default; }
+.drop-zone-newgroup.drag-over { border-color:#f0b429; background:rgba(240,180,41,0.1); }
+.drop-zone-newgroup-label { font-size:0.55rem; color:#2a2a2a; letter-spacing:0.1em; text-transform:uppercase; font-family:'Courier New',monospace; pointer-events:none; transition:color 0.15s; }
+.drop-zone-newgroup.drag-over .drop-zone-newgroup-label { color:#f0b429; }
+.group-move-menu { position:fixed; z-index:99999; background:#111; border:1px solid #2a2a2a; padding:4px 0; min-width:160px; box-shadow:0 6px 20px rgba(0,0,0,0.8); display:none; }
+.group-move-menu.open { display:block; }
+.group-move-item { padding:5px 12px; font-size:0.68rem; font-family:'Courier New',monospace; color:#aaa; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.group-move-item:hover { background:#1a1a1a; color:#f0b429; }
+.group-move-item .gm-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.group-move-item.gm-new { color:#555; border-top:1px solid #1e1e1e; margin-top:2px; padding-top:6px; }
+.group-move-item.gm-new:hover { color:#f0b429; }
+.group-move-item.gm-current { color:#333; cursor:default; }
+.group-move-item.gm-current:hover { background:transparent; color:#333; }
+
+/* ── UPLOAD ZONE ── */
+.left-upload { grid-area:upload; display:flex; flex-direction:column; border-right:1px solid #1e1e1e; border-top:1px solid #1e1e1e; background:#0d0d0d; overflow:hidden; }
+.drop-zone-merged { border:1px dashed #2a2a2a; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; transition:border-color 0.2s,background 0.2s; flex:1; text-align:center; padding:0.5rem; margin:0.4rem; }
+.drop-zone-merged:hover, .drop-zone-merged.drag-over { border-color:#f0b429; background:#151200; }
+.drop-icon-merged { font-size:1.6rem; margin-bottom:0.2rem; line-height:1; }
+.drop-text-merged { font-size:0.65rem; color:#888; letter-spacing:0.08em; text-transform:uppercase; }
+.drop-sub-merged { font-size:0.58rem; color:#444; margin-top:0.15rem; letter-spacing:0.06em; }
+.status { font-size:0.62rem; letter-spacing:0.06em; padding:2px 0 0; min-height:14px; color:#4caf50; text-align:center; }
+.status.w { color:#f0b429; }
+.status.e { color:#e24b4a; }
+
+/* ── CENTER PREVIEW ── */
+.center-panel { grid-area:preview; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:#080808; height:100%; width:100%; }
+.canvas-wrap { flex:1; min-height:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; touch-action:none; user-select:none; -webkit-user-select:none; }
+canvas { max-width:100%; max-height:100%; width:auto; height:auto; display:block; }
+.ph { text-align:center; color:#222; font-size:0.68rem; letter-spacing:0.15em; text-transform:uppercase; padding:2rem; }
+.ph-icon { font-size:2.5rem; display:block; margin-bottom:0.5rem; opacity:0.25; }
+.stamp-overlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+.stamp-ghost { position:absolute; background:transparent; border:1.5px dashed transparent; cursor:grab; pointer-events:all; user-select:none; display:none; box-sizing:border-box; touch-action:none; }
+.stamp-ghost.dragging { cursor:grabbing; background:transparent; }
+.stamp-ghost-label { font-family:"Courier New",monospace; font-size:10px; color:#f0b429; padding:2px 3px; white-space:nowrap; opacity:0.7; }
+
+/* ── STAMP SETTINGS ZONE ── */
+.stamp-zone { grid-area:stamp; background:#0d0d0d; border-top:1px solid #1a1a1a; overflow:hidden; display:flex; align-items:stretch; }
+.sz-group { display:flex; flex-direction:column; justify-content:flex-start; padding:0.5rem 0.75rem; border-right:1px solid #1e1e1e; overflow:hidden; min-width:0; }
+.sz-group:last-child { border-right:none; }
+.sz-group.grow { flex:1; }
+.sz-group-title { font-size:0.72rem; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:#f0b429; margin-bottom:0.6rem; opacity:0.8; }
+.sz-checks { display:flex; flex-direction:column; justify-content:center; gap:0; }
+.sz-chk { display:flex; align-items:center; gap:7px; cursor:pointer; padding:0.2rem 0.5rem; transition:background 0.12s; }
+.sz-chk:hover { background:#161616; }
+.sz-chk input[type="checkbox"] { accent-color:#f0b429; width:15px; height:15px; flex-shrink:0; cursor:pointer; margin:0; }
+.sz-chk-label { font-size:0.9rem; color:#777; transition:color 0.15s; white-space:nowrap; line-height:1.3; }
+.sz-chk:has(input:checked) .sz-chk-label { color:#e0e0e0; }
+.sz-chk:hover .sz-chk-label { color:#aaa; }
+.sz-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.8rem; }
+.sz-row:last-child { margin-bottom:0; }
+.sz-lbl { font-size:0.78rem; color:#555; letter-spacing:0.04em; text-transform:uppercase; width:54px; flex-shrink:0; text-align:right; }
+.sz-ctrl { display:flex; align-items:center; gap:0.3rem; flex:1; min-width:0; overflow:hidden; }
+.sz-ctrl input[type="range"] { flex:1; min-width:50px; height:2px; }
+.stamp-zone .style-btn { height:26px; min-width:30px; padding:0 7px; font-size:15px; }
+.sz-pgrid { display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:3px; width:100%; flex:1; }
+.sz-pb { width:100%; height:100%; background:#161616; border:1px solid #1e1e1e; color:#555; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.12s; padding:0; border-radius:2px; transform:scale(0.7); }
+.sz-pb:hover { background:#1e1e1e; color:#888; border-color:#333; }
+.sz-pb.on { background:#1e1500; border-color:#f0b429; color:#f0b429; }
+.sz-pb.dead { cursor:default; background:transparent; border-color:transparent; color:transparent; }
+.sz-pb.dead:hover { background:transparent; border-color:transparent; }
+#btnApplyPosGroup:hover { color:#f0b429; border-color:#f0b429; }
+#btnApplyPosGroup:disabled { color:#2a2a2a; border-color:#1a1a1a; cursor:not-allowed; }
+
+/* ── RIGHT PANEL ── */
+.right-panel { grid-area:exif; grid-row:1/-1; border-left:1px solid #1e1e1e; overflow-y:auto; scrollbar-width:thin; background:#0d0d0d; }
+.right-panel::-webkit-scrollbar { width:3px; }
+.right-panel::-webkit-scrollbar-thumb { background:#2a2a2a; }
+.exif-tbl { font-size:0.65rem; width:100%; border-collapse:collapse; }
+.exif-tbl tr { border-bottom:1px solid #1a1a1a; }
+.exif-tbl td { padding:3px 0; vertical-align:top; }
+.exif-tbl td:first-child { color:#555; width:44%; }
+.exif-tbl td:last-child { color:#bbb; word-break:break-all; }
+.addr-box { margin-top:0.5rem; padding:0.35rem 0.5rem; background:rgba(240,180,41,0.06); border-left:2px solid #f0b429; font-size:0.65rem; color:#aaa; line-height:1.5; }
+.addr-box.loading { color:#444; font-style:italic; border-color:#2a2a2a; }
+.addr-box.err { border-color:#333; color:#555; }
+.manual-panel { margin-top:0.6rem; padding:0.5rem 0.6rem; background:#0a0a0a; border-left:2px solid #2a2a2a; }
+.manual-panel.visible { border-color:#f0b429; }
+.manual-title { font-size:0.6rem; color:#555; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:0.4rem; }
+.manual-row { display:flex; align-items:center; gap:5px; margin-bottom:0.35rem; }
+.manual-lbl { font-size:0.6rem; color:#555; letter-spacing:0.06em; width:54px; flex-shrink:0; }
+.manual-inp { flex:1; background:#111; border:1px solid #222; color:#bbb; font-family:"Courier New",monospace; font-size:0.65rem; padding:2px 5px; outline:none; transition:border-color 0.15s; }
+.manual-inp:focus { border-color:#f0b429; }
+.manual-inp::placeholder { color:#333; }
+.manual-hint { font-size:0.58rem; color:#444; padding:2px 0 0; font-style:italic; }
+.badge-missing { font-size:0.55rem; background:#1a0a00; color:#f0b429; border:1px solid #3a2000; padding:1px 4px; letter-spacing:0.06em; margin-left:3px; }
+.scope-btn { flex:1; padding:3px 5px; background:transparent; color:#555; border:1px solid #222; font-family:'Courier New',monospace; font-size:0.58rem; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; transition:all 0.15s; }
+.scope-btn.on { background:#1e1500; color:#f0b429; border-color:#f0b429; }
+.scope-btn:hover:not(.on) { color:#888; border-color:#333; }
+
+/* ── SHARED CONTROLS ── */
+.row { display:flex; align-items:center; gap:6px; margin-bottom:0.4rem; }
+.lbl { font-size:0.62rem; color:#555; letter-spacing:0.08em; text-transform:uppercase; width:58px; flex-shrink:0; }
+input[type="range"] { -webkit-appearance:none; width:100%; height:2px; background:#2a2a2a; outline:none; cursor:pointer; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:11px; height:11px; background:#f0b429; border-radius:50%; cursor:pointer; }
+.rval { font-size:0.78rem; color:#f0b429; width:38px; text-align:right; flex-shrink:0; }
+label { display:flex; align-items:center; gap:6px; font-size:0.70rem; color:#999; margin-bottom:0.3rem; cursor:pointer; }
+label input[type="checkbox"] { accent-color:#f0b429; width:12px; height:12px; }
+.font-select { flex:1; background:#1a1a1a; border:1px solid #2a2a2a; color:#bbb; font-family:inherit; font-size:0.80rem; padding:5px 22px 5px 6px; outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 7px center; transition:border-color 0.15s; min-width:0; display:none; }
+.font-select:focus { border-color:#f0b429; }
+.font-select option { background:#1a1a1a; color:#bbb; }
+
+/* Custom font picker */
+.font-picker { flex:1; position:relative; min-width:0; height:28px; flex-shrink:1; }
+.font-picker-btn { width:100%; height:28px; background:#1a1a1a; border:1px solid #2a2a2a; color:#bbb; font-size:0.9rem; padding:0 22px 0 6px; outline:none; cursor:pointer; text-align:left; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; transition:border-color 0.15s; box-sizing:border-box; display:flex; align-items:center; position:relative; }
+.font-picker-btn:hover, .font-picker-btn.open { border-color:#f0b429; }
+.font-picker-btn::after { content:'▾'; position:absolute; right:6px; top:50%; transform:translateY(-50%); font-size:9px; color:#555; pointer-events:none; font-family:'Courier New',monospace; }
+.font-picker-drop { position:fixed; z-index:99999; background:#111; border:1px solid #2a2a2a; display:none; flex-direction:column; min-width:160px; max-height:240px; overflow-y:auto; box-shadow:0 6px 20px rgba(0,0,0,0.8); }
+.font-picker-drop.open { display:flex; }
+.font-picker-opt { padding:6px 10px; cursor:pointer; color:#bbb; font-size:1rem; white-space:nowrap; transition:background 0.1s; line-height:1.3; }
+.font-picker-opt:hover { background:#1a1a1a; color:#f0b429; }
+.font-picker-opt.selected { color:#f0b429; background:#1a1300; }
+.style-btns { display:flex; gap:3px; margin-bottom:0.5rem; }
+.style-btn { flex:1; padding:3px 5px; background:#1a1a1a; border:1px solid #222; color:#666; cursor:pointer; font-size:15px; text-align:center; transition:all 0.15s; font-family:serif; }
+.style-btn:hover { border-color:#444; color:#bbb; }
+.style-btn.on { background:#1e1500; border-color:#f0b429; color:#f0b429; }
+#btnBold { font-weight:bold; }
+#btnItalic { font-style:italic; }
+#btnUnder { text-decoration:underline; }
+
+/* ── COLOR PICKER ── */
+.color-pick-wrap { position:relative; display:inline-flex; align-items:center; }
+.color-pick-btn { width:28px; height:22px; border:1px solid #333; cursor:pointer; flex-shrink:0; position:relative; transition:border-color 0.15s; }
+.color-pick-btn:hover { border-color:#f0b429; }
+.color-pick-btn::after { content:"▾"; position:absolute; right:-14px; top:50%; transform:translateY(-50%); font-size:9px; color:#555; pointer-events:none; }
+.color-pick-dropdown { position:fixed; z-index:99999; background:#111; border:1px solid #2a2a2a; padding:6px; display:none; flex-direction:column; gap:4px; width:182px; box-shadow:0 6px 20px rgba(0,0,0,0.8); }
+.color-pick-dropdown.open { display:flex; }
+.color-pick-palette { display:grid; grid-template-columns:repeat(8,18px); gap:2px; }
+.color-swatch { width:18px; height:18px; border:1px solid #333; cursor:pointer; flex-shrink:0; transition:transform 0.1s,border-color 0.1s; }
+.color-swatch:hover { transform:scale(1.2); border-color:#f0b429; }
+.color-swatch.active { border:2px solid #f0b429; }
+.color-pick-custom { display:flex; align-items:center; gap:5px; border-top:1px solid #1e1e1e; padding-top:5px; margin-top:1px; }
+.color-pick-custom label { font-size:0.58rem; color:#555; letter-spacing:0.08em; text-transform:uppercase; white-space:nowrap; }
+.color-pick-custom input[type="color"] { width:28px; height:20px; border:1px solid #333; background:transparent; cursor:pointer; padding:0; }
+/* ── HELP MODAL ── */
+.help-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999999; display:none; align-items:center; justify-content:center; padding:20px; }
+.help-overlay.open { display:flex; }
+.help-modal { background:#0e0e0e; border:1px solid #2a2a2a; width:100%; max-width:820px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.9); }
+.help-modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid #1e1e1e; flex-shrink:0; }
+.help-modal-title { font-size:0.85rem; letter-spacing:0.2em; text-transform:uppercase; color:#f0b429; font-family:'Courier New',monospace; }
+.help-modal-close { background:transparent; border:none; color:#555; font-size:1.3rem; cursor:pointer; padding:0 4px; transition:color 0.15s; line-height:1; }
+.help-modal-close:hover { color:#f0b429; }
+
+/* Tab nav with chevrons instead of scrollbar */
+.help-modal-tabs { display:flex; align-items:stretch; border-bottom:1px solid #1e1e1e; flex-shrink:0; }
+.help-tab-chevron { background:transparent; border:none; border-bottom:2px solid transparent; color:#555; font-size:1rem; cursor:pointer; padding:0 12px; flex-shrink:0; transition:color 0.15s; display:flex; align-items:center; }
+.help-tab-chevron:hover { color:#f0b429; }
+.help-tab-chevron:disabled { color:#222; cursor:default; }
+.help-tabs-scroll { display:flex; flex:1; overflow:hidden; }
+.help-tab { padding:10px 18px; font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase; font-family:'Courier New',monospace; color:#444; cursor:pointer; border:none; background:transparent; border-bottom:2px solid transparent; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
+.help-tab:hover { color:#888; }
+.help-tab.on { color:#f0b429; border-bottom-color:#f0b429; }
+
+/* Tab counter badge */
+.help-tab-counter { font-size:0.65rem; color:#333; font-family:'Courier New',monospace; padding:0 10px; display:flex; align-items:center; flex-shrink:0; border-left:1px solid #1a1a1a; margin-left:auto; }
+
+.help-body { overflow-y:auto; padding:28px 28px 36px; flex:1; }
+.help-section { display:none; }
+.help-section.on { display:block; }
+.help-h1 { font-size:1.05rem; color:#f0b429; letter-spacing:0.15em; text-transform:uppercase; margin:0 0 16px; font-family:'Courier New',monospace; }
+.help-h2 { font-size:0.82rem; color:#f0b429; letter-spacing:0.12em; text-transform:uppercase; margin:24px 0 10px; font-family:'Courier New',monospace; opacity:0.85; border-left:2px solid #f0b429; padding-left:10px; }
+.help-p { font-size:0.82rem; color:#888; line-height:1.75; margin:0 0 12px; font-family:'Courier New',monospace; }
+.help-p strong { color:#ccc; }
+.help-ul { margin:0 0 14px 0; padding-left:18px; }
+.help-ul li { font-size:0.82rem; color:#888; line-height:1.9; font-family:'Courier New',monospace; }
+.help-ul li strong { color:#ccc; }
+.help-kv { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0 0 14px; }
+.help-key { font-size:0.75rem; color:#f0b429; font-family:'Courier New',monospace; white-space:nowrap; padding:3px 8px; background:#1a1300; border:1px solid #2a1a00; align-self:start; }
+.help-val { font-size:0.78rem; color:#888; font-family:'Courier New',monospace; line-height:1.7; }
+.help-tip { background:#0d1a0d; border:1px solid #1a2e1a; padding:12px 16px; margin:14px 0; }
+.help-tip-label { font-size:0.65rem; color:#4caf50; letter-spacing:0.15em; text-transform:uppercase; margin-bottom:6px; font-family:'Courier New',monospace; }
+.help-tip p { font-size:0.78rem; color:#6a8a6a; margin:0; line-height:1.7; font-family:'Courier New',monospace; }
+.help-warn { background:#1a0d0d; border:1px solid #2e1a1a; padding:12px 16px; margin:14px 0; }
+.help-warn-label { font-size:0.65rem; color:#e24b4a; letter-spacing:0.15em; text-transform:uppercase; margin-bottom:6px; font-family:'Courier New',monospace; }
+.help-warn p { font-size:0.78rem; color:#8a6a6a; margin:0; line-height:1.7; font-family:'Courier New',monospace; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo">
+      <div class="topbar-wordmark"><span>//</span> EXIF Stamper</div>
+      <div class="topbar-tagline">Metadata burned into photo</div>
+    </div>
+    <div class="topbar-tags">
+      <span class="topbar-tag">GPS</span>
+      <span class="topbar-tag">Address</span>
+      <span class="topbar-tag">Date &amp; Time</span>
+    </div>
+  </div>
+  <div class="topbar-btns">
+    <button class="btn outline" id="btnHelp" title="User Guide">? Guide</button>
+    <button class="btn outline" id="btnDL" disabled>⬇ This image</button>
+    <button class="btn" id="btnAll" disabled title="Waiting for geocoding to complete…">⬇ Download all stamped</button>
+  </div>
+</div>
+
+<!-- MAIN GRID -->
+<div class="main">
+
+  <!-- File list -->
+  <div class="left-files">
+    <div class="panel-hdr">
+      <span>Loaded images</span>
+      <span id="fileCount" style="font-size:0.55rem;color:#444;"></span>
+    </div>
+    <div class="file-scroll" id="fileList"></div>
+  </div>
+
+  <!-- Upload zone -->
+  <div class="left-upload">
+    <div class="drop-zone-merged" id="dropZone">
+      <div class="drop-icon-merged">📂</div>
+      <div class="drop-text-merged">Drop photos or ZIP here</div>
+      <div class="drop-sub-merged">click to browse or drag & drop</div>
+      <div class="status" id="status" style="font-size:0.55rem;margin-top:0.3rem;"></div>
+      <input type="file" id="fileInput" accept="image/*,.zip,application/zip,application/x-zip-compressed" multiple style="display:none;">
+      <input type="file" id="zipInput" accept=".zip,application/zip,application/x-zip-compressed" style="display:none;">
+    </div>
+  </div>
+
+  <!-- Preview canvas -->
+  <div class="center-panel">
+    <div class="canvas-wrap" id="canvasWrap">
+      <div class="ph"><span class="ph-icon">🖼</span>Load a photo to begin</div>
+      <div class="stamp-overlay" id="stampOverlay">
+        <div class="stamp-ghost" id="stampGhost"><div class="stamp-ghost-label" id="stampGhostLabel"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stamp settings -->
+  <div class="stamp-zone">
+    <div class="sz-group" style="width:30%;">
+      <div class="sz-group-title">Stamp Fields</div>
+      <div class="sz-checks">
+        <label class="sz-chk"><input type="checkbox" id="chkDate" checked><span class="sz-chk-label">Date &amp; Time</span></label>
+        <input type="checkbox" id="chkTime" checked style="display:none;">
+        <label class="sz-chk"><input type="checkbox" id="chkGPS" checked><span class="sz-chk-label">GPS</span></label>
+        <label class="sz-chk"><input type="checkbox" id="chkAddr" checked><span class="sz-chk-label">Address</span></label>
+        <label class="sz-chk"><input type="checkbox" id="chkFile"><span class="sz-chk-label">Filename</span></label>
+      </div>
+    </div>
+    <div class="sz-group grow" style="width:45%;">
+      <div class="sz-group-title">Typography &amp; Color</div>
+      <div class="sz-row">
+        <span class="sz-lbl">Size</span>
+        <div class="sz-ctrl">
+          <input type="range" id="slSize" min="12" max="120" step="1" value="24">
+          <span class="rval" id="valSize">36px</span>
+        </div>
+      </div>
+      <div class="sz-row">
+        <span class="sz-lbl">Font</span>
+        <div class="sz-ctrl" style="min-width:0;">
+          <div class="font-picker" id="fontPicker">
+            <div class="font-picker-btn" id="fontPickerBtn">Courier Prime</div>
+            <div class="font-picker-drop" id="fontPickerDrop"></div>
+          </div>
+          <!-- hidden select kept for JS compatibility -->
+          <select id="fontSelect" class="font-select">
+            <option value="'Courier Prime', 'Courier New', monospace" selected>Courier Prime</option>
+            <option value="'Roboto Mono', monospace">Roboto Mono</option>
+            <option value="'Share Tech Mono', monospace">Share Tech</option>
+            <option value="'IBM Plex Mono', monospace">IBM Plex Mono</option>
+            <option value="'Oswald', sans-serif">Oswald</option>
+            <option value="'Anton', sans-serif">Anton</option>
+            <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
+            <option value="'Rajdhani', sans-serif">Rajdhani</option>
+          </select>
+          <button class="style-btn" id="btnBold" title="Bold"><b>B</b></button>
+          <button class="style-btn" id="btnItalic" title="Italic"><i>I</i></button>
+          <button class="style-btn" id="btnUnder" title="Underline"><u>U</u></button>
+        </div>
+      </div>
+      <div class="sz-row">
+        <span class="sz-lbl">Align</span>
+        <div class="sz-ctrl" style="gap:3px;">
+          <button class="style-btn on" id="btnAlignLeft"   title="Align left">&#8676;</button>
+          <button class="style-btn"    id="btnAlignCenter" title="Align center">&#8596;</button>
+          <button class="style-btn"    id="btnAlignRight"  title="Align right">&#8677;</button>
+          <button class="style-btn"    id="btnAlignJustify" title="Justify">&#8644;</button>
+        </div>
+      </div>
+      <div class="sz-row">
+        <span class="sz-lbl">Color</span>
+        <div class="sz-ctrl" style="gap:6px;flex-wrap:nowrap;">
+          <div class="color-pick-wrap" id="colorPickWrap">
+            <div class="color-pick-btn" id="colorPickBtn" style="background:#ffffff;" title="Font color"></div>
+          </div>
+          <span style="font-size:0.75rem;color:#555;">Text</span>
+          <div class="color-pick-wrap" id="bgPickWrap">
+            <div class="color-pick-btn" id="bgPickBtn" style="background:#000000;" title="BG color"></div>
+          </div>
+          <span style="font-size:0.75rem;color:#555;">BG</span>
+          <input type="range" id="slBgOpacity" min="0" max="100" value="50" style="flex:1;min-width:40px;" title="BG opacity">
+          <span class="rval" id="valBgOpacity">55%</span>
+        </div>
+      </div>
+      <div style="display:none" id="bgOpacityRow"></div>
+    </div>
+    <div class="sz-group" style="display:flex;flex-direction:column;width:25%;">
+      <div class="sz-group-title">Position</div>
+      <div class="sz-pgrid" id="posGrid" style="flex:1;">
+        <button class="sz-pb" data-px="0.05" data-py="0.05" title="Top left">&#8598;</button>
+        <button class="sz-pb" data-px="0.5"  data-py="0.05" title="Top center">&#8593;</button>
+        <button class="sz-pb" data-px="0.95" data-py="0.05" title="Top right">&#8599;</button>
+        <button class="sz-pb" data-px="0.05" data-py="0.5"  title="Middle left">&#8592;</button>
+        <button class="sz-pb dead"></button>
+        <button class="sz-pb" data-px="0.95" data-py="0.5"  title="Middle right">&#8594;</button>
+        <button class="sz-pb on" data-px="0.05" data-py="0.88" title="Bottom left">&#8601;</button>
+        <button class="sz-pb" data-px="0.5"  data-py="0.88" title="Bottom center">&#8595;</button>
+        <button class="sz-pb" data-px="0.95" data-py="0.88" title="Bottom right">&#8600;</button>
+      </div>
+      <button id="btnApplyPosGroup" title="Apply current stamp position to all photos in the same group" style="margin-top:5px;width:100%;padding:3px 4px;background:transparent;color:#555;border:1px solid #222;font-family:'Courier New',monospace;font-size:0.5rem;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;transition:color 0.15s,border-color 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ↓ pos to group
+      </button>
+    </div>
+  </div>
+
+  <!-- EXIF panel -->
+  <div class="right-panel">
+    <div class="panel-hdr">EXIF + address</div>
+    <div class="section">
+      <div id="exifDisplay"><p class="hint">No image loaded.</p></div>
+      <div class="addr-box loading" id="addrBox" style="display:none;"></div>
+      <div class="manual-panel" id="manualPanel" style="display:none;">
+        <div class="manual-title">Manual override <span class="badge-missing" id="missingBadge"></span></div>
+        <div style="display:flex;gap:3px;margin-bottom:0.4rem;" id="manualScope">
+          <button class="scope-btn on" id="scopePhoto">This photo</button>
+          <button class="scope-btn" id="scopeGroup">Entire group</button>
+        </div>
+        <!-- autocomplete=off on the fake form prevents browser autofill -->
+        <div role="form" autocomplete="off">
+        <div class="manual-row">
+          <span class="manual-lbl">Date</span>
+          <input class="manual-inp" id="manualDate" type="text" placeholder="MM/DD/YYYY" autocomplete="off">
+        </div>
+        <div class="manual-row">
+          <span class="manual-lbl">Time</span>
+          <input class="manual-inp" id="manualTime" type="text" placeholder="HH:MM:SS" autocomplete="off">
+        </div>
+        <div class="manual-row">
+          <span class="manual-lbl">GPS</span>
+          <input class="manual-inp" id="manualGPS" type="text" placeholder="e.g. 26.184133,-80.263028 or 26.184133 -80.263028" autocomplete="off">
+        </div>
+        <div class="manual-row">
+          <span class="manual-lbl">Address</span>
+          <input class="manual-inp" id="manualAddr" type="text" placeholder="Type or auto-fill from GPS" autocomplete="off">
+        </div>
+        </div><!-- end autocomplete=off container -->
+        <p class="manual-hint" id="manualHint"></p>
+        <button id="btnApplyGroup" style="display:none;width:100%;margin-top:0.4rem;padding:4px 6px;background:transparent;color:#f0b429;border:1px solid #f0b429;font-family:'Courier New',monospace;font-size:0.57rem;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;">
+          ↓ Apply to all in group
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── GEOCODING CONFIG ─────────────────────────────────────────────────────────
+var GEOCODER       = 'nominatim'; // 'nominatim' | 'opencage' | 'locationiq'
+var OPENCAGE_KEY   = '';
+var LOCATIONIQ_KEY = '';
+var MAX_DIM        = 1500;
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+var files     = [];
+var groups    = [];
+var ungrouped = []; // file indices not belonging to any group
+var activeIdx = -1;
+var activeImg = null;
+var canvas    = null;
+var geoCache  = {};
+var geoQueue  = [];
+var geoBusy   = false;
+// Track how many photos still need geocoding
+var geoPending = 0;
+
+var GROUP_COLORS = ['#f0b429','#4caf50','#00e5ff','#ff4444','#cc88ff','#ff9944','#44ddaa','#ff66aa'];
+function nextGroupColor(){ return GROUP_COLORS[groups.length % GROUP_COLORS.length]; }
+
+var cfg = { color:'#ffffff', bg:'rgba(0,0,0,0.5)', bgBase:'0,0,0', bgOpacity:50, pos:'custom', size:24, margin:16, font:"'Courier Prime', 'Courier New', monospace", bold:false, italic:false, underline:false, align:'left', customX:0.05, customY:0.88 };
+
+function id(x){ return document.getElementById(x); }
+var $dz=id('dropZone'), $fi=id('fileInput'), $fl=id('fileList'), $st=id('status'), $fc=id('fileCount');
+var $cw=id('canvasWrap'), $exif=id('exifDisplay'), $addr=id('addrBox');
+var $btnDL=id('btnDL'), $btnAll=id('btnAll');
+
+// ─── GEO-GATE: enable "Download all" only when all geocoding is done ──────────
+function geoIncrement(){
+  geoPending++;
+  $btnAll.disabled = true;
+  updateGeoBtn();
+}
+function geoDecrement(){
+  if(geoPending > 0) geoPending--;
+  if(geoPending === 0 && files.filter(function(f){ return f !== null; }).length > 0){
+    $btnAll.disabled = false;
+    $btnAll.textContent = '⬇ Download all stamped';
+    $btnAll.title = '';
+  } else {
+    updateGeoBtn();
+  }
+}
+function updateGeoBtn(){
+  var total = files.filter(function(f){ return f !== null; }).length;
+  var done = 0;
+  files.forEach(function(f){ if(f && f.address !== null) done++; });
+  $btnAll.textContent = '⏳ Geocoding ' + done + '/' + total + '…';
+  $btnAll.title = 'Resolving addresses… ' + (total - done) + ' remaining';
+}
+
+// ─── DROP ZONE ────────────────────────────────────────────────────────────────
+$dz.addEventListener('click', function(e){
+  if(e.target === $fi || e.target === id('zipInput')) return;
+  $fi.click();
+});
+$dz.addEventListener('dragover', function(e){ e.preventDefault(); $dz.classList.add('drag-over'); });
+$dz.addEventListener('dragleave', function(e){ if(!$dz.contains(e.relatedTarget)) $dz.classList.remove('drag-over'); });
+$dz.addEventListener('drop', function(e){
+  e.preventDefault(); $dz.classList.remove('drag-over');
+  var droppedFiles = e.dataTransfer.files;
+  if(!droppedFiles.length) return;
+  var imgs = [];
+  for(var i=0; i<droppedFiles.length; i++){
+    var f = droppedFiles[i];
+    if(f.name.match(/\.zip$/i) || (f.type && f.type.match(/zip/))){ handleZip(f); }
+    else if(isImageFile(f)){ imgs.push(f); }
+  }
+  if(imgs.length) ingest(imgs, null);
+});
+$fi.addEventListener('change', function(){
+  if(!$fi.files.length) return;
+  var imgs = [];
+  for(var i=0; i<$fi.files.length; i++){
+    var f = $fi.files[i];
+    if(f.name.match(/\.zip$/i) || (f.type && f.type.match(/zip/))){ handleZip(f); }
+    else if(isImageFile(f)){ imgs.push(f); }
+  }
+  if(imgs.length) ingest(imgs, null);
+  $fi.value='';
+});
+
+function isImageFile(f){
+  if(f.type && f.type.match(/^image\//)) return true;
+  return /\.(jpe?g|png|webp|heic|heif|tiff?|bmp|gif|avif|svg)$/i.test(f.name);
+}
+function isImagePath(path){ return /\.(jpe?g|png|webp|heic|heif|tiff?|bmp|gif|avif|svg)$/i.test(path); }
+
+var $zipInput = id('zipInput');
+$zipInput.addEventListener('change', function(){
+  if($zipInput.files.length) handleZip($zipInput.files[0]);
+  $zipInput.value='';
+});
+
+// ─── INGEST ───────────────────────────────────────────────────────────────────
+function ingest(fileList, groupName){
+  if(!fileList || !fileList.length) return;
+  st('Reading…','w');
+
+  // null/undefined groupName = ungrouped
+  var grp = null;
+  if(groupName){
+    for(var g=0; g<groups.length; g++){ if(groups[g].name === groupName){ grp=groups[g]; break; } }
+    if(!grp){ grp={name:groupName, color:nextGroupColor(), indices:[], collapsed:false}; groups.push(grp); }
+  }
+
+  var pending = fileList.length;
+  var firstNewIdx = files.length;
+  for(var i=0; i<fileList.length; i++){
+    (function(f){
+      readOne(f, function(entry){
+        var idx = files.length;
+        files.push(entry);
+        if(grp) grp.indices.push(idx);
+        else ungrouped.push(idx);
+
+        // Kick off geocoding immediately
+        var lat = dms(entry.exif.GPSLatitude,  entry.exif.GPSLatitudeRef);
+        var lon = dms(entry.exif.GPSLongitude, entry.exif.GPSLongitudeRef);
+        if(lat !== null && lon !== null){
+          geoIncrement();
+          geocode(lat, lon, function(addr){
+            entry.address = addr;
+            geoDecrement();
+            if(activeIdx === idx) redraw();
+          });
+        } else {
+          entry.address = '';
+        }
+
+        pending--;
+        renderFileList();
+        if(pending === 0){
+          st('','');
+          if(activeIdx === -1) activate(firstNewIdx);
+          if(geoPending === 0 && files.filter(function(f){ return f !== null; }).length > 0){
+            $btnAll.disabled = false;
+            $btnAll.title = '';
+          }
+        }
+      });
+    })(fileList[i]);
+  }
+}
+
+function readOne(file, cb){
+  var r = new FileReader();
+  r.onload = function(e){
+    var exif = {}, rawExifB64 = null;
+    try{ var x=EXIF.readFromBinaryFile(e.target.result); if(x&&typeof x==='object') exif=x; }catch(ex){}
+    var r2 = new FileReader();
+    r2.onload = function(e2){
+      var dataUrl = e2.target.result;
+      // Store the data URL so piexif.load() can extract EXIF verbatim on download
+      var ext=(file.name||'').split('.').pop().toLowerCase();
+      if((ext==='jpg'||ext==='jpeg') && piexif && dataUrl){
+        try{ piexif.load(dataUrl); rawExifB64 = dataUrl; }catch(ex2){}
+      }
+      cb({file:file, b64:dataUrl, exif:exif, rawExifB64:rawExifB64, address:null, manualLat:null, manualLon:null, manualAddr:null, manualDate:null, manualTime:null, stamped:true, stampX:null, stampY:null});
+    };
+    r2.onerror = function(){ cb({file:file, b64:null, exif:exif, rawExifB64:null, address:null, manualLat:null, manualLon:null, manualAddr:null, manualDate:null, manualTime:null, stamped:true, stampX:null, stampY:null}); };
+    r2.readAsDataURL(file);
+  };
+  r.onerror = function(){
+    var r2 = new FileReader();
+    r2.onload = function(e2){ cb({file:file, b64:e2.target.result, exif:{}, rawExifB64:null, address:null, manualLat:null, manualLon:null, manualAddr:null, manualDate:null, manualTime:null, stamped:true, stampX:null, stampY:null}); };
+    r2.readAsDataURL(file);
+  };
+  r.readAsArrayBuffer(file);
+}
+
+// ─── ZIP HANDLING ─────────────────────────────────────────────────────────────
+function handleZip(zipFile){
+  st('Extracting ZIP…','w');
+  var zipName = zipFile.name.replace(/\.zip$/i,'');
+  JSZip.loadAsync(zipFile).then(function(zip){
+    var imageEntries = [];
+    zip.forEach(function(relPath, zipEntry){
+      if(!zipEntry.dir && isImagePath(relPath)) imageEntries.push(zipEntry);
+    });
+    if(!imageEntries.length){ st('No images found in ZIP.','w'); return; }
+    var pending = imageEntries.length;
+    var folderMap = {};
+    imageEntries.forEach(function(zipEntry){
+      zipEntry.async('blob').then(function(blob){
+        var relPath = zipEntry.name;
+        var parts = relPath.split('/');
+        var fname = parts[parts.length-1];
+        var folderKey = parts.length <= 1 ? zipName : (parts[parts.length-2] || zipName);
+        var mimeMap = {jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif',bmp:'image/bmp',tiff:'image/tiff',tif:'image/tiff'};
+        var ext = fname.split('.').pop().toLowerCase();
+        var file = new File([blob], fname, {type: mimeMap[ext] || 'image/jpeg'});
+        if(!folderMap[folderKey]) folderMap[folderKey] = [];
+        folderMap[folderKey].push(file);
+        if(--pending === 0){
+          var keys = Object.keys(folderMap);
+          keys.forEach(function(key){ ingest(folderMap[key], key); });
+          st('Loaded '+imageEntries.length+' image'+(imageEntries.length===1?'':'s')+' in '+keys.length+' group'+(keys.length===1?'':'s')+'.','');
+        }
+      });
+    });
+  }).catch(function(err){ st('ZIP error: '+err.message,'e'); });
+}
+
+// ─── FILE LIST UI ─────────────────────────────────────────────────────────────
+function renderFileList(){
+  $fl.innerHTML = '';
+  var total = files.filter(function(f){ return f !== null; }).length;
+  if($fc) $fc.textContent = total ? total+' file'+(total===1?'':'s') : '';
+
+  // Ungrouped drop zone at top
+  var ugDrop = document.createElement('div');
+  ugDrop.className = 'drop-zone-ungrouped';
+  ugDrop.addEventListener('dragover', function(e){
+    if(fileDrag.fi < 0) return;
+    e.preventDefault(); clearDragOver(); ugDrop.classList.add('drag-over');
+  });
+  ugDrop.addEventListener('dragleave', function(){ ugDrop.classList.remove('drag-over'); });
+  ugDrop.addEventListener('drop', function(e){
+    if(fileDrag.fi < 0) return;
+    e.preventDefault(); dropFileOnUngrouped(fileDrag.fi); clearDragOver();
+  });
+  $fl.appendChild(ugDrop);
+
+  // Render ungrouped files — no header, no indent
+  ungrouped.forEach(function(fi){
+    var entry = files[fi]; if(!entry) return;
+    $fl.appendChild(makeFileItem(fi, entry, false));
+  });
+
+  // Render groups
+  groups.forEach(function(grp, gi){
+    if(!grp.indices.length) return;
+    var hdr = document.createElement('div');
+    hdr.className = 'group-header'+(grp.collapsed?' collapsed':'');
+    hdr.innerHTML = '<span class="group-dot" style="background:'+grp.color+'"></span>'+
+      '<span class="group-name">'+escHtml(grp.name)+'</span>'+
+      '<span class="group-count">('+grp.indices.length+')</span>'+
+      '<span class="group-chevron">▾</span>'+
+      '<button class="group-dl-btn" title="Download group">⬇</button>'+
+      '<button class="group-rm-btn" title="Remove group">✕</button>';
+    hdr.addEventListener('click', function(){ grp.collapsed=!grp.collapsed; renderFileList(); });
+    hdr.querySelector('.group-dl-btn').addEventListener('click', function(e){ e.stopPropagation(); downloadGroup(gi); });
+    hdr.querySelector('.group-rm-btn').addEventListener('click', function(e){ e.stopPropagation(); removeGroup(gi); });
+
+    // Group header as drop target — drop moves file into this group
+    hdr.addEventListener('dragover', function(e){
+      if(fileDrag.fi < 0) return;
+      e.preventDefault(); e.stopPropagation();
+      clearDragOver(); hdr.classList.add('drag-over');
+    });
+    hdr.addEventListener('dragleave', function(){ hdr.classList.remove('drag-over'); });
+    hdr.addEventListener('drop', function(e){
+      if(fileDrag.fi < 0) return;
+      e.preventDefault(); e.stopPropagation();
+      dropFileOnGroup(fileDrag.fi, gi); clearDragOver();
+    });
+
+    $fl.appendChild(hdr);
+    if(!grp.collapsed){
+      var wrap = document.createElement('div');
+      wrap.className = 'group-files';
+      grp.indices.forEach(function(fi){
+        var entry = files[fi]; if(!entry) return;
+        wrap.appendChild(makeFileItem(fi, entry, true));
+      });
+      $fl.appendChild(wrap);
+    }
+  });
+
+  // New group drop zone — always visible at bottom when dragging
+  var newGrpDrop = document.createElement('div');
+  newGrpDrop.className = 'drop-zone-newgroup';
+  newGrpDrop.id = 'dropZoneNewGroup';
+  newGrpDrop.innerHTML = '<span class="drop-zone-newgroup-label">+ Drop to create new group</span>';
+  newGrpDrop.addEventListener('dragover', function(e){
+    if(fileDrag.fi < 0) return;
+    e.preventDefault(); clearDragOver(); newGrpDrop.classList.add('drag-over');
+  });
+  newGrpDrop.addEventListener('dragleave', function(){ newGrpDrop.classList.remove('drag-over'); });
+  newGrpDrop.addEventListener('drop', function(e){
+    if(fileDrag.fi < 0) return;
+    e.preventDefault();
+    var name = prompt('New group name:');
+    if(!name || !name.trim()){ clearDragOver(); return; }
+    var newGrp = {name:name.trim(), color:nextGroupColor(), indices:[], collapsed:false};
+    groups.push(newGrp);
+    removeFromLocation(fileDrag.fi);
+    newGrp.indices.push(fileDrag.fi);
+    groups = groups.filter(function(g){ return g.indices.length > 0; });
+    clearDragOver();
+    renderFileList();
+  });
+  $fl.appendChild(newGrpDrop);
+}
+
+function makeFileItem(fi, entry, inGroup){
+  var el = document.createElement('div');
+  var isStamped = entry.stamped !== false;
+  el.className = 'file-item'+(fi===activeIdx?' on':'')+(isStamped?'':' unstamped');
+  el.draggable = true;
+  el.dataset.fi = fi;
+  if(!inGroup) el.style.paddingLeft = '8px';
+  var thumb = entry.b64 ? '<img class="file-item-thumb" src="'+entry.b64+'" alt="">' : '<div class="file-item-thumb" style="background:#1a1a1a;"></div>';
+  el.innerHTML = '<span class="drag-handle" title="Drag to reorder">⠿</span>'+
+    thumb+
+    '<input type="checkbox" class="file-stamp-chk" '+(isStamped?'checked':'')+' title="Stamp this photo" >'+
+    '<span class="fn">'+escHtml(entry.file.name)+'</span>'+
+    '<span class="fsz">'+(entry.file.size/1024).toFixed(0)+'K</span>'+
+    '<button class="file-move-btn" title="Move to group">⇄</button>'+
+    '<button class="file-remove" title="Remove">✕</button>';
+  el.addEventListener('click', function(){ activate(fi); });
+  el.querySelector('.file-stamp-chk').addEventListener('click', function(e){
+    e.stopPropagation();
+    entry.stamped = this.checked;
+    el.classList.toggle('unstamped', !this.checked);
+  });
+  el.querySelector('.file-remove').addEventListener('click', function(e){ e.stopPropagation(); removeFile(fi); });
+  el.querySelector('.file-move-btn').addEventListener('click', function(e){ e.stopPropagation(); openGroupMoveMenu(fi, e); });
+
+  // ── Drag events ──────────────────────────────────────────────────────────────
+  el.addEventListener('dragstart', function(e){
+    e.stopPropagation();
+    fileDrag.fi = fi;
+    fileDrag.srcEl = el;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(fi));
+    setTimeout(function(){ el.classList.add('dragging'); }, 0);
+  });
+  el.addEventListener('dragend', function(){
+    el.classList.remove('dragging');
+    fileDrag.fi = -1; fileDrag.srcEl = null;
+    clearDragOver();
+  });
+  el.addEventListener('dragover', function(e){
+    if(fileDrag.fi < 0) return;
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    clearDragOver();
+    var rect = el.getBoundingClientRect();
+    var mid  = rect.top + rect.height / 2;
+    el.classList.add(e.clientY < mid ? 'drag-over-top' : 'drag-over-bottom');
+  });
+  el.addEventListener('dragleave', function(){ el.classList.remove('drag-over-top','drag-over-bottom'); });
+  el.addEventListener('drop', function(e){
+    if(fileDrag.fi < 0) return;
+    e.preventDefault(); e.stopPropagation();
+    var rect = el.getBoundingClientRect();
+    var before = e.clientY < rect.top + rect.height / 2;
+    dropFileOnItem(fileDrag.fi, fi, before);
+    clearDragOver();
+  });
+
+  return el;
+}
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── DRAG & DROP REORDER ──────────────────────────────────────────────────────
+var fileDrag = { fi: -1, srcEl: null };
+
+function clearDragOver(){
+  document.querySelectorAll('.drag-over-top,.drag-over-bottom,.group-header.drag-over,.drop-zone-ungrouped.drag-over')
+    .forEach(function(el){ el.classList.remove('drag-over-top','drag-over-bottom','drag-over','drag-over'); });
+}
+
+function getFileLocation(fi){
+  // Returns {type:'ungrouped',idx} or {type:'group',gi,idx}
+  var ui = ungrouped.indexOf(fi);
+  if(ui !== -1) return {type:'ungrouped', idx:ui};
+  for(var g=0; g<groups.length; g++){
+    var idx = groups[g].indices.indexOf(fi);
+    if(idx !== -1) return {type:'group', gi:g, idx:idx};
+  }
+  return null;
+}
+
+function removeFromLocation(fi){
+  var ui = ungrouped.indexOf(fi); if(ui !== -1){ ungrouped.splice(ui,1); return; }
+  groups.forEach(function(g){ var i=g.indices.indexOf(fi); if(i!==-1) g.indices.splice(i,1); });
+}
+
+function dropFileOnItem(dragFi, targetFi, before){
+  if(dragFi === targetFi) return;
+  var targetLoc = getFileLocation(targetFi);
+  if(!targetLoc) return;
+
+  removeFromLocation(dragFi);
+
+  if(targetLoc.type === 'ungrouped'){
+    var insertIdx = before ? targetLoc.idx : targetLoc.idx + 1;
+    ungrouped.splice(insertIdx, 0, dragFi);
+  } else {
+    var grp = groups[targetLoc.gi];
+    // Remove target again in case dragFi was in same group (already removed above)
+    var tIdx = grp.indices.indexOf(targetFi);
+    var insertAt = before ? tIdx : tIdx + 1;
+    if(insertAt < 0) insertAt = 0;
+    grp.indices.splice(insertAt, 0, dragFi);
+  }
+
+  // Remove empty groups
+  groups = groups.filter(function(g){ return g.indices.length > 0; });
+  renderFileList();
+}
+
+function dropFileOnGroup(dragFi, gi){
+  // Drop onto group header — move to end of that group
+  if(gi < 0 || gi >= groups.length) return;
+  removeFromLocation(dragFi);
+  groups[gi].indices.push(dragFi);
+  groups = groups.filter(function(g){ return g.indices.length > 0; });
+  renderFileList();
+}
+
+function dropFileOnUngrouped(dragFi){
+  removeFromLocation(dragFi);
+  ungrouped.push(dragFi);
+  groups = groups.filter(function(g){ return g.indices.length > 0; });
+  renderFileList();
+}
+
+// ─── GROUP MOVE MENU ──────────────────────────────────────────────────────────
+(function(){
+  var menu = document.createElement('div');
+  menu.className = 'group-move-menu';
+  menu.id = 'groupMoveMenu';
+  document.body.appendChild(menu);
+
+  document.addEventListener('click', function(){ menu.classList.remove('open'); });
+})();
+
+function openGroupMoveMenu(fileIdx, e){
+  e.stopPropagation();
+  var menu = id('groupMoveMenu');
+  menu.innerHTML = '';
+
+  // Find current group
+  var currentGrpIdx = -1;
+  groups.forEach(function(g, gi){ if(g.indices.indexOf(fileIdx) !== -1) currentGrpIdx = gi; });
+
+  // Add menu header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'padding:4px 12px 5px;font-size:0.6rem;color:#555;letter-spacing:0.1em;text-transform:uppercase;border-bottom:1px solid #1e1e1e;margin-bottom:2px;font-family:"Courier New",monospace;';
+  hdr.textContent = 'Move to group';
+  menu.appendChild(hdr);
+
+  // Existing groups
+  groups.forEach(function(grp, gi){
+    var item = document.createElement('div');
+    var isCurrent = gi === currentGrpIdx;
+    item.className = 'group-move-item' + (isCurrent ? ' gm-current' : '');
+    item.innerHTML = '<span class="gm-dot" style="background:'+grp.color+'"></span>'+escHtml(grp.name)+(isCurrent?' <span style="color:#333;font-size:0.6rem;">(current)</span>':'');
+    if(!isCurrent){
+      item.addEventListener('click', function(e){
+        e.stopPropagation();
+        moveFileToGroup(fileIdx, gi);
+        menu.classList.remove('open');
+      });
+    }
+    menu.appendChild(item);
+  });
+
+  // Ungroup option — only show if file is currently in a group
+  var isUngrouped = ungrouped.indexOf(fileIdx) !== -1;
+  if(!isUngrouped){
+    var ungroupItem = document.createElement('div');
+    ungroupItem.className = 'group-move-item gm-new';
+    ungroupItem.innerHTML = '<span class="gm-dot" style="background:#444;"></span>Ungroup';
+    ungroupItem.addEventListener('click', function(e){
+      e.stopPropagation();
+      ungroup(fileIdx);
+      menu.classList.remove('open');
+    });
+    menu.appendChild(ungroupItem);
+  }
+
+  // New group option
+  var newItem = document.createElement('div');
+  newItem.className = 'group-move-item gm-new';
+  newItem.innerHTML = '<span class="gm-dot" style="background:#555;"></span>New group…';
+  newItem.addEventListener('click', function(e){
+    e.stopPropagation();
+    var name = prompt('New group name:');
+    if(!name || !name.trim()) return;
+    var newGrp = {name:name.trim(), color:nextGroupColor(), indices:[], collapsed:false};
+    groups.push(newGrp);
+    moveFileToGroup(fileIdx, groups.length - 1);
+    menu.classList.remove('open');
+  });
+  menu.appendChild(newItem);
+
+  // Position the menu near the button
+  var rect = e.target.getBoundingClientRect();
+  var vw = window.innerWidth, vh = window.innerHeight;
+  menu.style.visibility = 'hidden'; menu.classList.add('open');
+  var mw = menu.offsetWidth, mh = menu.offsetHeight;
+  var left = rect.right - mw; if(left < 4) left = 4;
+  var top = rect.bottom + 2; if(top + mh > vh - 4) top = rect.top - mh - 2;
+  menu.style.left = left + 'px'; menu.style.top = top + 'px';
+  menu.style.visibility = '';
+}
+
+function moveFileToGroup(fileIdx, targetGrpIdx){
+  var targetGrp = groups[targetGrpIdx];
+  if(!targetGrp) return;
+
+  // Remove from all current locations
+  groups.forEach(function(grp){ var pos = grp.indices.indexOf(fileIdx); if(pos !== -1) grp.indices.splice(pos, 1); });
+  var ui = ungrouped.indexOf(fileIdx); if(ui !== -1) ungrouped.splice(ui, 1);
+
+  // Add to target group
+  if(targetGrp.indices.indexOf(fileIdx) === -1) targetGrp.indices.push(fileIdx);
+
+  // Remove empty groups (keep target)
+  groups = groups.filter(function(g){ return g === targetGrp || g.indices.length > 0; });
+
+  renderFileList();
+}
+
+function ungroup(fileIdx){
+  // Remove from all groups
+  groups.forEach(function(grp){ var pos = grp.indices.indexOf(fileIdx); if(pos !== -1) grp.indices.splice(pos, 1); });
+  groups = groups.filter(function(g){ return g.indices.length > 0; });
+
+  // Add to ungrouped if not already there
+  if(ungrouped.indexOf(fileIdx) === -1) ungrouped.push(fileIdx);
+
+  renderFileList();
+}
+
+// ─── REMOVE ───────────────────────────────────────────────────────────────────
+function removeFile(fileIdx){
+  groups.forEach(function(grp){ var pos=grp.indices.indexOf(fileIdx); if(pos!==-1) grp.indices.splice(pos,1); });
+  groups = groups.filter(function(g){ return g.indices.length > 0; });
+  var ui = ungrouped.indexOf(fileIdx); if(ui !== -1) ungrouped.splice(ui, 1);
+  if(files[fileIdx] && files[fileIdx].address === null){ geoDecrement(); }
+  files[fileIdx] = null;
+  if(activeIdx === fileIdx){
+    var next = -1;
+    for(var i=0;i<files.length;i++){ if(files[i]!==null){ next=i; break; } }
+    activeIdx=-1; activeImg=null; canvas=null;
+    if(next!==-1){ activate(next); } else {
+      $cw.innerHTML='<div class="ph"><span class="ph-icon">🖼</span>Load a photo to begin</div>';
+      $btnDL.disabled=true; $btnAll.disabled=true;
+      $exif.innerHTML='<p class="hint">No image loaded.</p>';
+      if($addr) $addr.style.display='none';
+    }
+  }
+  renderFileList();
+}
+
+function removeGroup(gi){
+  var grp = groups[gi]; if(!grp) return;
+  var movedIndices = grp.indices.slice();
+  // Move all files to ungrouped instead of deleting them
+  movedIndices.forEach(function(fi){
+    if(ungrouped.indexOf(fi) === -1) ungrouped.push(fi);
+  });
+  groups.splice(gi,1);
+  renderFileList();
+}
+
+function downloadGroup(gi){
+  var grp=groups[gi]; if(!grp||!grp.indices.length) return;
+  var zip=new JSZip();
+  var folder=grp.name;
+  var total=grp.indices.filter(function(fi){ return files[fi]&&files[fi].b64; }).length;
+  if(!total) return;
+
+  // Find the group download button and show progress
+  var grpHeaders=document.querySelectorAll('.group-header');
+  var dlBtn=null;
+  grpHeaders.forEach(function(hdr){
+    if(hdr.querySelector('.group-name')&&hdr.querySelector('.group-name').textContent===grp.name){
+      dlBtn=hdr.querySelector('.group-dl-btn');
+    }
+  });
+  if(dlBtn){ dlBtn.disabled=true; dlBtn.textContent='⏳'; }
+
+  var processed=0;
+  grp.indices.forEach(function(fi){
+    var entry=files[fi]; if(!entry||!entry.b64){ checkDone(); return; }
+    var path=folder+'/'+entry.file.name;
+    if(entry.stamped===false){
+      zip.file(path, entry.b64.split(',')[1], {base64:true});
+      checkDone();
+      return;
+    }
+    var img=new Image();
+    img.onload=function(){
+      var dims=scaledDims(img.naturalWidth,img.naturalHeight);
+      var c=document.createElement('canvas'); c.width=dims.w; c.height=dims.h;
+      var ctx=c.getContext('2d'); ctx.drawImage(img,0,0,dims.w,dims.h);
+      if(entry.stampX!==null&&entry.stampY!==null){ cfg.customX=entry.stampX; cfg.customY=entry.stampY; }
+      stampForEntry(ctx,c.width,c.height,entry);
+      var dataUrl=applyExifToDataUrl(c.toDataURL('image/jpeg',0.93), entry);
+      zip.file(path, dataUrl.split(',')[1], {base64:true});
+      checkDone();
+    };
+    img.onerror=function(){ checkDone(); };
+    img.src=entry.b64;
+  });
+
+  function checkDone(){
+    processed++;
+    if(dlBtn) dlBtn.textContent='⏳'+processed+'/'+total;
+    if(processed>=total){
+      zip.generateAsync({type:'blob'}).then(function(blob){
+        var a=document.createElement('a');
+        a.download=folder+'.zip';
+        a.href=URL.createObjectURL(blob);
+        a.click();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+        if(dlBtn){ dlBtn.disabled=false; dlBtn.textContent='⬇'; }
+      });
+    }
+  }
+}
+
+// ─── ACTIVATE ─────────────────────────────────────────────────────────────────
+function activate(idx){
+  activeIdx=idx;
+  renderFileList();
+  var entry=files[idx];
+  renderExifTable(entry.exif);
+  $addr.style.display='block';
+
+  // Show address — manual addr takes priority over geocoded
+  if(entry.manualAddr){
+    showAddr(entry.manualAddr);
+  } else if(entry.address !== null){
+    showAddr(entry.address);
+  } else {
+    // Check if there's any GPS to resolve from
+    var lat = entry.manualLat ? parseFloat(entry.manualLat) : dms(entry.exif.GPSLatitude, entry.exif.GPSLatitudeRef);
+    var lon = entry.manualLon ? parseFloat(entry.manualLon) : dms(entry.exif.GPSLongitude, entry.exif.GPSLongitudeRef);
+    if(lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon)){
+      $addr.textContent = 'Resolving address…';
+      $addr.className = 'addr-box loading';
+    } else {
+      $addr.textContent = 'No GPS data in this photo.';
+      $addr.className = 'addr-box err';
+    }
+  }
+
+  updateManualPanel(entry, idx);
+
+  if(!entry.b64){ st('No image data.','e'); return; }
+  st('Loading…','w');
+  // Load this photo's saved stamp position, or keep current cfg position
+  if(entry.stampX !== null && entry.stampY !== null){
+    cfg.customX = entry.stampX;
+    cfg.customY = entry.stampY;
+  }
+  var img=new Image();
+  img.onload=function(){
+    activeImg=img; $btnDL.disabled=false;
+    st('Ready.','');
+    redraw();
+  };
+  img.onerror=function(){ st('Image decode failed.','e'); };
+  img.src=entry.b64;
+}
+
+function showAddr(addr){
+  $addr.textContent = addr || 'Address not found.';
+  $addr.className = 'addr-box'+(addr?'':' err');
+}
+
+// ─── GEOCODING ────────────────────────────────────────────────────────────────
+function geocode(lat, lon, cb){
+  var key=lat.toFixed(5)+','+lon.toFixed(5);
+  if(geoCache[key]!==undefined){ cb(geoCache[key]); return; }
+  geoQueue.push({lat:lat, lon:lon, key:key, cb:cb});
+  runQueue();
+}
+function runQueue(){
+  if(geoBusy||geoQueue.length===0) return;
+  geoBusy=true;
+  var job=geoQueue.shift();
+  fetchAddress(job.lat, job.lon, function(addr){
+    geoCache[job.key]=addr; job.cb(addr);
+    var delay = (GEOCODER==='nominatim') ? 2200 : 200;
+    setTimeout(function(){ geoBusy=false; runQueue(); }, delay);
+  });
+}
+function fetchAddress(lat, lon, cb){
+  var headers = {'Accept':'application/json'};
+
+  if(GEOCODER==='opencage' && OPENCAGE_KEY){
+    var url='https://api.opencagedata.com/geocode/v1/json?q='+lat.toFixed(8)+'+'+lon.toFixed(8)+'&key='+OPENCAGE_KEY+'&limit=1&no_annotations=1&language=en';
+    fetch(url, {headers:headers})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(data){ cb(parseAddress(data)); })
+      .catch(function(){ cb(''); });
+
+  } else if(GEOCODER==='locationiq' && LOCATIONIQ_KEY){
+    var url='https://us1.locationiq.com/v1/reverse?key='+LOCATIONIQ_KEY+'&lat='+lat.toFixed(8)+'&lon='+lon.toFixed(8)+'&format=json&accept-language=en';
+    fetch(url, {headers:headers})
+      .then(function(r){
+        // 402 = over daily limit, 429 = rate limit — fall back to Nominatim
+        if(r.status === 402 || r.status === 429){
+          console.warn('[LocationIQ] limit reached, falling back to Nominatim');
+          fetchAddressNominatim(lat, lon, cb);
+          return null;
+        }
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(data){ if(data) cb(parseAddress(data)); })
+      .catch(function(){ fetchAddressNominatim(lat, lon, cb); });
+
+  } else {
+    fetchAddressNominatim(lat, lon, cb);
+  }
+}
+
+function fetchAddressNominatim(lat, lon, cb){
+  // Strategy: try zoom=18 (house level) first.
+  // If result has no house_number, retry zoom=17 (street level) — sometimes more accurate.
+  // Use extratags=1 to get additional OSM tags for better matching.
+  var base = 'https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&namedetails=1&accept-language=en'
+    + '&lat=' + lat.toFixed(8) + '&lon=' + lon.toFixed(8);
+  var headers = {'Accept':'application/json'};
+
+  function hasHouseNumber(data){
+    return data && data.address && data.address.house_number;
+  }
+
+  // First attempt: zoom=18 (most specific — tries to snap to a building/house)
+  fetch(base + '&zoom=18', {headers:headers})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(data18){
+      if(hasHouseNumber(data18)){
+        // Got a house number — best result, use it
+        cb(parseAddress(data18));
+      } else {
+        // No house number at zoom 18 — try zoom 17 (road segment level)
+        // Add a small delay to respect Nominatim's rate limit
+        setTimeout(function(){
+          fetch(base + '&zoom=17', {headers:headers})
+            .then(function(r){ return r.json(); })
+            .then(function(data17){
+              // Pick whichever has a house number; prefer 17 if it does
+              if(hasHouseNumber(data17)){
+                cb(parseAddress(data17));
+              } else {
+                // Neither has house number — use zoom 18 result (more specific OSM object)
+                cb(parseAddress(data18));
+              }
+            })
+            .catch(function(){
+              cb(parseAddress(data18));
+            });
+        }, 1100);
+      }
+    })
+    .catch(function(){ cb(''); });
+}
+function parseAddress(data){
+  // Nominatim structured address — build clean human-readable string
+  if(data && data.address){
+    var a = data.address;
+
+    // House number + road
+    var street = '';
+    if(a.house_number && a.road)       street = a.house_number + ' ' + a.road;
+    else if(a.road)                    street = a.road;
+    else if(a.pedestrian)              street = a.pedestrian;
+    else if(a.footway)                 street = a.footway;
+    else if(a.path)                    street = a.path;
+
+    // City (most specific first)
+    var city = a.city || a.town || a.village || a.hamlet || a.suburb || a.neighbourhood || a.county || '';
+
+    // State + postcode
+    var region = '';
+    if(a.state && a.postcode)          region = a.state + ' ' + a.postcode;
+    else if(a.state)                   region = a.state;
+    else if(a.postcode)                region = a.postcode;
+
+    // Country (omit US, keep everything else)
+    var country = '';
+    if(a.country_code && a.country_code.toUpperCase() !== 'US') country = a.country;
+
+    var parts = [street, city, region, country].filter(function(p){ return p && p.trim(); });
+    return parts.join(', ');
+  }
+
+  // OpenCage
+  if(data && data.results && data.results[0]) return data.results[0].formatted || '';
+
+  // LocationIQ array
+  if(data && Array.isArray(data) && data[0] && data[0].display_name) return data[0].display_name;
+
+  return '';
+}
+
+// ─── CANVAS / STAMP ───────────────────────────────────────────────────────────
+function scaledDims(nw,nh){
+  if(nw<=MAX_DIM&&nh<=MAX_DIM) return {w:nw,h:nh};
+  if(nw>=nh) return {w:MAX_DIM,h:Math.round(nh*MAX_DIM/nw)};
+  return {w:Math.round(nw*MAX_DIM/nh),h:MAX_DIM};
+}
+
+function redraw(){
+  if(!activeImg) return;
+  var entry=files[activeIdx];
+  var dims=scaledDims(activeImg.naturalWidth, activeImg.naturalHeight);
+
+  var c=$cw.querySelector('canvas');
+  if(!c||c.width!==dims.w||c.height!==dims.h){
+    var $overlay=id('stampOverlay');
+    if(!$overlay){
+      $overlay=document.createElement('div');
+      $overlay.className='stamp-overlay'; $overlay.id='stampOverlay';
+      $overlay.innerHTML='<div class="stamp-ghost" id="stampGhost"><div class="stamp-ghost-label" id="stampGhostLabel"></div></div>';
+    }
+    $cw.innerHTML='';
+    c=document.createElement('canvas');
+    c.width=dims.w; c.height=dims.h;
+    c.style.maxWidth='100%'; c.style.display='block';
+    $cw.appendChild(c); $cw.appendChild($overlay);
+    canvas=c;
+    $ghost=id('stampGhost'); $ghostLabel=id('stampGhostLabel');
+    setCwCursor();
+  }
+  var ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.drawImage(activeImg,0,0,dims.w,dims.h);
+  stamp(ctx,c.width,c.height,buildLines(entry.exif,entry.file.name,entry.address,entry));
+  updateGhost();
+}
+
+function buildLines(exif, fname, addr, entry){
+  var ent = entry || (activeIdx >= 0 ? files[activeIdx] : null) || {};
+  var out = [];
+  var dt = exif.DateTimeOriginal || exif.DateTime;
+  var chkD = id('chkDate').checked;
+
+  // Date & Time
+  if(chkD){
+    var d = ent.manualDate || exifDate(dt) || 'Not set';
+    var t = ent.manualTime || exifTime(dt);
+    if(t && t.indexOf('AM')===-1 && t.indexOf('PM')===-1 && t.split(':').length===2) t += ':00';
+    out.push(t ? (d + ' ' + t) : d);
+  }
+
+  // GPS
+  if(id('chkGPS').checked){
+    var lat = ent.manualLat ? parseFloat(ent.manualLat) : dms(exif.GPSLatitude, exif.GPSLatitudeRef);
+    var lon = ent.manualLon ? parseFloat(ent.manualLon) : dms(exif.GPSLongitude, exif.GPSLongitudeRef);
+    out.push((lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon))
+      ? lat.toFixed(6) + ', ' + lon.toFixed(6)
+      : 'GPS: Not set');
+  }
+
+  // Address
+  if(id('chkAddr').checked){
+    var addrVal = ent.manualAddr !== null && ent.manualAddr !== undefined
+      ? ent.manualAddr
+      : addr;
+    if(addrVal === null){
+      out.push('Resolving…');
+    } else if(!addrVal){
+      out.push('Address: Not set');
+    } else {
+      // Word-wrap at 44 chars
+      var words = String(addrVal).split(' '), line = '', first = true;
+      words.forEach(function(w){
+        if((line + w).length > 44 && !first){ out.push(line.trimRight()); line = w + ' '; }
+        else { line += w + ' '; first = false; }
+      });
+      if(line.trim()) out.push(line.trimRight());
+    }
+  }
+
+  // Filename
+  if(id('chkFile').checked && fname) out.push(fname);
+
+  return out;
+}
+
+function stamp(ctx, w, h, ls){
+  stampDraw(ctx, w, h, ls);
+}
+
+function stampForEntry(ctx, w, h, entry){
+  stampDraw(ctx, w, h, buildLines(entry.exif, entry.file.name, entry.address, entry));
+}
+
+function ratioToXY(w, h){
+  return { x: cfg.customX * w, y: cfg.customY * h };
+}
+
+function xyToRatio(x, y, w, h){
+  cfg.customX = x / w;
+  cfg.customY = y / h;
+  if(activeIdx >= 0 && files[activeIdx]){
+    files[activeIdx].stampX = cfg.customX;
+    files[activeIdx].stampY = cfg.customY;
+  }
+}
+
+function stampDraw(ctx, w, h, ls){
+  if(!ls || !ls.length) return;
+  var fs  = cfg.size;
+  var pad = Math.max(4, Math.round(fs * 0.4));
+  var lh  = Math.round(fs * 1.55);
+  var fontStr = (cfg.bold ? 'bold ' : '') + (cfg.italic ? 'italic ' : '') + fs + 'px ' + cfg.font;
+
+  ctx.save();
+  ctx.font = fontStr;
+  ctx.textBaseline = 'top';
+
+  // Measure widest line
+  var maxW = 0;
+  ls.forEach(function(l){ var tw = ctx.measureText(l).width; if(tw > maxW) maxW = tw; });
+
+  var bw = maxW + pad * 2;
+  var bh = lh * ls.length + pad * 2;
+
+  // Position (orientation-independent)
+  var pos = ratioToXY(w, h);
+  var x = Math.max(0, Math.min(Math.round(pos.x), w - bw));
+  var y = Math.max(0, Math.min(Math.round(pos.y), h - bh));
+  xyToRatio(x, y, w, h);
+
+  // Background
+  if(cfg.bg !== 'none'){
+    ctx.fillStyle = cfg.bg;
+    ctx.fillRect(x, y, bw, bh);
+  }
+
+  // Text
+  ctx.fillStyle = cfg.color;
+  var align = cfg.align || 'left';
+
+  ls.forEach(function(l, i){
+    var tw = ctx.measureText(l).width;
+    var ty = y + pad + i * lh;
+    var tx;
+
+    if(align === 'center'){
+      tx = x + pad + (maxW - tw) / 2;
+    } else if(align === 'right'){
+      tx = x + pad + (maxW - tw);
+    } else if(align === 'justify' && i < ls.length - 1 && tw < maxW * 0.9){
+      // Justify: spread words
+      var words = l.split(' ');
+      if(words.length > 1){
+        var spaceW = (maxW - ctx.measureText(l.replace(/ /g, '')).width) / (words.length - 1);
+        var cx2 = x + pad;
+        words.forEach(function(word, wi){
+          ctx.fillText(word, cx2, ty);
+          if(cfg.underline) ctx.fillRect(cx2, ty + fs * 1.1, ctx.measureText(word).width, Math.max(1, fs * 0.06));
+          cx2 += ctx.measureText(word).width + spaceW;
+        });
+        if(cfg.underline) return; // underlines already drawn
+        return;
+      }
+      tx = x + pad;
+    } else {
+      tx = x + pad;
+    }
+
+    ctx.fillText(l, tx, ty);
+    if(cfg.underline) ctx.fillRect(tx, ty + fs * 1.1, tw, Math.max(1, fs * 0.06));
+  });
+
+  ctx.restore();
+}
+// ─── EXIF HELPERS ─────────────────────────────────────────────────────────────
+function dms(v, ref){
+  if(!v || !Array.isArray(v) || v.length < 3) return null;
+  try{
+    function toNum(x){
+      if(x === null || x === undefined) return NaN;
+      if(typeof x === 'number') return x;
+      // {numerator, denominator}
+      if(typeof x === 'object' && 'numerator' in x){
+        return x.denominator ? x.numerator / x.denominator : x.numerator;
+      }
+      // [numerator, denominator]
+      if(Array.isArray(x)){
+        return x[1] ? x[0] / x[1] : x[0];
+      }
+      return parseFloat(x);
+    }
+    var d = toNum(v[0]);
+    var m = toNum(v[1]);
+    var s = toNum(v[2]);
+    if(isNaN(d) || isNaN(m) || isNaN(s)) return null;
+    var dec = d + m/60 + s/3600;
+    if(ref === 'S' || ref === 'W') dec = -dec;
+    return dec;
+  }catch(e){ return null; }
+}
+function exifDate(dt){
+  if(!dt) return null;
+  var p = dt.split(' ');
+  if(!p[0]) return null;
+  // EXIF date is YYYY:MM:DD — reformat to MM/DD/YYYY
+  var parts = p[0].split(':');
+  if(parts.length === 3) return parts[1]+'/'+parts[2]+'/'+parts[0];
+  return p[0].replace(/:/g,'/');
+}
+function exifTime(dt){
+  if(!dt) return null;
+  var p = dt.split(' ');
+  if(p.length < 2) return null;
+  // Convert HH:MM:SS (24h) to hh:mm:ss AM/PM
+  var timeParts = p[1].split(':');
+  if(timeParts.length < 2) return p[1];
+  var h = parseInt(timeParts[0], 10);
+  var m = timeParts[1];
+  var s = timeParts[2] || '00';
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if(h === 0) h = 12;
+  return (h < 10 ? '0'+h : h)+':'+m+':'+s+' '+ampm;
+}
+
+function renderExifTable(exif){
+  var keys=[
+    ['DateTimeOriginal','Date/time'],['Make','Camera make'],['Model','Camera model'],
+    ['GPSLatitude','GPS lat'],['GPSLongitude','GPS lon'],['GPSAltitude','Altitude'],
+    ['FocalLength','Focal length'],['FNumber','F-number'],['ISOSpeedRatings','ISO'],
+    ['ExposureTime','Exposure'],['PixelXDimension','Width'],['PixelYDimension','Height']
+  ];
+  var lat=dms(exif.GPSLatitude,exif.GPSLatitudeRef), lon=dms(exif.GPSLongitude,exif.GPSLongitudeRef), rows='';
+  keys.forEach(function(kv){
+    var k=kv[0],label=kv[1],val=exif[k];
+    if(val===undefined||val===null) return;
+    if(k==='GPSLatitude')  val=lat!==null?lat.toFixed(6)+'° '+(exif.GPSLatitudeRef||''):'—';
+    if(k==='GPSLongitude') val=lon!==null?lon.toFixed(6)+'° '+(exif.GPSLongitudeRef||''):'—';
+    if(k==='FocalLength'&&val&&val.numerator!==undefined) val=(val.numerator/val.denominator).toFixed(1)+'mm';
+    if(k==='FNumber'&&val&&val.numerator!==undefined) val='f/'+(val.numerator/val.denominator).toFixed(1);
+    if(k==='ExposureTime'&&val&&val.numerator!==undefined) val=val.numerator+'/'+val.denominator+'s';
+    if(k==='GPSAltitude'&&val&&val.numerator!==undefined) val=(val.numerator/val.denominator).toFixed(1)+'m';
+    rows+='<tr><td>'+label+'</td><td>'+val+'</td></tr>';
+  });
+  $exif.innerHTML=rows?'<table class="exif-tbl">'+rows+'</table>':'<p class="hint">No EXIF tags found.</p>';
+}
+
+// ─── GHOST / DRAG ─────────────────────────────────────────────────────────────
+var $ghost=id('stampGhost'), $ghostLabel=id('stampGhostLabel');
+var dragState={active:false,startMouseX:0,startMouseY:0,startRatioX:0,startRatioY:0};
+
+function updateGhost(){
+  if(!canvas||!$ghost) return;
+  var cRect=canvas.getBoundingClientRect();
+  if(!cRect.width) return;
+  var w=canvas.width, h=canvas.height;
+  // Measure stamp bounds
+  var ctx=canvas.getContext('2d');
+  var fs=cfg.size, pad=Math.max(4,Math.round(fs*0.4));
+  var fontStr=(cfg.bold?'bold ':'')+( cfg.italic?'italic ':'')+fs+'px '+cfg.font;
+  ctx.font=fontStr; ctx.textBaseline='top';
+  var ls=buildLines((files[activeIdx]||{}).exif||{},(files[activeIdx]||{file:{name:''}}).file.name,(files[activeIdx]||{}).address);
+  var lh=fs*1.5, maxW=0;
+  ls.forEach(function(l){ var tw=ctx.measureText(l).width; if(tw>maxW) maxW=tw; });
+  var bw=maxW+pad*2, bh=lh*ls.length+pad*2;
+  var scaleX=cRect.width/w, scaleY=cRect.height/h;
+  var offX=0, offY=0;
+  var cwRect=$cw.getBoundingClientRect();
+  offX=cRect.left-cwRect.left; offY=cRect.top-cwRect.top;
+  var sx=offX+ratioToXY(w,h).x/w*cRect.width;
+  var sy=offY+ratioToXY(w,h).y/h*cRect.height;
+  $ghost.style.left=sx+'px'; $ghost.style.top=sy+'px';
+  $ghost.style.width=(bw*scaleX)+'px'; $ghost.style.height=(bh*scaleY)+'px';
+  $ghost.style.display='block';
+}
+
+function clampByGhost(canvasRect){
+  if(!canvas) return;
+  var w=canvas.width, h=canvas.height;
+  var ctx=canvas.getContext('2d');
+  var fs=cfg.size, pad=Math.max(4,Math.round(fs*0.4));
+  ctx.font=(cfg.bold?'bold ':'')+fs+'px '+cfg.font;
+  var ls=buildLines((files[activeIdx]||{}).exif||{},(files[activeIdx]||{file:{name:''}}).file.name,(files[activeIdx]||{}).address);
+  var lh=fs*1.5, maxW=0;
+  ls.forEach(function(l){ var tw=ctx.measureText(l).width; if(tw>maxW) maxW=tw; });
+  var bw=maxW+pad*2, bh=lh*ls.length+pad*2;
+  var pos=ratioToXY(w,h);
+  var cx=Math.max(0,Math.min(pos.x, w-bw));
+  var cy=Math.max(0,Math.min(pos.y, h-bh));
+  xyToRatio(cx,cy,w,h);
+}
+
+// Ghost drag (dragging the ghost itself)
+$ghost.addEventListener('mousedown', function(e){
+  e.stopPropagation(); e.preventDefault();
+  dragState.active=true;
+  dragState.startMouseX=e.clientX; dragState.startMouseY=e.clientY;
+  dragState.startRatioX=cfg.customX; dragState.startRatioY=cfg.customY;
+  $ghost.classList.add('dragging');
+});
+document.addEventListener('mousemove', function(e){
+  if(!dragState.active||!canvas) return;
+  var rect=canvas.getBoundingClientRect();
+  var dx=(e.clientX-dragState.startMouseX)/rect.width*canvas.width;
+  var dy=(e.clientY-dragState.startMouseY)/rect.height*canvas.height;
+  var startPos=ratioToXY(canvas.width,canvas.height);
+  // temporarily set to start position
+  cfg.customX=dragState.startRatioX; cfg.customY=dragState.startRatioY;
+  var startXY=ratioToXY(canvas.width,canvas.height);
+  xyToRatio(startXY.x+dx, startXY.y+dy, canvas.width, canvas.height);
+  cfg.pos='custom';
+  clampByGhost(rect);
+  redraw(); updateGhost();
+});
+document.addEventListener('mouseup', function(e){
+  if(!dragState.active) return;
+  dragState.active=false;
+  $ghost.classList.remove('dragging'); $ghostLabel.textContent='';
+  redraw(); updateGhost();
+});
+
+// Canvas click/drag (clicking outside ghost)
+var canvasDragState={active:false,startMouseX:0,startMouseY:0,moved:false};
+$cw.addEventListener('mousedown', function(e){
+  if(!canvas) return;
+  if(e.target===$ghost||$ghost.contains(e.target)) return;
+  var rect=canvas.getBoundingClientRect();
+  if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom) return;
+  e.preventDefault(); e.stopPropagation();
+  canvasDragState.active=true; canvasDragState.moved=false;
+  canvasDragState.startMouseX=e.clientX; canvasDragState.startMouseY=e.clientY;
+  var px=(e.clientX-rect.left)/rect.width*canvas.width;
+  var py=(e.clientY-rect.top)/rect.height*canvas.height;
+  xyToRatio(px, py, canvas.width, canvas.height);
+  cfg.pos='custom';
+  clampByGhost(rect);
+  redraw(); updateGhost();
+  $cw.style.cursor='grabbing';
+});
+document.addEventListener('mousemove', function(e){
+  if(!canvasDragState.active||!canvas) return;
+  e.preventDefault();
+  var dx=e.clientX-canvasDragState.startMouseX, dy=e.clientY-canvasDragState.startMouseY;
+  if(Math.abs(dx)>2||Math.abs(dy)>2) canvasDragState.moved=true;
+  if(!canvasDragState.moved) return;
+  var rect=canvas.getBoundingClientRect();
+  var px=(e.clientX-rect.left)/rect.width*canvas.width;
+  var py=(e.clientY-rect.top)/rect.height*canvas.height;
+  xyToRatio(px, py, canvas.width, canvas.height);
+  cfg.pos='custom';
+  clampByGhost(rect);
+  redraw(); updateGhost();
+});
+document.addEventListener('mouseup', function(){
+  if(!canvasDragState.active) return;
+  canvasDragState.active=false;
+  $cw.style.cursor='';
+  redraw(); updateGhost();
+});
+// Touch
+$ghost.addEventListener('touchstart', function(e){
+  e.preventDefault(); var t=e.touches[0];
+  dragState.active=true; dragState.startMouseX=t.clientX; dragState.startMouseY=t.clientY;
+  dragState.startRatioX=cfg.customX; dragState.startRatioY=cfg.customY;
+  $ghost.classList.add('dragging');
+},{passive:false});
+$cw.addEventListener('touchstart', function(e){
+  if(!canvas) return; e.preventDefault();
+  var t=e.touches[0]; var rect=canvas.getBoundingClientRect();
+  if(t.clientX<rect.left||t.clientX>rect.right||t.clientY<rect.top||t.clientY>rect.bottom) return;
+  canvasDragState.active=true; canvasDragState.moved=false;
+  canvasDragState.startMouseX=t.clientX; canvasDragState.startMouseY=t.clientY;
+  var px=(t.clientX-rect.left)/rect.width*canvas.width;
+  var py=(t.clientY-rect.top)/rect.height*canvas.height;
+  xyToRatio(px, py, canvas.width, canvas.height);
+  cfg.pos='custom'; clampByGhost(rect); redraw(); updateGhost();
+},{passive:false});
+document.addEventListener('touchmove', function(e){
+  if(dragState.active&&canvas){
+    e.preventDefault(); var t=e.touches[0];
+    var rect=canvas.getBoundingClientRect();
+    var dx=(t.clientX-dragState.startMouseX)/rect.width*canvas.width;
+    var dy=(t.clientY-dragState.startMouseY)/rect.height*canvas.height;
+    cfg.customX=dragState.startRatioX; cfg.customY=dragState.startRatioY;
+    var startXY=ratioToXY(canvas.width,canvas.height);
+    xyToRatio(startXY.x+dx, startXY.y+dy, canvas.width, canvas.height);
+    cfg.pos='custom'; clampByGhost(rect); redraw(); updateGhost();
+  } else if(canvasDragState.active&&canvas){
+    e.preventDefault(); var t=e.touches[0];
+    var dx2=t.clientX-canvasDragState.startMouseX, dy2=t.clientY-canvasDragState.startMouseY;
+    if(Math.abs(dx2)>2||Math.abs(dy2)>2) canvasDragState.moved=true;
+    var rect2=canvas.getBoundingClientRect();
+    var px=(t.clientX-rect2.left)/rect2.width*canvas.width;
+    var py=(t.clientY-rect2.top)/rect2.height*canvas.height;
+    xyToRatio(px, py, canvas.width, canvas.height);
+    cfg.pos='custom'; clampByGhost(rect2); redraw(); updateGhost();
+  }
+},{passive:false});
+document.addEventListener('touchend', function(){
+  if(dragState.active){ dragState.active=false; $ghost.classList.remove('dragging'); $ghostLabel.textContent=''; redraw(); updateGhost(); }
+  if(canvasDragState.active){ canvasDragState.active=false; redraw(); updateGhost(); }
+});
+
+function setCwCursor(){ $cw.style.cursor=canvas?'crosshair':''; }
+
+// ─── PRESET POSITION ──────────────────────────────────────────────────────────
+(function(){
+  var grid=id('posGrid'); if(!grid) return;
+  grid.addEventListener('click', function(e){
+    var btn=e.target.closest('.sz-pb[data-px]'); if(!btn) return;
+    grid.querySelectorAll('.sz-pb').forEach(function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+    cfg.customX=parseFloat(btn.dataset.px); cfg.customY=parseFloat(btn.dataset.py);
+    if(activeIdx>=0&&files[activeIdx]){ files[activeIdx].stampX=cfg.customX; files[activeIdx].stampY=cfg.customY; }
+    cfg.pos='custom'; redraw(); updateGhost();
+  });
+})();
+
+// Apply current stamp position to all photos in the active photo's group
+(function(){
+  var btn = id('btnApplyPosGroup'); if(!btn) return;
+  btn.addEventListener('click', function(){
+    if(activeIdx < 0) return;
+
+    // Find which group/ungrouped the active photo belongs to
+    var targetIndices = [];
+    var grpName = '';
+    for(var g=0; g<groups.length; g++){
+      if(groups[g].indices.indexOf(activeIdx) !== -1){
+        targetIndices = groups[g].indices;
+        grpName = groups[g].name;
+        break;
+      }
+    }
+    // Also check ungrouped
+    if(!targetIndices.length && ungrouped.indexOf(activeIdx) !== -1){
+      targetIndices = ungrouped;
+      grpName = 'ungrouped';
+    }
+
+    if(!targetIndices.length){
+      st('Photo is not in a group.', 'w');
+      setTimeout(function(){ st('',''); }, 2000);
+      return;
+    }
+
+    var count = 0;
+    targetIndices.forEach(function(fi){
+      if(!files[fi]) return;
+      files[fi].stampX = cfg.customX;
+      files[fi].stampY = cfg.customY;
+      count++;
+    });
+
+    st('Position applied to ' + count + ' photos' + (grpName ? ' in "' + grpName + '"' : '') + '.', '');
+    setTimeout(function(){ st('',''); }, 2000);
+  });
+})();
+
+// ─── CONTROLS ─────────────────────────────────────────────────────────────────
+(function(){ var el=id('slSize'); if(!el) return; el.addEventListener('input', function(){ cfg.size=+this.value; var vEl=id('valSize'); if(vEl) vEl.textContent=this.value+'px'; redraw(); }); })();
+// ─── CUSTOM FONT PICKER ───────────────────────────────────────────────────────
+(function(){
+  var fonts = [
+    { label:'Courier Prime', value:"'Courier Prime', 'Courier New', monospace" },
+    { label:'Roboto Mono',   value:"'Roboto Mono', monospace" },
+    { label:'Share Tech',    value:"'Share Tech Mono', monospace" },
+    { label:'IBM Plex Mono', value:"'IBM Plex Mono', monospace" },
+    { label:'Oswald',        value:"'Oswald', sans-serif" },
+    { label:'Anton',         value:"'Anton', sans-serif" },
+    { label:'Bebas Neue',    value:"'Bebas Neue', sans-serif" },
+    { label:'Rajdhani',      value:"'Rajdhani', sans-serif" }
+  ];
+
+  var btn  = id('fontPickerBtn');
+  var drop = id('fontPickerDrop');
+  if(!btn || !drop) return;
+
+  // Build dropdown options
+  fonts.forEach(function(f){
+    var opt = document.createElement('div');
+    opt.className = 'font-picker-opt' + (f.value === cfg.font ? ' selected' : '');
+    opt.textContent = f.label;
+    opt.style.fontFamily = f.value;  // preview each option in its own font
+    opt.addEventListener('click', function(e){
+      e.stopPropagation();
+      cfg.font = f.value;
+      btn.textContent = f.label;
+      btn.style.fontFamily = f.value;  // preview in button — isolated from UI
+      drop.querySelectorAll('.font-picker-opt').forEach(function(o){ o.classList.remove('selected'); });
+      opt.classList.add('selected');
+      drop.classList.remove('open');
+      btn.classList.remove('open');
+      redraw();
+    });
+    drop.appendChild(opt);
+  });
+
+  // Set initial button font preview
+  btn.style.fontFamily = cfg.font;
+
+  // Open/close
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var isOpen = drop.classList.contains('open');
+    // Close all other dropdowns
+    document.querySelectorAll('.color-pick-dropdown').forEach(function(d){ d.classList.remove('open'); });
+    if(isOpen){
+      drop.classList.remove('open');
+      btn.classList.remove('open');
+    } else {
+      // Position dropdown
+      drop.style.visibility='hidden'; drop.classList.add('open'); btn.classList.add('open');
+      var rect = btn.getBoundingClientRect();
+      var dh = drop.offsetHeight || 200;
+      var vw = window.innerWidth, vh = window.innerHeight;
+      var left = rect.left; if(left + 160 > vw - 4) left = vw - 164;
+      var top = rect.bottom + 2; if(top + dh > vh - 4) top = rect.top - dh - 2;
+      drop.style.left = left+'px'; drop.style.top = top+'px'; drop.style.minWidth = rect.width+'px';
+      drop.style.visibility = '';
+    }
+  });
+
+  document.addEventListener('click', function(){
+    drop.classList.remove('open'); btn.classList.remove('open');
+  });
+})();
+(function(){ var el=id('valSize'); if(el) el.textContent='24px'; })();
+(function(){ var el=id('valBgOpacity'); if(el) el.textContent='50%'; })();
+['btnBold','btnItalic','btnUnder'].forEach(function(bid){
+  var _b=id(bid); if(!_b) return;
+  _b.addEventListener('click', function(){
+    this.classList.toggle('on');
+    if(bid==='btnBold')    cfg.bold      = this.classList.contains('on');
+    if(bid==='btnItalic')  cfg.italic    = this.classList.contains('on');
+    if(bid==='btnUnder')   cfg.underline = this.classList.contains('on');
+    redraw();
+  });
+});
+
+// Alignment buttons — mutually exclusive
+['btnAlignLeft','btnAlignCenter','btnAlignRight','btnAlignJustify'].forEach(function(bid){
+  var _b=id(bid); if(!_b) return;
+  _b.addEventListener('click', function(){
+    ['btnAlignLeft','btnAlignCenter','btnAlignRight','btnAlignJustify'].forEach(function(b){ var el=id(b); if(el) el.classList.remove('on'); });
+    this.classList.add('on');
+    if(bid==='btnAlignLeft')    cfg.align='left';
+    if(bid==='btnAlignCenter')  cfg.align='center';
+    if(bid==='btnAlignRight')   cfg.align='right';
+    if(bid==='btnAlignJustify') cfg.align='justify';
+    redraw();
+  });
+});
+['chkDate','chkTime','chkGPS','chkAddr','chkFile'].forEach(function(x){ var el=id(x); if(el) el.addEventListener('change', redraw); });
+(function(){ var d=id('chkDate'), t=id('chkTime'); if(d&&t) d.addEventListener('change', function(){ t.checked=d.checked; }); })();
+
+// BG Opacity
+(function(){ var el=id('slBgOpacity'); if(!el) return; el.addEventListener('input', function(){
+  cfg.bgOpacity=+this.value; id('valBgOpacity').textContent=this.value+'%';
+  if(cfg.bg!=='none'){ cfg.bg='rgba('+cfg.bgBase+','+cfg.bgOpacity/100+')'; redraw(); }
+}); })();
+
+// ─── COLOR PICKERS ────────────────────────────────────────────────────────────
+var COLOR_PALETTE=[
+  '#ffffff','#f2f2f2','#d9d9d9','#bfbfbf','#a6a6a6','#808080','#404040','#000000',
+  '#dce6f1','#deeaf1','#e2efda','#fff2cc','#fce4d6','#f4cccc','#d9ead3','#cfe2f3',
+  '#b8cce4','#9dc3e6','#a9d18e','#ffe699','#f4b183','#ea9999','#93c47d','#9fc5e8',
+  '#70ad47','#4472c4','#ed7d31','#ffc000','#5b9bd5','#c00000','#538135','#2e75b6',
+  '#375623','#17375e','#974706','#7f6000','#1f3864','#660000','#274e13','#1a3459',
+  '#ff0000','#ff9900','#ffff00','#00ff00','#00ffff','#0000ff','#9900ff','#ff00ff'
+];
+
+function buildPalette(containerId, onSelect){
+  var el=id(containerId); el.innerHTML='';
+  var accentStart=COLOR_PALETTE.length-8;
+  COLOR_PALETTE.forEach(function(c,i){
+    if(i===accentStart){ var sep=document.createElement('div'); sep.style.cssText='grid-column:1/-1;height:1px;background:#2a2a2a;margin:2px 0;'; el.appendChild(sep); }
+    var s=document.createElement('div'); s.className='color-swatch'; s.style.background=c; s.title=c;
+    if(c==='#ffffff'||c==='#f2f2f2') s.style.borderColor='#444';
+    s.addEventListener('click', function(e){ e.stopPropagation(); onSelect(c); }); el.appendChild(s);
+  });
+}
+function setActiveSwatch(paletteId,color){
+  id(paletteId).querySelectorAll('.color-swatch').forEach(function(s){ s.classList.toggle('active',s.title.toLowerCase()===color.toLowerCase()); });
+}
+function openColorDrop(btn,drop){
+  drop.style.visibility='hidden'; drop.style.top='-9999px'; drop.style.left='-9999px'; drop.style.bottom=''; drop.classList.add('open');
+  var dw=drop.offsetWidth||182, dh=drop.offsetHeight||240, rect=btn.getBoundingClientRect(), vw=window.innerWidth, vh=window.innerHeight;
+  var left=rect.left; if(left+dw>vw-8) left=vw-dw-8; if(left<4) left=4;
+  var top; if(rect.top>=dh+4||rect.top>=vh-rect.bottom){ top=rect.top-dh-4; } else { top=rect.bottom+4; if(top+dh>vh-4) top=vh-dh-4; }
+  if(top<4) top=4;
+  drop.style.left=left+'px'; drop.style.top=top+'px'; drop.style.bottom=''; drop.style.visibility='';
+}
+function setupColorPicker(btnId,dropId,paletteId,customId,onColor){
+  var btn=id(btnId), drop=id(dropId);
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var isOpen=drop.classList.contains('open');
+    document.querySelectorAll('.color-pick-dropdown').forEach(function(d){ d.classList.remove('open'); });
+    if(!isOpen) openColorDrop(btn,drop);
+  });
+  id(customId).addEventListener('input', function(){ onColor(this.value); btn.style.background=this.value; setActiveSwatch(paletteId,this.value); });
+  buildPalette(paletteId, function(c){ onColor(c); btn.style.background=c; id(customId).value=c; setActiveSwatch(paletteId,c); drop.classList.remove('open'); });
+}
+
+// Inject dropdowns
+(function(){
+  var colorDrop=document.createElement('div'); colorDrop.className='color-pick-dropdown'; colorDrop.id='colorPickDrop';
+  colorDrop.innerHTML='<div class="color-pick-palette" id="colorPalette"></div><div class="color-pick-custom"><label>Custom</label><input type="color" id="colorCustom" value="#ffffff"></div>';
+  document.body.appendChild(colorDrop);
+  var bgDrop=document.createElement('div'); bgDrop.className='color-pick-dropdown'; bgDrop.id='bgPickDrop';
+  bgDrop.innerHTML='<div class="color-pick-palette" id="bgPalette"></div><div class="color-pick-custom" style="flex-direction:column;align-items:flex-start;gap:3px;"><div style="display:flex;align-items:center;gap:5px;"><label>Custom</label><input type="color" id="bgCustom" value="#000000"></div><label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="bgNone" style="accent-color:#f0b429;width:11px;height:11px;"><span style="font-size:0.55rem;color:#555;letter-spacing:0.08em;text-transform:uppercase;">No background</span></label></div>';
+  document.body.appendChild(bgDrop);
+})();
+
+function setBgNoneState(isNone){
+  var bgPickBtn=id('bgPickBtn'), slOp=id('slBgOpacity'), valOp=id('valBgOpacity');
+  if(isNone){
+    cfg.bg='none';
+    if(bgPickBtn) bgPickBtn.style.background='repeating-conic-gradient(#444 0% 25%, #1a1a1a 0% 50%) 0 0 / 6px 6px';
+    if(slOp){ slOp.disabled=true; slOp.style.opacity='0.3'; slOp.style.pointerEvents='none'; }
+    if(valOp) valOp.style.opacity='0.3';
+  } else {
+    cfg.bg='rgba('+cfg.bgBase+','+cfg.bgOpacity/100+')';
+    var hex='#'+cfg.bgBase.split(',').map(function(v){ return ('0'+parseInt(v).toString(16)).slice(-2); }).join('');
+    if(bgPickBtn) bgPickBtn.style.background=hex;
+    if(slOp){ slOp.disabled=false; slOp.style.opacity=''; slOp.style.pointerEvents=''; }
+    if(valOp) valOp.style.opacity='';
+  }
+}
+
+setupColorPicker('colorPickBtn','colorPickDrop','colorPalette','colorCustom', function(c){ cfg.color=c; redraw(); });
+setupColorPicker('bgPickBtn','bgPickDrop','bgPalette','bgCustom', function(c){
+  var r=parseInt(c.slice(1,3),16), g=parseInt(c.slice(3,5),16), b=parseInt(c.slice(5,7),16);
+  cfg.bgBase=r+','+g+','+b; setBgNoneState(false); redraw();
+});
+var _bgNone=id('bgNone');
+if(_bgNone) _bgNone.addEventListener('change', function(){ setBgNoneState(this.checked); redraw(); });
+(function(){ var el=id('slBgOpacity'); if(!el) return; el.addEventListener('input', function(){
+  cfg.bgOpacity=+this.value; id('valBgOpacity').textContent=this.value+'%';
+  if(cfg.bg!=='none'){ cfg.bg='rgba('+cfg.bgBase+','+cfg.bgOpacity/100+')'; redraw(); }
+}); })();
+
+document.addEventListener('click', function(){ document.querySelectorAll('.color-pick-dropdown').forEach(function(d){ d.classList.remove('open'); }); });
+
+// ─── MANUAL OVERRIDE PANEL ────────────────────────────────────────────────────
+var manualScope='photo';
+function updateManualPanel(entry,idx){
+  var mp=id('manualPanel'); if(!mp) return;
+  mp.style.display='block'; mp.classList.add('visible');
+
+  // Show what EXIF data is missing so user knows what to fill in
+  var hasDT  = !!(entry.exif && (entry.exif.DateTimeOriginal||entry.exif.DateTime));
+  var hasGPS = !!(entry.exif && dms(entry.exif.GPSLatitude,entry.exif.GPSLatitudeRef)!==null);
+  var missing = [];
+  if(!hasDT)  missing.push('Date/Time');
+  if(!hasGPS) missing.push('GPS');
+  var badge = id('missingBadge');
+  if(badge) badge.textContent = missing.length ? 'Missing: '+missing.join(', ') : '';
+
+  id('manualDate').value  = entry.manualDate||'';
+  id('manualTime').value  = entry.manualTime||'';
+  var gpsEl=id('manualGPS');
+  if(gpsEl){ gpsEl.value = (entry.manualLat&&entry.manualLon) ? entry.manualLat+','+entry.manualLon : ''; }
+  id('manualAddr').value  = entry.manualAddr||'';
+
+  var grp=null; for(var g=0;g<groups.length;g++){ if(groups[g].indices.indexOf(idx)!==-1){ grp=groups[g]; break; } }
+  var showScope=grp&&grp.indices.length>1;
+  id('manualScope').style.display=showScope?'flex':'none';
+  id('btnApplyGroup').style.display=showScope&&manualScope==='group'?'block':'none';
+}
+
+function replaceWithClone(el){ var c=el.cloneNode(true); el.parentNode.replaceChild(c,el); return c; }
+(function(){
+  var $sp=replaceWithClone(id('scopePhoto')), $sg=replaceWithClone(id('scopeGroup'));
+  $sp.addEventListener('click', function(){ manualScope='photo'; $sp.classList.add('on'); $sg.classList.remove('on'); id('btnApplyGroup').style.display='none'; });
+  $sg.addEventListener('click', function(){ manualScope='group'; $sg.classList.add('on'); $sp.classList.remove('on'); id('btnApplyGroup').style.display='block'; });
+})();
+
+function onManualDateTimeChange(entry){ entry.manualDate=id('manualDate').value; entry.manualTime=id('manualTime').value; redraw(); }
+function parseGPSInput(gpsVal){
+  // Returns {lat, lon} or null
+  gpsVal = (gpsVal||'').trim();
+  if(!gpsVal) return null;
+  var lat = null, lon = null;
+  var byComma = gpsVal.split(',');
+  if(byComma.length >= 2){
+    lat = parseFloat(byComma[0].trim());
+    lon = parseFloat(byComma[1].trim());
+  } else {
+    var m = gpsVal.match(/^([+-]?\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)$/);
+    if(m){ lat = parseFloat(m[1]); lon = parseFloat(m[2]); }
+  }
+  if(isNaN(lat) || isNaN(lon)) return null;
+  return {lat:lat, lon:lon};
+}
+
+function resolveAddressFromCoords(lat, lon, entry, idx){
+  var key = lat.toFixed(5)+','+lon.toFixed(5);
+  if(geoCache[key] !== undefined){
+    entry.address = geoCache[key];
+    if(activeIdx === idx){
+      // Only fill address field if user hasn't typed a manual address
+      if(!entry.manualAddr){
+        var addrEl = id('manualAddr');
+        if(addrEl) addrEl.value = entry.address || '';
+      }
+      showAddr(entry.manualAddr || entry.address);
+      redraw();
+    }
+  } else {
+    entry.address = null;
+    if(activeIdx === idx){
+      showAddr('');
+      $addr.textContent = 'Resolving address…';
+      $addr.className = 'addr-box loading';
+    }
+    geoIncrement();
+    geocode(lat, lon, function(addr){
+      entry.address = addr;
+      // Do NOT set manualAddr — geocoded result is not a manual override
+      geoDecrement();
+      if(activeIdx === idx){
+        if(!entry.manualAddr){
+          var el = id('manualAddr');
+          if(el) el.value = addr || '';
+        }
+        showAddr(entry.manualAddr || addr);
+        redraw();
+      }
+    });
+  }
+}
+
+function onManualGPSChange(entry){
+  var gpsVal = (id('manualGPS').value||'').trim();
+  var parsed = parseGPSInput(gpsVal);
+
+  if(!parsed){
+    // GPS cleared — restore from EXIF GPS
+    entry.manualLat = null;
+    entry.manualLon = null;
+    var exifLat = dms(entry.exif.GPSLatitude, entry.exif.GPSLatitudeRef);
+    var exifLon = dms(entry.exif.GPSLongitude, entry.exif.GPSLongitudeRef);
+    if(exifLat !== null && exifLon !== null){
+      resolveAddressFromCoords(exifLat, exifLon, entry, files.indexOf(entry));
+    } else {
+      entry.address = '';
+      entry.manualAddr = null;
+      var addrEl = id('manualAddr'); if(addrEl) addrEl.value = '';
+      showAddr('');
+    }
+    redraw();
+    return;
+  }
+
+  entry.manualLat = String(parsed.lat);
+  entry.manualLon = String(parsed.lon);
+
+  // Auto-resolve address from new GPS
+  resolveAddressFromCoords(parsed.lat, parsed.lon, entry, files.indexOf(entry));
+  redraw();
+}
+var addrGeoTimer = null;
+function onManualAddrChange(entry){
+  entry.manualAddr = id('manualAddr').value;
+
+  if(!entry.manualAddr.trim()){
+    // Address cleared — restore geocoded address from manual GPS or EXIF GPS
+    entry.manualAddr = null;
+    var lat = entry.manualLat ? parseFloat(entry.manualLat) : dms(entry.exif.GPSLatitude, entry.exif.GPSLatitudeRef);
+    var lon = entry.manualLon ? parseFloat(entry.manualLon) : dms(entry.exif.GPSLongitude, entry.exif.GPSLongitudeRef);
+    if(lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon)){
+      resolveAddressFromCoords(lat, lon, entry, files.indexOf(entry));
+    } else {
+      entry.address = '';
+      showAddr('');
+    }
+    redraw();
+    return;
+  }
+
+  // Manual address typed — use it as-is, do NOT touch GPS fields
+  entry.address = entry.manualAddr;
+  showAddr(entry.address);
+  redraw();
+}
+
+
+id('manualDate').addEventListener('input', function(){ if(activeIdx>=0&&files[activeIdx]) onManualDateTimeChange(files[activeIdx]); });
+id('manualTime').addEventListener('input', function(){ if(activeIdx>=0&&files[activeIdx]) onManualDateTimeChange(files[activeIdx]); });
+id('manualGPS').addEventListener('input',  function(){ if(activeIdx>=0&&files[activeIdx]) onManualGPSChange(files[activeIdx]); });
+id('manualAddr').addEventListener('input', function(){ if(activeIdx>=0&&files[activeIdx]) onManualAddrChange(files[activeIdx]); });
+
+id('btnApplyGroup').addEventListener('click', function(){
+  if(activeIdx < 0) return;
+  var src = files[activeIdx];
+  if(!src) return;
+
+  // Find group containing the active photo
+  var grp = null;
+  for(var g=0; g<groups.length; g++){
+    if(groups[g].indices.indexOf(activeIdx) !== -1){ grp = groups[g]; break; }
+  }
+  if(!grp) return;
+
+  grp.indices.forEach(function(fi){
+    if(fi === activeIdx || !files[fi]) return;
+    var e = files[fi];
+
+    // Copy all manual override fields
+    e.manualDate = src.manualDate;
+    e.manualTime = src.manualTime;
+    e.manualLat  = src.manualLat;
+    e.manualLon  = src.manualLon;
+    e.manualAddr = src.manualAddr;
+
+    // Apply address: use manual addr if set, otherwise geocode from manual GPS
+    if(src.manualAddr){
+      e.address = src.manualAddr;
+    } else if(src.manualLat && src.manualLon){
+      var lat = parseFloat(src.manualLat), lon = parseFloat(src.manualLon);
+      if(!isNaN(lat) && !isNaN(lon)){
+        var key = lat.toFixed(5)+','+lon.toFixed(5);
+        if(geoCache[key] !== undefined){
+          e.address = geoCache[key];
+        } else {
+          e.address = null;
+          geoIncrement();
+          (function(entry, idx){ geocode(lat, lon, function(addr){
+            entry.address = addr;
+            geoDecrement();
+            if(activeIdx === idx) { showAddr(addr); redraw(); }
+          }); })(e, fi);
+        }
+      }
+    }
+  });
+
+  st('Applied to all '+grp.indices.length+' photos in group.', '');
+  setTimeout(function(){ st('',''); }, 2000);
+});
+
+// ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
+$btnDL.addEventListener('click', function(){
+  var entry=files[activeIdx];
+  if(!entry||!entry.b64) return;
+  if(entry.stamped === false){
+    // No stamp — download original
+    var a=document.createElement('a'); a.download=entry.file.name; a.href=entry.b64; a.click();
+    return;
+  }
+  if(!canvas) return;
+  downloadWithExif(canvas, entry||null, entry?entry.file.name:'photo.jpg');
+});
+
+$btnAll.addEventListener('click', function(){
+  $btnAll.disabled=true; $btnAll.textContent='⏳ Processing…';
+
+  var zip = new JSZip();
+  var allEntries = []; // {entry, folderPath}
+
+  // Build list with folder paths based on group membership
+  groups.forEach(function(grp){
+    var isUngrouped = grp.name === 'Ungrouped';
+    grp.indices.forEach(function(fi){
+      var entry = files[fi];
+      if(!entry||!entry.b64) return;
+      allEntries.push({
+        entry: entry,
+        folder: isUngrouped ? '' : grp.name
+      });
+    });
+  });
+
+  // Ungrouped files go at ZIP root
+  ungrouped.forEach(function(fi){
+    var entry = files[fi];
+    if(!entry||!entry.b64) return;
+    allEntries.push({entry:entry, folder:''});
+  });
+
+  if(!allEntries.length){ $btnAll.textContent='⬇ Download all stamped'; $btnAll.disabled=false; return; }
+
+  var processed = 0;
+  allEntries.forEach(function(item){
+    var img = new Image();
+    img.onload = function(){
+      var path = item.folder ? item.folder+'/'+item.entry.file.name : item.entry.file.name;
+
+      if(item.entry.stamped === false){
+        // No stamp — just save the original file bytes
+        var base64 = item.entry.b64.split(',')[1];
+        zip.file(path, base64, {base64:true});
+      } else {
+        var dims = scaledDims(img.naturalWidth, img.naturalHeight);
+        var c = document.createElement('canvas'); c.width=dims.w; c.height=dims.h;
+        var ctx = c.getContext('2d'); ctx.drawImage(img,0,0,dims.w,dims.h);
+        // Use this photo's saved stamp position if available
+        if(item.entry.stampX !== null && item.entry.stampY !== null){ cfg.customX=item.entry.stampX; cfg.customY=item.entry.stampY; }
+        stampForEntry(ctx,c.width,c.height,item.entry);
+        var dataUrl = applyExifToDataUrl(c.toDataURL('image/jpeg', 0.93), item.entry);
+        zip.file(path, dataUrl.split(',')[1], {base64:true});
+      }
+
+      processed++;
+      $btnAll.textContent = '⏳ '+processed+'/'+allEntries.length+'…';
+
+      if(processed === allEntries.length){
+        zip.generateAsync({type:'blob'}).then(function(blob){
+          var a = document.createElement('a');
+          a.download = 'stamped_photos.zip';
+          a.href = URL.createObjectURL(blob);
+          a.click();
+          setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+          $btnAll.textContent='⬇ Download all stamped';
+          $btnAll.disabled=false;
+        });
+      }
+    };
+    img.src = item.entry.b64;
+  });
+});
+
+// Shared EXIF injection: preserves original EXIF, patches manual overrides
+function applyExifToDataUrl(dataUrl, entry){
+  var filename  = entry ? entry.file.name  : '';
+  var rawExifB64= entry ? entry.rawExifB64 : null;
+  var exifObj   = entry ? entry.exif       : {};
+  var ext = (filename||'').split('.').pop().toLowerCase();
+  if((ext==='jpg'||ext==='jpeg') && piexif){
+    try{
+      var origExif = rawExifB64 ? piexif.load(rawExifB64) : {'0th':{},'Exif':{},'GPS':{},'1st':{}};
+
+      // Patch manual date/time
+      var manDate = entry && entry.manualDate;
+      var manTime = entry && entry.manualTime;
+      if(manDate || manTime){
+        var datePart = '', timePart = '';
+        if(manDate){ var dp=manDate.split('/'); if(dp.length===3) datePart=dp[2]+':'+dp[0]+':'+dp[1]; }
+        if(manTime){ timePart=manTime; if(timePart.split(':').length===2) timePart+=':00'; }
+        if(!datePart && origExif['Exif'][piexif.ExifIFD.DateTimeOriginal])
+          datePart=String(origExif['Exif'][piexif.ExifIFD.DateTimeOriginal]).split(' ')[0];
+        if(!timePart && origExif['Exif'][piexif.ExifIFD.DateTimeOriginal])
+          timePart=String(origExif['Exif'][piexif.ExifIFD.DateTimeOriginal]).split(' ')[1]||'00:00:00';
+        var dtStr=(datePart||'0000:00:00')+' '+(timePart||'00:00:00');
+        origExif['Exif'][piexif.ExifIFD.DateTimeOriginal]=dtStr;
+        origExif['0th'][piexif.ImageIFD.DateTime]=dtStr;
+      }
+
+      // Patch manual GPS
+      var manLat=entry&&entry.manualLat?parseFloat(entry.manualLat):NaN;
+      var manLon=entry&&entry.manualLon?parseFloat(entry.manualLon):NaN;
+      if(!isNaN(manLat)&&!isNaN(manLon)){
+        function toRat(deg){ var d=Math.abs(deg),dd=Math.floor(d),m=Math.floor((d-dd)*60),s=Math.round(((d-dd)*60-m)*3600*100); return [[dd,1],[m,1],[s,100]]; }
+        origExif['GPS'][piexif.GPSIFD.GPSLatitudeRef] =manLat>=0?'N':'S';
+        origExif['GPS'][piexif.GPSIFD.GPSLatitude]    =toRat(manLat);
+        origExif['GPS'][piexif.GPSIFD.GPSLongitudeRef]=manLon>=0?'E':'W';
+        origExif['GPS'][piexif.GPSIFD.GPSLongitude]   =toRat(manLon);
+      }
+
+      // Reset orientation to 1 — canvas pixels are already correctly oriented
+      // (browser auto-applies EXIF orientation when rendering img tags)
+      // Without this, photo viewers rotate the already-correct pixels again
+      if(origExif['0th']) origExif['0th'][piexif.ImageIFD.Orientation] = 1;
+
+      var exifBytes=piexif.dump(origExif);
+      dataUrl=piexif.insert(exifBytes, piexif.remove(dataUrl));
+    }catch(e){}
+  }
+  return dataUrl;
+}
+
+function downloadWithExif(canvasEl, entry, filename){
+  var dataUrl = applyExifToDataUrl(canvasEl.toDataURL('image/jpeg', 0.93), entry);
+  var a = document.createElement('a');
+  a.download = filename||'stamped.jpg';
+  a.href = dataUrl; a.click();
+}
+
+function buildPiexifExif(exifObj){
+  if(!exifObj||!piexif) return null;
+  try{
+    var zeroth={}, exifD={}, gps={};
+    function rat(v){ return v&&v.numerator!==undefined?[v.numerator,v.denominator]:null; }
+    if(exifObj.Make) zeroth[piexif.ImageIFD.Make]=String(exifObj.Make);
+    if(exifObj.Model) zeroth[piexif.ImageIFD.Model]=String(exifObj.Model);
+    if(exifObj.DateTimeOriginal) exifD[piexif.ExifIFD.DateTimeOriginal]=String(exifObj.DateTimeOriginal);
+    if(exifObj.DateTime) zeroth[piexif.ImageIFD.DateTime]=String(exifObj.DateTime);
+    var lat=dms(exifObj.GPSLatitude,exifObj.GPSLatitudeRef);
+    var lon=dms(exifObj.GPSLongitude,exifObj.GPSLongitudeRef);
+    if(lat!==null&&lon!==null){
+      function toRat(deg){ var d=Math.abs(deg); var dd=Math.floor(d); var m=Math.floor((d-dd)*60); var s=Math.round(((d-dd)*60-m)*3600*100); return [[dd,1],[m,1],[s,100]]; }
+      gps[piexif.GPSIFD.GPSLatitudeRef]=lat>=0?'N':'S'; gps[piexif.GPSIFD.GPSLatitude]=toRat(lat);
+      gps[piexif.GPSIFD.GPSLongitudeRef]=lon>=0?'E':'W'; gps[piexif.GPSIFD.GPSLongitude]=toRat(lon);
+    }
+    return piexif.dump({'0th':zeroth,'Exif':exifD,'GPS':gps});
+  }catch(e){ return null; }
+}
+
+function st(msg,type){ $st.textContent=msg; $st.className='status'+(type?' '+type:''); }
+
+// Clear manual inputs on load — prevents browser autofill from pre-populating fields
+(function(){
+  ['manualDate','manualTime','manualGPS','manualAddr'].forEach(function(x){
+    var el = id(x); if(el) el.value = '';
+  });
+})();
+</script>
+<!-- HELP MODAL -->
+<div class="help-overlay" id="helpOverlay">
+  <div class="help-modal">
+    <div class="help-modal-header">
+      <div class="help-modal-title">// EXIF Stamper — User Guide</div>
+      <button class="help-modal-close" id="helpClose">✕</button>
+    </div>
+    <div class="help-modal-tabs" id="helpTabs">
+      <button class="help-tab-chevron" id="helpTabPrev" title="Previous tab">&#8249;</button>
+      <div class="help-tabs-scroll" id="helpTabsScroll">
+        <button class="help-tab on" data-tab="overview">Overview</button>
+        <button class="help-tab" data-tab="loading">Loading Photos</button>
+        <button class="help-tab" data-tab="stamp">Stamp Settings</button>
+        <button class="help-tab" data-tab="position">Positioning</button>
+        <button class="help-tab" data-tab="groups">Groups</button>
+        <button class="help-tab" data-tab="override">Manual Override</button>
+        <button class="help-tab" data-tab="download">Downloading</button>
+        <button class="help-tab" data-tab="geocoding">Geocoding</button>
+      </div>
+      <button class="help-tab-chevron" id="helpTabNext" title="Next tab">&#8250;</button>
+      <div class="help-tab-counter" id="helpTabCounter">1 / 8</div>
+    </div>
+    <div class="help-body">
+
+      <!-- OVERVIEW -->
+      <div class="help-section on" id="tab-overview">
+        <div class="help-h1">What is EXIF Stamper?</div>
+        <div class="help-p">EXIF Stamper burns metadata — GPS coordinates, reverse-geocoded address, date, and time — directly onto your photos as visible text. Everything runs locally in your browser. <strong>No photos are ever uploaded to any server.</strong></div>
+        <div class="help-h2">How it works</div>
+        <ul class="help-ul">
+          <li>Load photos (or a ZIP file) into the app</li>
+          <li>The app reads each photo's EXIF metadata automatically</li>
+          <li>GPS coordinates are reverse-geocoded to a street address</li>
+          <li>A text stamp is drawn onto the canvas preview</li>
+          <li>Download individual photos or all photos as a ZIP</li>
+        </ul>
+        <div class="help-h2">Layout</div>
+        <div class="help-kv">
+          <span class="help-key">Left panel</span><span class="help-val">Loaded images list — click to select, hover for controls</span>
+          <span class="help-key">Center</span><span class="help-val">Live canvas preview — drag or click to reposition the stamp</span>
+          <span class="help-key">Bottom bar</span><span class="help-val">Stamp settings — fields, font, alignment, color, position presets</span>
+          <span class="help-key">Right panel</span><span class="help-val">EXIF data table, geocoded address, and manual override fields</span>
+        </div>
+        <div class="help-tip">
+          <div class="help-tip-label">✓ Tip</div>
+          <p>The stamp is non-destructive during editing — the original file bytes are preserved. The stamp is only baked in when you download.</p>
+        </div>
+      </div>
+
+      <!-- LOADING -->
+      <div class="help-section" id="tab-loading">
+        <div class="help-h1">Loading Photos</div>
+        <div class="help-h2">Drag & Drop</div>
+        <div class="help-p">Drag photos or a <strong>.zip</strong> file directly onto the drop zone in the bottom-left corner. You can drop multiple files at once.</div>
+        <div class="help-h2">Click to Browse</div>
+        <div class="help-p">Click the drop zone to open a file picker. Accepts <strong>JPG, PNG, WEBP, HEIC, TIFF, BMP, GIF</strong> and <strong>.zip</strong> files.</div>
+        <div class="help-h2">ZIP Files</div>
+        <div class="help-p">When a ZIP is loaded, photos are <strong>automatically grouped by subfolder</strong>. Photos in the ZIP root are placed ungrouped. The ZIP filename becomes the group name for root-level photos.</div>
+        <div class="help-h2">File List</div>
+        <ul class="help-ul">
+          <li><strong>Click</strong> any photo to select and preview it</li>
+          <li><strong>Checkbox</strong> on each photo — uncheck to download without stamp</li>
+          <li><strong>⇄ button</strong> (hover) — move photo to a different group or ungroup it</li>
+          <li><strong>✕ button</strong> (hover) — remove photo from the list</li>
+        </ul>
+        <div class="help-tip">
+          <div class="help-tip-label">✓ Tip</div>
+          <p>Photos are processed in parallel. Geocoding runs immediately in the background as photos load. The "Download all" button enables once all addresses are resolved.</p>
+        </div>
+      </div>
+
+      <!-- STAMP SETTINGS -->
+      <div class="help-section" id="tab-stamp">
+        <div class="help-h1">Stamp Settings</div>
+        <div class="help-h2">Stamp Fields</div>
+        <div class="help-kv">
+          <span class="help-key">Date &amp; Time</span><span class="help-val">Shows date and time from EXIF (format: MM/DD/YYYY hh:mm:ss AM/PM)</span>
+          <span class="help-key">GPS</span><span class="help-val">Decimal latitude and longitude from EXIF</span>
+          <span class="help-key">Address</span><span class="help-val">Reverse-geocoded street address from GPS coordinates</span>
+          <span class="help-key">Filename</span><span class="help-val">Original filename of the photo</span>
+        </div>
+        <div class="help-h2">Typography</div>
+        <div class="help-kv">
+          <span class="help-key">Size</span><span class="help-val">Font size in pixels (12–120px). Scales with the actual image size on download.</span>
+          <span class="help-key">Font</span><span class="help-val">Choose from 8 typefaces. Each option previews in its own font.</span>
+          <span class="help-key">B / I / U</span><span class="help-val">Bold, italic, underline toggles</span>
+          <span class="help-key">Align</span><span class="help-val">Left, center, right, or justify — aligns text within the stamp block</span>
+        </div>
+        <div class="help-h2">Color</div>
+        <div class="help-kv">
+          <span class="help-key">Text color</span><span class="help-val">Click the white swatch to open the color picker. Choose from palette or enter a custom hex value.</span>
+          <span class="help-key">BG color</span><span class="help-val">Background fill behind the stamp text</span>
+          <span class="help-key">BG opacity</span><span class="help-val">Slider controls background transparency (0% = fully transparent)</span>
+        </div>
+        <div class="help-tip">
+          <div class="help-tip-label">✓ Tip</div>
+          <p>Default is white text with a dark semi-transparent background (50% opacity). This works well on both light and dark photos.</p>
+        </div>
+      </div>
+
+      <!-- POSITION -->
+      <div class="help-section" id="tab-position">
+        <div class="help-h1">Stamp Positioning</div>
+        <div class="help-h2">Drag to Position</div>
+        <div class="help-p">Click anywhere on the canvas preview to jump the stamp to that point. Then drag the stamp ghost (dashed outline) to fine-tune its position.</div>
+        <div class="help-h2">Preset Grid</div>
+        <div class="help-p">The 3×3 grid in the Position column snaps the stamp to 9 common positions: corners, edges, and center.</div>
+        <div class="help-h2">Per-Photo Independence</div>
+        <div class="help-p">Each photo remembers its own stamp position independently. Moving the stamp on one photo does not affect others.</div>
+        <div class="help-h2">Apply Position to Group</div>
+        <div class="help-p">The <strong>↓ pos to group</strong> button (below the preset grid) copies the current photo's stamp position to every other photo in the same group. This is a one-time copy — photos remain independent afterwards.</div>
+        <div class="help-tip">
+          <div class="help-tip-label">✓ Tip</div>
+          <p>Position is stored as a ratio (0–1) of the image dimensions, so it stays proportionally correct regardless of image size or orientation.</p>
+        </div>
+      </div>
+
+      <!-- GROUPS -->
+      <div class="help-section" id="tab-groups">
+        <div class="help-h1">Groups</div>
+        <div class="help-h2">What are groups?</div>
+        <div class="help-p">Groups are collections of photos — typically from the same job site, folder, or ZIP subfolder. They appear as collapsible headers in the file list with a colored dot.</div>
+        <div class="help-h2">Creating Groups</div>
+        <ul class="help-ul">
+          <li><strong>From ZIP</strong> — subfolders become groups automatically</li>
+          <li><strong>Manually</strong> — hover a photo, click ⇄, then choose "New group…"</li>
+        </ul>
+        <div class="help-h2">Group Controls</div>
+        <div class="help-kv">
+          <span class="help-key">⬇ on header</span><span class="help-val">Download all photos in that group as a ZIP (GroupName.zip with photos inside GroupName/ folder)</span>
+          <span class="help-key">✕ on header</span><span class="help-val">Dissolve the group — photos move to ungrouped</span>
+          <span class="help-key">▾ chevron</span><span class="help-val">Collapse or expand the group in the list</span>
+        </div>
+        <div class="help-h2">Moving Photos</div>
+        <div class="help-p">Hover any photo and click the <strong>⇄</strong> button to move it to another group, create a new group, or ungroup it. Ungrouped photos appear at the top of the list with no header.</div>
+        <div class="help-h2">Manual Override — Entire Group</div>
+        <div class="help-p">In the Manual Override panel, switch scope to <strong>Entire group</strong> then click <strong>↓ Apply to all in group</strong> to apply the current photo's overrides to all photos in the group.</div>
+      </div>
+
+      <!-- MANUAL OVERRIDE -->
+      <div class="help-section" id="tab-override">
+        <div class="help-h1">Manual Override</div>
+        <div class="help-p">The Manual Override panel (right sidebar) lets you correct or replace any metadata field for individual photos or entire groups.</div>
+        <div class="help-h2">Fields</div>
+        <div class="help-kv">
+          <span class="help-key">Date</span><span class="help-val">Override the EXIF date. Format: MM/DD/YYYY</span>
+          <span class="help-key">Time</span><span class="help-val">Override the EXIF time. Format: HH:MM:SS</span>
+          <span class="help-key">GPS</span><span class="help-val">Override GPS coordinates. Accepts: 26.184133,-80.263028 or 26.184133 -80.263028</span>
+          <span class="help-key">Address</span><span class="help-val">Override the geocoded address with any text. Will NOT change GPS coordinates.</span>
+        </div>
+        <div class="help-h2">Auto-fill behavior</div>
+        <ul class="help-ul">
+          <li><strong>Type GPS</strong> → Address field auto-fills from reverse geocoding</li>
+          <li><strong>Clear GPS</strong> → Address restores from EXIF GPS coordinates</li>
+          <li><strong>Clear Address</strong> → Address restores from GPS (manual or EXIF)</li>
+          <li><strong>Type Address</strong> → GPS field is NOT changed (address is independent)</li>
+        </ul>
+        <div class="help-h2">Scope</div>
+        <div class="help-kv">
+          <span class="help-key">This photo</span><span class="help-val">Override applies only to the currently selected photo</span>
+          <span class="help-key">Entire group</span><span class="help-val">Shows when photo is in a group with 2+ photos. Click "↓ Apply to all in group" to propagate.</span>
+        </div>
+        <div class="help-warn">
+          <div class="help-warn-label">⚠ Note</div>
+          <p>Manual overrides are saved per-photo and persist when you switch between photos. They are also written into the downloaded JPEG's EXIF metadata.</p>
+        </div>
+      </div>
+
+      <!-- DOWNLOADING -->
+      <div class="help-section" id="tab-download">
+        <div class="help-h1">Downloading</div>
+        <div class="help-h2">Download This Image</div>
+        <div class="help-p">The <strong>⬇ This image</strong> button downloads the currently previewed photo with the stamp burned in and original EXIF metadata preserved.</div>
+        <div class="help-h2">Download All Stamped</div>
+        <div class="help-p">The <strong>⬇ Download all stamped</strong> button packages every loaded photo into a single <strong>stamped_photos.zip</strong>. Photos in groups are placed in subfolders matching the group name. Ungrouped photos go in the ZIP root.</div>
+        <div class="help-h2">Download Group</div>
+        <div class="help-p">Click <strong>⬇</strong> on a group header to download only that group's photos as <strong>GroupName.zip</strong>, with all photos inside a <strong>GroupName/</strong> folder.</div>
+        <div class="help-h2">Stamp Checkbox</div>
+        <div class="help-p">Each photo has a checkbox in the file list. <strong>Unchecked photos are downloaded without any stamp</strong> — the original file bytes are used as-is.</div>
+        <div class="help-h2">Geocoding Gate</div>
+        <div class="help-p">The "Download all" button shows <strong>⏳ Geocoding X/Y…</strong> while addresses are being resolved. It enables automatically when all photos have been geocoded.</div>
+        <div class="help-tip">
+          <div class="help-tip-label">✓ Tip</div>
+          <p>EXIF metadata is fully preserved in downloads. Manual date, time, and GPS overrides are also written back into the saved JPEG's EXIF tags.</p>
+        </div>
+      </div>
+
+      <!-- GEOCODING -->
+      <div class="help-section" id="tab-geocoding">
+        <div class="help-h1">Geocoding</div>
+        <div class="help-p">Geocoding converts GPS coordinates into a human-readable street address. It runs automatically in the background when photos are loaded.</div>
+        <div class="help-h2">Default Provider</div>
+        <div class="help-p"><strong>Nominatim</strong> (OpenStreetMap) is used by default — completely free, no API key required, no usage limits. Requests are spaced 1.1 seconds apart to respect Nominatim's usage policy.</div>
+        <div class="help-h2">Alternative Providers</div>
+        <div class="help-kv">
+          <span class="help-key">LocationIQ</span><span class="help-val">5,000 requests/day free. More accurate for some regions. Requires free API key from locationiq.com. Falls back to Nominatim at limit.</span>
+          <span class="help-key">OpenCage</span><span class="help-val">2,500 requests/day free. Requires API key from opencagedata.com.</span>
+        </div>
+        <div class="help-h2">Switching Providers</div>
+        <div class="help-p">Open the HTML file in a text editor and change the config at the top of the script:</div>
+        <div class="help-p" style="background:#0a0a0a;border:1px solid #1e1e1e;padding:10px;color:#4caf50;">var GEOCODER = 'locationiq';<br>var LOCATIONIQ_KEY = 'pk.your_key_here';</div>
+        <div class="help-h2">Geocoding Cache</div>
+        <div class="help-p">Addresses are cached by coordinate. If multiple photos share the same GPS location (rounded to 5 decimal places), only one geocoding request is made.</div>
+        <div class="help-warn">
+          <div class="help-warn-label">⚠ Note</div>
+          <p>Geocoding requires an internet connection. Photos without GPS coordinates will show "No GPS data" and are skipped in the geocoding queue.</p>
+        </div>
+      </div>
+
+    </div><!-- end help-body -->
+  </div><!-- end help-modal -->
+</div><!-- end help-overlay -->
+
+<script>
+// ─── HELP MODAL ───────────────────────────────────────────────────────────────
+(function(){
+  var overlay  = document.getElementById('helpOverlay');
+  var btnHelp  = document.getElementById('btnHelp');
+  var btnClose = document.getElementById('helpClose');
+  var btnPrev  = document.getElementById('helpTabPrev');
+  var btnNext  = document.getElementById('helpTabNext');
+  var counter  = document.getElementById('helpTabCounter');
+  if(!overlay||!btnHelp||!btnClose) return;
+
+  var tabs = Array.from(overlay.querySelectorAll('.help-tab'));
+  var sections = tabs.map(function(t){ return document.getElementById('tab-'+t.dataset.tab); });
+  var current = 0;
+
+  function goTo(idx){
+    idx = Math.max(0, Math.min(idx, tabs.length-1));
+    tabs.forEach(function(t,i){ t.classList.toggle('on', i===idx); });
+    sections.forEach(function(s,i){ if(s) s.classList.toggle('on', i===idx); });
+    current = idx;
+    if(counter) counter.textContent = (idx+1)+' / '+tabs.length;
+    if(btnPrev) btnPrev.disabled = idx===0;
+    if(btnNext) btnNext.disabled = idx===tabs.length-1;
+    // Scroll active tab into view
+    var activeTab = tabs[idx];
+    var scrollEl = document.getElementById('helpTabsScroll');
+    if(activeTab && scrollEl){
+      var tabLeft = activeTab.offsetLeft;
+      var tabW    = activeTab.offsetWidth;
+      var scrollW = scrollEl.offsetWidth;
+      scrollEl.scrollLeft = tabLeft - scrollW/2 + tabW/2;
+    }
+  }
+
+  // Tab clicks
+  tabs.forEach(function(t, i){
+    t.addEventListener('click', function(){ goTo(i); });
+  });
+
+  // Chevrons
+  if(btnPrev) btnPrev.addEventListener('click', function(){ goTo(current-1); });
+  if(btnNext) btnNext.addEventListener('click', function(){ goTo(current+1); });
+
+  // Open / close
+  btnHelp.addEventListener('click', function(){ overlay.classList.add('open'); goTo(current); });
+  btnClose.addEventListener('click', function(){ overlay.classList.remove('open'); });
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.classList.remove('open'); });
+  document.addEventListener('keydown', function(e){
+    if(!overlay.classList.contains('open')) return;
+    if(e.key==='Escape') overlay.classList.remove('open');
+    if(e.key==='ArrowRight') goTo(current+1);
+    if(e.key==='ArrowLeft')  goTo(current-1);
+  });
+
+  // Init
+  goTo(0);
+})();
+</script>
+
+</body>
+</html>
