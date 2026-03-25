@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=Roboto+Mono:wght@400;700&family=Share+Tech+Mono&family=IBM+Plex+Mono&family=Oswald:wght@400;600&family=Anton&family=Bebas+Neue&family=Rajdhani:wght@500;700&display=swap');
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -17,8 +18,8 @@ body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #e0e0e
 .topbar {
   display:flex; align-items:stretch; justify-content:space-between;
   background:#0a0a0a; border-bottom:1px solid #1e1e1e;
-  flex-shrink:0; width:100%; position:relative; overflow:hidden;
-  min-height:48px;
+  flex-shrink:0; width:100%; position:relative;
+  min-height:48px; z-index:100;
 }
 .topbar::before {
   content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
@@ -57,19 +58,17 @@ body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #e0e0e
   border:none; font-family:'Courier New',monospace; font-size:0.65rem;
   letter-spacing:0.15em; text-transform:uppercase; cursor:pointer;
   transition:all 0.15s; white-space:nowrap; position:relative;
-  clip-path:polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
 }
-.btn:hover { background:#ffc940; transform:translateY(-1px); }
-.btn:disabled { background:#1a1a1a; color:#333; cursor:not-allowed; transform:none; clip-path:none; border:1px solid #222; }
+.btn:hover { background:#ffc940; }
+.btn:disabled { background:#1a1a1a; color:#333; cursor:not-allowed; border:1px solid #222; }
 .btn.outline {
   background:transparent; color:#f0b429; border:1px solid #2a2a2a;
-  clip-path:none;
 }
-.btn.outline:hover { background:#111; border-color:#f0b429; transform:none; }
+.btn.outline:hover { background:#111; border-color:#f0b429; }
 .btn.outline:disabled { border-color:#1e1e1e; color:#333; background:transparent; cursor:not-allowed; }
 
 /* ── MAIN GRID ── */
-.main { display:grid; grid-template-columns:260px 1fr 280px; grid-template-rows:1fr 180px; grid-template-areas:"files preview exif" "upload stamp exif"; width:100%; flex:1; min-height:0; overflow:hidden; }
+.main { display:grid; grid-template-columns:260px 1fr 280px; grid-template-rows:1fr 180px; grid-template-areas:"files preview exif" "upload stamp exif"; width:100%; flex:1; min-height:0; overflow:hidden; position:relative; z-index:1; }
 
 /* ── PANEL HEADERS ── */
 .panel-hdr { font-size:0.68rem; letter-spacing:0.18em; text-transform:uppercase; color:#555; padding:0.45rem 0.8rem; border-bottom:1px solid #1a1a1a; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; background:#0d0d0d; }
@@ -115,9 +114,9 @@ body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #e0e0e
 .file-item:hover .file-move-btn { display:block; }
 .file-move-btn:hover { color:#f0b429; }
 /* Drag handle */
-.drag-handle { flex-shrink:0; color:#2a2a2a; font-size:0.7rem; cursor:grab; padding:0 3px; line-height:1; user-select:none; transition:color 0.15s; }
-.file-item:hover .drag-handle { color:#444; }
-.drag-handle:active { cursor:grabbing; }
+.drag-handle { flex-shrink:0; color:#444; font-size:0.75rem; cursor:grab; padding:0 4px; line-height:1; user-select:none; transition:color 0.15s; }
+.file-item:hover .drag-handle { color:#888; }
+.drag-handle:active { cursor:grabbing; color:#f0b429; }
 /* Drag states */
 .file-item.dragging { opacity:0.35; background:#0a0a0a; }
 .file-item.drag-over-top { border-top:2px solid #f0b429; }
@@ -263,7 +262,7 @@ label input[type="checkbox"] { accent-color:#f0b429; width:12px; height:12px; }
 /* ── HELP MODAL ── */
 .help-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999999; display:none; align-items:center; justify-content:center; padding:20px; }
 .help-overlay.open { display:flex; }
-.help-modal { background:#0e0e0e; border:1px solid #2a2a2a; width:100%; max-width:820px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.9); }
+.help-modal { background:#0e0e0e; border:1px solid #2a2a2a; width:820px; height:560px; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.9); flex-shrink:0; }
 .help-modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid #1e1e1e; flex-shrink:0; }
 .help-modal-title { font-size:0.85rem; letter-spacing:0.2em; text-transform:uppercase; color:#f0b429; font-family:'Courier New',monospace; }
 .help-modal-close { background:transparent; border:none; color:#555; font-size:1.3rem; cursor:pointer; padding:0 4px; transition:color 0.15s; line-height:1; }
@@ -271,18 +270,17 @@ label input[type="checkbox"] { accent-color:#f0b429; width:12px; height:12px; }
 
 /* Tab nav with chevrons instead of scrollbar */
 .help-modal-tabs { display:flex; align-items:stretch; border-bottom:1px solid #1e1e1e; flex-shrink:0; }
-.help-tab-chevron { background:transparent; border:none; border-bottom:2px solid transparent; color:#555; font-size:1rem; cursor:pointer; padding:0 12px; flex-shrink:0; transition:color 0.15s; display:flex; align-items:center; }
-.help-tab-chevron:hover { color:#f0b429; }
-.help-tab-chevron:disabled { color:#222; cursor:default; }
-.help-tabs-scroll { display:flex; flex:1; overflow:hidden; }
-.help-tab { padding:10px 18px; font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase; font-family:'Courier New',monospace; color:#444; cursor:pointer; border:none; background:transparent; border-bottom:2px solid transparent; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
-.help-tab:hover { color:#888; }
-.help-tab.on { color:#f0b429; border-bottom-color:#f0b429; }
+.help-tab-chevron { background:#111; border:none; border-bottom:2px solid transparent; color:#888; font-size:1.2rem; cursor:pointer; padding:0 14px; flex-shrink:0; transition:color 0.15s,background 0.15s; display:flex; align-items:center; justify-content:center; min-width:36px; z-index:1; position:relative; }
+.help-tab-chevron:hover:not(:disabled) { color:#f0b429; background:#1a1a1a; }
+.help-tab-chevron:disabled { color:#2a2a2a; cursor:default; }
+.help-tabs-scroll { display:flex; flex:1; overflow:hidden; min-width:0; align-items:stretch; }
+.help-tab { padding:10px 18px; font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase; font-family:'Courier New',monospace; color:#333; cursor:pointer; border:none; background:transparent; border-bottom:2px solid transparent; transition:all 0.15s; white-space:nowrap; flex-shrink:0; display:none; }
+.help-tab.on { display:flex; align-items:center; color:#f0b429; border-bottom-color:#f0b429; cursor:default; flex:1; justify-content:center; }
 
 /* Tab counter badge */
 .help-tab-counter { font-size:0.65rem; color:#333; font-family:'Courier New',monospace; padding:0 10px; display:flex; align-items:center; flex-shrink:0; border-left:1px solid #1a1a1a; margin-left:auto; }
 
-.help-body { overflow-y:auto; padding:28px 28px 36px; flex:1; }
+.help-body { overflow-y:auto; padding:28px 28px 36px; flex:1; min-height:0; }
 .help-section { display:none; }
 .help-section.on { display:block; }
 .help-h1 { font-size:1.05rem; color:#f0b429; letter-spacing:0.15em; text-transform:uppercase; margin:0 0 16px; font-family:'Courier New',monospace; }
@@ -464,22 +462,25 @@ label input[type="checkbox"] { accent-color:#f0b429; width:12px; height:12px; }
         <div role="form" autocomplete="off">
         <div class="manual-row">
           <span class="manual-lbl">Date</span>
-          <input class="manual-inp" id="manualDate" type="text" placeholder="MM/DD/YYYY" autocomplete="off">
+          <input class="manual-inp" id="manualDate" type="text" placeholder="MM/DD/YYYY" autocomplete="new-password">
         </div>
         <div class="manual-row">
           <span class="manual-lbl">Time</span>
-          <input class="manual-inp" id="manualTime" type="text" placeholder="HH:MM:SS" autocomplete="off">
+          <input class="manual-inp" id="manualTime" type="text" placeholder="HH:MM:SS" autocomplete="new-password">
         </div>
         <div class="manual-row">
           <span class="manual-lbl">GPS</span>
-          <input class="manual-inp" id="manualGPS" type="text" placeholder="e.g. 26.184133,-80.263028 or 26.184133 -80.263028" autocomplete="off">
+          <input class="manual-inp" id="manualGPS" type="text" placeholder="e.g. 26.184133,-80.263028 or 26.184133 -80.263028" autocomplete="new-password">
         </div>
         <div class="manual-row">
           <span class="manual-lbl">Address</span>
-          <input class="manual-inp" id="manualAddr" type="text" placeholder="Type or auto-fill from GPS" autocomplete="off">
+          <input class="manual-inp" id="manualAddr" type="text" placeholder="Type or auto-fill from GPS" autocomplete="new-password">
         </div>
         </div><!-- end autocomplete=off container -->
         <p class="manual-hint" id="manualHint"></p>
+        <button id="btnScanPhoto" style="width:100%;margin-top:0.4rem;padding:4px 6px;background:transparent;color:#555;border:1px solid #222;font-family:'Courier New',monospace;font-size:0.57rem;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;transition:color 0.15s,border-color 0.15s;" title="Use AI to scan photo for visible GPS coordinates, date/time or address text">
+          🔍 Scan photo for metadata
+        </button>
         <button id="btnApplyGroup" style="display:none;width:100%;margin-top:0.4rem;padding:4px 6px;background:transparent;color:#f0b429;border:1px solid #f0b429;font-family:'Courier New',monospace;font-size:0.57rem;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;">
           ↓ Apply to all in group
         </button>
@@ -489,18 +490,175 @@ label input[type="checkbox"] { accent-color:#f0b429; width:12px; height:12px; }
 
 </div>
 
+<!-- HELP MODAL -->
+<div class="help-overlay" id="helpOverlay">
+  <div class="help-modal">
+    <div class="help-modal-header">
+      <div class="help-modal-title">// EXIF Stamper — User Guide</div>
+      <button class="help-modal-close" id="helpClose">✕</button>
+    </div>
+    <div class="help-modal-tabs" id="helpTabs">
+      <button class="help-tab-chevron" id="helpTabPrev">&#8249;</button>
+      <div class="help-tabs-scroll" id="helpTabsScroll">
+        <button class="help-tab on" data-tab="overview">Overview</button>
+        <button class="help-tab" data-tab="loading">Loading Photos</button>
+        <button class="help-tab" data-tab="stamp">Stamp Settings</button>
+        <button class="help-tab" data-tab="position">Positioning</button>
+        <button class="help-tab" data-tab="groups">Groups</button>
+        <button class="help-tab" data-tab="override">Manual Override</button>
+        <button class="help-tab" data-tab="download">Downloading</button>
+        <button class="help-tab" data-tab="geocoding">Geocoding</button>
+      </div>
+      <button class="help-tab-chevron" id="helpTabNext">&#8250;</button>
+      <div class="help-tab-counter" id="helpTabCounter">1 / 8</div>
+    </div>
+    <div class="help-body">
+
+      <div class="help-section on" id="tab-overview">
+        <div class="help-h1">What is EXIF Stamper?</div>
+        <div class="help-p">EXIF Stamper burns metadata — GPS coordinates, reverse-geocoded address, date, and time — directly onto your photos as visible text. Everything runs locally in your browser. <strong>No photos are ever uploaded to any server.</strong></div>
+        <div class="help-h2">Layout</div>
+        <div class="help-kv">
+          <span class="help-key">Left panel</span><span class="help-val">Loaded images list — click to select, hover for controls</span>
+          <span class="help-key">Center</span><span class="help-val">Live canvas preview — drag or click to reposition the stamp</span>
+          <span class="help-key">Bottom bar</span><span class="help-val">Stamp settings — fields, font, alignment, color, position presets</span>
+          <span class="help-key">Right panel</span><span class="help-val">EXIF data table, geocoded address, and manual override fields</span>
+        </div>
+        <div class="help-tip"><div class="help-tip-label">✓ Tip</div><p>The stamp is non-destructive during editing — the original file bytes are preserved. The stamp is only baked in when you download.</p></div>
+      </div>
+
+      <div class="help-section" id="tab-loading">
+        <div class="help-h1">Loading Photos</div>
+        <div class="help-h2">Drag &amp; Drop</div>
+        <div class="help-p">Drag photos or a <strong>.zip</strong> file directly onto the app. You can also drag from the file list to reorder or move to groups.</div>
+        <div class="help-h2">Click to Browse</div>
+        <div class="help-p">Click the drop zone in the bottom-left to open a file picker. Accepts <strong>JPG, PNG, WEBP, HEIC, TIFF, BMP, GIF</strong> and <strong>.zip</strong> files.</div>
+        <div class="help-h2">ZIP Files</div>
+        <div class="help-p">When a ZIP is loaded, photos are <strong>automatically grouped by subfolder</strong>. Photos in the ZIP root are placed ungrouped.</div>
+        <div class="help-h2">File List Controls</div>
+        <ul class="help-ul">
+          <li><strong>Click</strong> any photo to select and preview it</li>
+          <li><strong>Checkbox</strong> — uncheck to download without stamp</li>
+          <li><strong>⇄ button</strong> (hover) — move photo to a different group</li>
+          <li><strong>⠿ handle</strong> (hover) — drag to reorder or move to group</li>
+          <li><strong>✕ button</strong> (hover) — remove photo from list</li>
+        </ul>
+      </div>
+
+      <div class="help-section" id="tab-stamp">
+        <div class="help-h1">Stamp Settings</div>
+        <div class="help-h2">Stamp Fields</div>
+        <div class="help-kv">
+          <span class="help-key">Date &amp; Time</span><span class="help-val">MM/DD/YYYY hh:mm:ss AM/PM from EXIF</span>
+          <span class="help-key">GPS</span><span class="help-val">Decimal latitude and longitude</span>
+          <span class="help-key">Address</span><span class="help-val">Reverse-geocoded street address</span>
+          <span class="help-key">Filename</span><span class="help-val">Original filename of the photo</span>
+        </div>
+        <div class="help-h2">Typography &amp; Color</div>
+        <div class="help-kv">
+          <span class="help-key">Size</span><span class="help-val">Font size in pixels (12–120px)</span>
+          <span class="help-key">Font</span><span class="help-val">8 typefaces — each option previews in its own font</span>
+          <span class="help-key">B / I / U</span><span class="help-val">Bold, italic, underline</span>
+          <span class="help-key">Align</span><span class="help-val">Left, center, right, justify</span>
+          <span class="help-key">Text / BG</span><span class="help-val">Color pickers with 48-color palette + custom hex</span>
+          <span class="help-key">BG opacity</span><span class="help-val">0% = transparent background</span>
+        </div>
+      </div>
+
+      <div class="help-section" id="tab-position">
+        <div class="help-h1">Stamp Positioning</div>
+        <div class="help-h2">Drag to Position</div>
+        <div class="help-p">Click anywhere on the canvas to jump the stamp there. Drag the stamp ghost to fine-tune position.</div>
+        <div class="help-h2">Preset Grid</div>
+        <div class="help-p">The 3×3 grid snaps the stamp to 9 common positions: corners, edges, and center.</div>
+        <div class="help-h2">Per-Photo Independence</div>
+        <div class="help-p">Each photo remembers its own stamp position independently.</div>
+        <div class="help-h2">Apply to Group</div>
+        <div class="help-p">The <strong>↓ pos to group</strong> button copies the current position to all photos in the same group.</div>
+      </div>
+
+      <div class="help-section" id="tab-groups">
+        <div class="help-h1">Groups</div>
+        <div class="help-h2">Creating Groups</div>
+        <ul class="help-ul">
+          <li><strong>From ZIP</strong> — subfolders become groups automatically</li>
+          <li><strong>Drag a photo</strong> to the <strong>+ Drop to create new group</strong> zone at the bottom of the list</li>
+          <li><strong>⇄ menu</strong> — hover a photo and choose "New group…"</li>
+        </ul>
+        <div class="help-h2">Group Controls</div>
+        <div class="help-kv">
+          <span class="help-key">⬇ on header</span><span class="help-val">Download group as GroupName.zip</span>
+          <span class="help-key">✕ on header</span><span class="help-val">Dissolve group — photos move to ungrouped</span>
+          <span class="help-key">Drag to header</span><span class="help-val">Move photo into that group</span>
+        </div>
+      </div>
+
+      <div class="help-section" id="tab-override">
+        <div class="help-h1">Manual Override</div>
+        <div class="help-p">Override any metadata field per-photo. Works even if the photo has no EXIF data.</div>
+        <div class="help-h2">Fields</div>
+        <div class="help-kv">
+          <span class="help-key">Date</span><span class="help-val">MM/DD/YYYY</span>
+          <span class="help-key">Time</span><span class="help-val">HH:MM:SS</span>
+          <span class="help-key">GPS</span><span class="help-val">26.184133,-80.263028 or 26.184133 -80.263028</span>
+          <span class="help-key">Address</span><span class="help-val">Free text — does not change GPS</span>
+        </div>
+        <div class="help-h2">Auto-fill</div>
+        <ul class="help-ul">
+          <li><strong>Type GPS</strong> → address auto-fills from reverse geocoding</li>
+          <li><strong>Clear GPS</strong> → address restores from EXIF GPS</li>
+          <li><strong>🔍 Scan photo</strong> → OCR reads visible text in the image for coordinates/timestamps</li>
+        </ul>
+        <div class="help-h2">Scope</div>
+        <div class="help-kv">
+          <span class="help-key">This photo</span><span class="help-val">Override applies only to this photo</span>
+          <span class="help-key">Entire group</span><span class="help-val">Click "↓ Apply to all in group" to propagate</span>
+        </div>
+      </div>
+
+      <div class="help-section" id="tab-download">
+        <div class="help-h1">Downloading</div>
+        <div class="help-kv">
+          <span class="help-key">⬇ This image</span><span class="help-val">Downloads the current photo with stamp burned in</span>
+          <span class="help-key">⬇ Download all</span><span class="help-val">All photos as stamped_photos.zip with group folders</span>
+          <span class="help-key">⬇ on group</span><span class="help-val">That group only as GroupName.zip</span>
+        </div>
+        <div class="help-h2">Stamp Checkbox</div>
+        <div class="help-p">Uncheck a photo in the file list to download it <strong>without any stamp</strong> — original bytes used as-is.</div>
+        <div class="help-tip"><div class="help-tip-label">✓ Tip</div><p>EXIF metadata is fully preserved. Manual date, time, and GPS overrides are written back into the saved JPEG's EXIF tags.</p></div>
+      </div>
+
+      <div class="help-section" id="tab-geocoding">
+        <div class="help-h1">Geocoding</div>
+        <div class="help-p">GPS coordinates are automatically converted to street addresses when photos load.</div>
+        <div class="help-h2">Default: Nominatim (OpenStreetMap)</div>
+        <div class="help-p">Completely free, no API key, no sign-up. Uses a zoom-fallback strategy for better accuracy.</div>
+        <div class="help-h2">Alternative Providers</div>
+        <div class="help-kv">
+          <span class="help-key">LocationIQ</span><span class="help-val">5,000/day free — set LOCATIONIQ_KEY in the file</span>
+          <span class="help-key">OpenCage</span><span class="help-val">2,500/day free — set OPENCAGE_KEY in the file</span>
+        </div>
+        <div class="help-warn"><div class="help-warn-label">⚠ Note</div><p>Geocoding requires an internet connection. Photos without GPS show "No GPS data".</p></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── GEOCODING CONFIG ─────────────────────────────────────────────────────────
-var GEOCODER       = 'nominatim'; // 'nominatim' | 'opencage' | 'locationiq'
-var OPENCAGE_KEY   = '';
-var LOCATIONIQ_KEY = '';
-var MAX_DIM        = 1500;
+var GEOCODER          = 'nominatim'; // 'nominatim' | 'opencage' | 'locationiq'
+var OPENCAGE_KEY      = '';
+var LOCATIONIQ_KEY    = '';
+var ANTHROPIC_API_KEY = ''; // Add your key for "Scan photo for metadata" feature
+var MAX_DIM           = 1500;
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 var files     = [];
 var groups    = [];
 var ungrouped = []; // file indices not belonging to any group
 var activeIdx = -1;
+var fileDrag  = { fi: -1, srcEl: null }; // drag-and-drop state
 var activeImg = null;
 var canvas    = null;
 var geoCache  = {};
@@ -516,7 +674,24 @@ var cfg = { color:'#ffffff', bg:'rgba(0,0,0,0.5)', bgBase:'0,0,0', bgOpacity:50,
 
 function id(x){ return document.getElementById(x); }
 var $dz=id('dropZone'), $fi=id('fileInput'), $fl=id('fileList'), $st=id('status'), $fc=id('fileCount');
+function st(msg,type){ if($st){ $st.textContent=msg; $st.className='status'+(type?' '+type:''); } }
+
+// Allow drag events to propagate through the file list scroll container
+$fl.addEventListener('dragover', function(e){
+  if(fileDrag.fi >= 0) e.preventDefault(); // internal reorder
+});
+$fl.addEventListener('drop', function(e){
+  if(fileDrag.fi >= 0) e.preventDefault(); // internal reorder
+});
 var $cw=id('canvasWrap'), $exif=id('exifDisplay'), $addr=id('addrBox');
+
+// Prevent browser default for external file drags (stops browser from opening the file)
+document.addEventListener('dragover', function(e){
+  if(fileDrag.fi >= 0) return;
+  if(e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).indexOf('Files') !== -1){
+    e.preventDefault();
+  }
+});
 var $btnDL=id('btnDL'), $btnAll=id('btnAll');
 
 // ─── GEO-GATE: enable "Download all" only when all geocoding is done ──────────
@@ -548,9 +723,15 @@ $dz.addEventListener('click', function(e){
   if(e.target === $fi || e.target === id('zipInput')) return;
   $fi.click();
 });
-$dz.addEventListener('dragover', function(e){ e.preventDefault(); $dz.classList.add('drag-over'); });
+$dz.addEventListener('dragover', function(e){
+  // Only activate for real file drops from outside (not internal item reordering)
+  if(fileDrag.fi >= 0) return;
+  e.preventDefault();
+  $dz.classList.add('drag-over');
+});
 $dz.addEventListener('dragleave', function(e){ if(!$dz.contains(e.relatedTarget)) $dz.classList.remove('drag-over'); });
 $dz.addEventListener('drop', function(e){
+  if(fileDrag.fi >= 0) return; // ignore internal reorder drags
   e.preventDefault(); $dz.classList.remove('drag-over');
   var droppedFiles = e.dataTransfer.files;
   if(!droppedFiles.length) return;
@@ -591,12 +772,11 @@ function ingest(fileList, groupName){
   if(!fileList || !fileList.length) return;
   st('Reading…','w');
 
-  // null/undefined groupName = ungrouped
+  // null/undefined groupName → place in 'Ungroup' default group
+  var resolvedName = groupName || 'Ungroup';
   var grp = null;
-  if(groupName){
-    for(var g=0; g<groups.length; g++){ if(groups[g].name === groupName){ grp=groups[g]; break; } }
-    if(!grp){ grp={name:groupName, color:nextGroupColor(), indices:[], collapsed:false}; groups.push(grp); }
-  }
+  for(var g=0; g<groups.length; g++){ if(groups[g].name === resolvedName){ grp=groups[g]; break; } }
+  if(!grp){ grp={name:resolvedName, color:nextGroupColor(), indices:[], collapsed:false}; groups.push(grp); }
 
   var pending = fileList.length;
   var firstNewIdx = files.length;
@@ -605,8 +785,7 @@ function ingest(fileList, groupName){
       readOne(f, function(entry){
         var idx = files.length;
         files.push(entry);
-        if(grp) grp.indices.push(idx);
-        else ungrouped.push(idx);
+        grp.indices.push(idx);
 
         // Kick off geocoding immediately
         var lat = dms(entry.exif.GPSLatitude,  entry.exif.GPSLatitudeRef);
@@ -850,7 +1029,6 @@ function makeFileItem(fi, entry, inGroup){
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ─── DRAG & DROP REORDER ──────────────────────────────────────────────────────
-var fileDrag = { fi: -1, srcEl: null };
 
 function clearDragOver(){
   document.querySelectorAll('.drag-over-top,.drag-over-bottom,.group-header.drag-over,.drop-zone-ungrouped.drag-over')
@@ -908,7 +1086,10 @@ function dropFileOnGroup(dragFi, gi){
 
 function dropFileOnUngrouped(dragFi){
   removeFromLocation(dragFi);
-  ungrouped.push(dragFi);
+  var defaultGrp = null;
+  for(var g=0; g<groups.length; g++){ if(groups[g].name==='Ungroup'){ defaultGrp=groups[g]; break; } }
+  if(!defaultGrp){ defaultGrp={name:'Ungroup', color:'#888', indices:[], collapsed:false}; groups.push(defaultGrp); }
+  if(defaultGrp.indices.indexOf(dragFi)===-1) defaultGrp.indices.push(dragFi);
   groups = groups.filter(function(g){ return g.indices.length > 0; });
   renderFileList();
 }
@@ -1012,12 +1193,15 @@ function moveFileToGroup(fileIdx, targetGrpIdx){
 }
 
 function ungroup(fileIdx){
-  // Remove from all groups
+  // Remove from all current groups
   groups.forEach(function(grp){ var pos = grp.indices.indexOf(fileIdx); if(pos !== -1) grp.indices.splice(pos, 1); });
   groups = groups.filter(function(g){ return g.indices.length > 0; });
 
-  // Add to ungrouped if not already there
-  if(ungrouped.indexOf(fileIdx) === -1) ungrouped.push(fileIdx);
+  // Move to the 'Ungroup' default group
+  var defaultGrp = null;
+  for(var g=0; g<groups.length; g++){ if(groups[g].name==='Ungroup'){ defaultGrp=groups[g]; break; } }
+  if(!defaultGrp){ defaultGrp={name:'Ungroup', color:'#888', indices:[], collapsed:false}; groups.push(defaultGrp); }
+  if(defaultGrp.indices.indexOf(fileIdx)===-1) defaultGrp.indices.push(fileIdx);
 
   renderFileList();
 }
@@ -1045,12 +1229,14 @@ function removeFile(fileIdx){
 
 function removeGroup(gi){
   var grp = groups[gi]; if(!grp) return;
+  if(grp.name === 'Ungroup'){ return; } // cannot remove the default group
   var movedIndices = grp.indices.slice();
-  // Move all files to ungrouped instead of deleting them
-  movedIndices.forEach(function(fi){
-    if(ungrouped.indexOf(fi) === -1) ungrouped.push(fi);
-  });
-  groups.splice(gi,1);
+  groups.splice(gi, 1);
+  // Move all files to 'Ungroup' default group
+  var defaultGrp = null;
+  for(var g=0; g<groups.length; g++){ if(groups[g].name==='Ungroup'){ defaultGrp=groups[g]; break; } }
+  if(!defaultGrp){ defaultGrp={name:'Ungroup', color:'#888', indices:[], collapsed:false}; groups.push(defaultGrp); }
+  movedIndices.forEach(function(fi){ if(defaultGrp.indices.indexOf(fi)===-1) defaultGrp.indices.push(fi); });
   renderFileList();
 }
 
@@ -1818,6 +2004,20 @@ function setCwCursor(){ $cw.style.cursor=canvas?'crosshair':''; }
 })();
 (function(){ var el=id('valSize'); if(el) el.textContent='24px'; })();
 (function(){ var el=id('valBgOpacity'); if(el) el.textContent='50%'; })();
+
+// Hide manual panel and clear inputs on load — defeats Chrome autofill
+(function(){
+  var mp = id('manualPanel');
+  if(mp) mp.style.display = 'none';
+  // Use setTimeout to run after browser autofill has a chance to populate fields
+  setTimeout(function(){
+    ['manualDate','manualTime','manualGPS','manualAddr'].forEach(function(x){
+      var el = id(x); if(el) el.value = '';
+    });
+    var mp2 = id('manualPanel');
+    if(mp2 && activeIdx < 0) mp2.style.display = 'none';
+  }, 300);
+})();
 ['btnBold','btnItalic','btnUnder'].forEach(function(bid){
   var _b=id(bid); if(!_b) return;
   _b.addEventListener('click', function(){
@@ -1938,6 +2138,13 @@ document.addEventListener('click', function(){ document.querySelectorAll('.color
 var manualScope='photo';
 function updateManualPanel(entry,idx){
   var mp=id('manualPanel'); if(!mp) return;
+
+  // Only show when a real photo is selected
+  if(!entry || idx < 0){
+    mp.style.display='none'; mp.classList.remove('visible');
+    return;
+  }
+
   mp.style.display='block'; mp.classList.add('visible');
 
   // Show what EXIF data is missing so user knows what to fill in
@@ -2083,153 +2290,106 @@ id('manualTime').addEventListener('input', function(){ if(activeIdx>=0&&files[ac
 id('manualGPS').addEventListener('input',  function(){ if(activeIdx>=0&&files[activeIdx]) onManualGPSChange(files[activeIdx]); });
 id('manualAddr').addEventListener('input', function(){ if(activeIdx>=0&&files[activeIdx]) onManualAddrChange(files[activeIdx]); });
 
-id('btnApplyGroup').addEventListener('click', function(){
-  if(activeIdx < 0) return;
-  var src = files[activeIdx];
-  if(!src) return;
+// ─── SCAN PHOTO FOR METADATA (OCR via Tesseract.js — no API key needed) ────────
+id('btnScanPhoto').addEventListener('click', function(){
+  if(activeIdx < 0 || !files[activeIdx] || !files[activeIdx].b64) return;
+  var entry = files[activeIdx];
+  var btn   = id('btnScanPhoto');
+  var hint  = id('manualHint');
 
-  // Find group containing the active photo
-  var grp = null;
-  for(var g=0; g<groups.length; g++){
-    if(groups[g].indices.indexOf(activeIdx) !== -1){ grp = groups[g]; break; }
-  }
-  if(!grp) return;
+  btn.textContent = '⏳ Running OCR…';
+  btn.disabled = true;
+  if(hint){ hint.textContent = 'Reading text from photo…'; hint.style.color = '#888'; }
 
-  grp.indices.forEach(function(fi){
-    if(fi === activeIdx || !files[fi]) return;
-    var e = files[fi];
+  Tesseract.recognize(entry.b64, 'eng', { logger: function(){} })
+    .then(function(result){
+      var text = result.data.text || '';
+      var filled = [];
 
-    // Copy all manual override fields
-    e.manualDate = src.manualDate;
-    e.manualTime = src.manualTime;
-    e.manualLat  = src.manualLat;
-    e.manualLon  = src.manualLon;
-    e.manualAddr = src.manualAddr;
-
-    // Apply address: use manual addr if set, otherwise geocode from manual GPS
-    if(src.manualAddr){
-      e.address = src.manualAddr;
-    } else if(src.manualLat && src.manualLon){
-      var lat = parseFloat(src.manualLat), lon = parseFloat(src.manualLon);
-      if(!isNaN(lat) && !isNaN(lon)){
-        var key = lat.toFixed(5)+','+lon.toFixed(5);
-        if(geoCache[key] !== undefined){
-          e.address = geoCache[key];
-        } else {
-          e.address = null;
-          geoIncrement();
-          (function(entry, idx){ geocode(lat, lon, function(addr){
-            entry.address = addr;
-            geoDecrement();
-            if(activeIdx === idx) { showAddr(addr); redraw(); }
-          }); })(e, fi);
+      // GPS decimal coordinates: e.g. +26.184133,-80.263028 or 26.184 -80.263
+      var gpsMatch = text.match(/([+-]?\d{1,3}\.\d{4,})\s*[,\s]\s*([+-]?\d{1,3}\.\d{4,})/);
+      if(gpsMatch){
+        var lat = parseFloat(gpsMatch[1]), lon = parseFloat(gpsMatch[2]);
+        if(!isNaN(lat) && !isNaN(lon) && Math.abs(lat)<=90 && Math.abs(lon)<=180){
+          entry.manualLat = String(lat); entry.manualLon = String(lon);
+          var gpsEl = id('manualGPS'); if(gpsEl) gpsEl.value = lat+','+lon;
+          filled.push('GPS');
+          onManualGPSChange(entry);
         }
       }
-    }
-  });
 
-  st('Applied to all '+grp.indices.length+' photos in group.', '');
-  setTimeout(function(){ st('',''); }, 2000);
+      // Date: MM/DD/YYYY | YYYY-MM-DD | Jan 13 2026 | 13 Jan 2026
+      var datePatterns = [
+        /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/,
+        /\b(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/,
+        /\b(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})\b/i,
+        /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{4})\b/i
+      ];
+      var mmap={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+      for(var di=0;di<datePatterns.length;di++){
+        var dm=text.match(datePatterns[di]);
+        if(dm){
+          var mm,dd,yyyy;
+          if(di===0){mm=parseInt(dm[1]);dd=parseInt(dm[2]);yyyy=dm[3];}
+          else if(di===1){yyyy=dm[1];mm=parseInt(dm[2]);dd=parseInt(dm[3]);}
+          else if(di===2){dd=parseInt(dm[1]);mm=mmap[dm[2].toLowerCase().substr(0,3)];yyyy=dm[3];}
+          else{mm=mmap[dm[1].toLowerCase().substr(0,3)];dd=parseInt(dm[2]);yyyy=dm[3];}
+          if(mm&&dd&&yyyy&&mm<=12&&dd<=31){
+            var ds=(mm<10?'0'+mm:mm)+'/'+(dd<10?'0'+dd:dd)+'/'+yyyy;
+            if(!entry.manualDate){
+              entry.manualDate=ds;
+              var del=id('manualDate'); if(del) del.value=ds;
+              filled.push('Date'); onManualDateTimeChange(entry);
+            }
+            break;
+          }
+        }
+      }
+
+      // Time: HH:MM:SS or HH:MM AM/PM
+      var tm=text.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?\b/);
+      if(tm){
+        var hh=parseInt(tm[1]),m2=tm[2],ss=tm[3]||'00',ap=tm[4]?tm[4].toUpperCase():null;
+        if(ap==='PM'&&hh<12) hh+=12;
+        if(ap==='AM'&&hh===12) hh=0;
+        var ts=(hh<10?'0'+hh:hh)+':'+m2+':'+ss;
+        if(!entry.manualTime){
+          entry.manualTime=ts;
+          var tel=id('manualTime'); if(tel) tel.value=ts;
+          filled.push('Time'); onManualDateTimeChange(entry);
+        }
+      }
+
+      if(filled.length>0){
+        if(hint){hint.textContent='✓ Found: '+filled.join(', ');hint.style.color='#4caf50';}
+        redraw();
+      } else {
+        if(hint){hint.textContent='No coordinates or timestamps found.';hint.style.color='#888';}
+      }
+      btn.textContent='🔍 Scan photo for metadata'; btn.disabled=false;
+    })
+    .catch(function(err){
+      if(hint){hint.textContent='OCR failed: '+err.message;hint.style.color='#e24b4a';}
+      btn.textContent='🔍 Scan photo for metadata'; btn.disabled=false;
+    });
 });
+
 
 // ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
-$btnDL.addEventListener('click', function(){
-  var entry=files[activeIdx];
-  if(!entry||!entry.b64) return;
-  if(entry.stamped === false){
-    // No stamp — download original
-    var a=document.createElement('a'); a.download=entry.file.name; a.href=entry.b64; a.click();
-    return;
-  }
-  if(!canvas) return;
-  downloadWithExif(canvas, entry||null, entry?entry.file.name:'photo.jpg');
-});
-
-$btnAll.addEventListener('click', function(){
-  $btnAll.disabled=true; $btnAll.textContent='⏳ Processing…';
-
-  var zip = new JSZip();
-  var allEntries = []; // {entry, folderPath}
-
-  // Build list with folder paths based on group membership
-  groups.forEach(function(grp){
-    var isUngrouped = grp.name === 'Ungrouped';
-    grp.indices.forEach(function(fi){
-      var entry = files[fi];
-      if(!entry||!entry.b64) return;
-      allEntries.push({
-        entry: entry,
-        folder: isUngrouped ? '' : grp.name
-      });
-    });
-  });
-
-  // Ungrouped files go at ZIP root
-  ungrouped.forEach(function(fi){
-    var entry = files[fi];
-    if(!entry||!entry.b64) return;
-    allEntries.push({entry:entry, folder:''});
-  });
-
-  if(!allEntries.length){ $btnAll.textContent='⬇ Download all stamped'; $btnAll.disabled=false; return; }
-
-  var processed = 0;
-  allEntries.forEach(function(item){
-    var img = new Image();
-    img.onload = function(){
-      var path = item.folder ? item.folder+'/'+item.entry.file.name : item.entry.file.name;
-
-      if(item.entry.stamped === false){
-        // No stamp — just save the original file bytes
-        var base64 = item.entry.b64.split(',')[1];
-        zip.file(path, base64, {base64:true});
-      } else {
-        var dims = scaledDims(img.naturalWidth, img.naturalHeight);
-        var c = document.createElement('canvas'); c.width=dims.w; c.height=dims.h;
-        var ctx = c.getContext('2d'); ctx.drawImage(img,0,0,dims.w,dims.h);
-        // Use this photo's saved stamp position if available
-        if(item.entry.stampX !== null && item.entry.stampY !== null){ cfg.customX=item.entry.stampX; cfg.customY=item.entry.stampY; }
-        stampForEntry(ctx,c.width,c.height,item.entry);
-        var dataUrl = applyExifToDataUrl(c.toDataURL('image/jpeg', 0.93), item.entry);
-        zip.file(path, dataUrl.split(',')[1], {base64:true});
-      }
-
-      processed++;
-      $btnAll.textContent = '⏳ '+processed+'/'+allEntries.length+'…';
-
-      if(processed === allEntries.length){
-        zip.generateAsync({type:'blob'}).then(function(blob){
-          var a = document.createElement('a');
-          a.download = 'stamped_photos.zip';
-          a.href = URL.createObjectURL(blob);
-          a.click();
-          setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
-          $btnAll.textContent='⬇ Download all stamped';
-          $btnAll.disabled=false;
-        });
-      }
-    };
-    img.src = item.entry.b64;
-  });
-});
-
-// Shared EXIF injection: preserves original EXIF, patches manual overrides
 function applyExifToDataUrl(dataUrl, entry){
-  var filename  = entry ? entry.file.name  : '';
-  var rawExifB64= entry ? entry.rawExifB64 : null;
-  var exifObj   = entry ? entry.exif       : {};
+  var filename   = entry ? entry.file.name : '';
+  var rawExifB64 = entry ? entry.rawExifB64 : null;
   var ext = (filename||'').split('.').pop().toLowerCase();
   if((ext==='jpg'||ext==='jpeg') && piexif){
     try{
       var origExif = rawExifB64 ? piexif.load(rawExifB64) : {'0th':{},'Exif':{},'GPS':{},'1st':{}};
-
       // Patch manual date/time
       var manDate = entry && entry.manualDate;
       var manTime = entry && entry.manualTime;
       if(manDate || manTime){
-        var datePart = '', timePart = '';
+        var datePart='', timePart='';
         if(manDate){ var dp=manDate.split('/'); if(dp.length===3) datePart=dp[2]+':'+dp[0]+':'+dp[1]; }
-        if(manTime){ timePart=manTime; if(timePart.split(':').length===2) timePart+=':00'; }
+        if(manTime){ timePart=manTime.replace(/ ?(AM|PM)$/i,''); if(timePart.split(':').length===2) timePart+=':00'; }
         if(!datePart && origExif['Exif'][piexif.ExifIFD.DateTimeOriginal])
           datePart=String(origExif['Exif'][piexif.ExifIFD.DateTimeOriginal]).split(' ')[0];
         if(!timePart && origExif['Exif'][piexif.ExifIFD.DateTimeOriginal])
@@ -2238,7 +2398,6 @@ function applyExifToDataUrl(dataUrl, entry){
         origExif['Exif'][piexif.ExifIFD.DateTimeOriginal]=dtStr;
         origExif['0th'][piexif.ImageIFD.DateTime]=dtStr;
       }
-
       // Patch manual GPS
       var manLat=entry&&entry.manualLat?parseFloat(entry.manualLat):NaN;
       var manLon=entry&&entry.manualLon?parseFloat(entry.manualLon):NaN;
@@ -2249,12 +2408,8 @@ function applyExifToDataUrl(dataUrl, entry){
         origExif['GPS'][piexif.GPSIFD.GPSLongitudeRef]=manLon>=0?'E':'W';
         origExif['GPS'][piexif.GPSIFD.GPSLongitude]   =toRat(manLon);
       }
-
-      // Reset orientation to 1 — canvas pixels are already correctly oriented
-      // (browser auto-applies EXIF orientation when rendering img tags)
-      // Without this, photo viewers rotate the already-correct pixels again
+      // Reset orientation — pixels already correctly oriented from canvas
       if(origExif['0th']) origExif['0th'][piexif.ImageIFD.Orientation] = 1;
-
       var exifBytes=piexif.dump(origExif);
       dataUrl=piexif.insert(exifBytes, piexif.remove(dataUrl));
     }catch(e){}
@@ -2269,249 +2424,79 @@ function downloadWithExif(canvasEl, entry, filename){
   a.href = dataUrl; a.click();
 }
 
-function buildPiexifExif(exifObj){
-  if(!exifObj||!piexif) return null;
-  try{
-    var zeroth={}, exifD={}, gps={};
-    function rat(v){ return v&&v.numerator!==undefined?[v.numerator,v.denominator]:null; }
-    if(exifObj.Make) zeroth[piexif.ImageIFD.Make]=String(exifObj.Make);
-    if(exifObj.Model) zeroth[piexif.ImageIFD.Model]=String(exifObj.Model);
-    if(exifObj.DateTimeOriginal) exifD[piexif.ExifIFD.DateTimeOriginal]=String(exifObj.DateTimeOriginal);
-    if(exifObj.DateTime) zeroth[piexif.ImageIFD.DateTime]=String(exifObj.DateTime);
-    var lat=dms(exifObj.GPSLatitude,exifObj.GPSLatitudeRef);
-    var lon=dms(exifObj.GPSLongitude,exifObj.GPSLongitudeRef);
-    if(lat!==null&&lon!==null){
-      function toRat(deg){ var d=Math.abs(deg); var dd=Math.floor(d); var m=Math.floor((d-dd)*60); var s=Math.round(((d-dd)*60-m)*3600*100); return [[dd,1],[m,1],[s,100]]; }
-      gps[piexif.GPSIFD.GPSLatitudeRef]=lat>=0?'N':'S'; gps[piexif.GPSIFD.GPSLatitude]=toRat(lat);
-      gps[piexif.GPSIFD.GPSLongitudeRef]=lon>=0?'E':'W'; gps[piexif.GPSIFD.GPSLongitude]=toRat(lon);
-    }
-    return piexif.dump({'0th':zeroth,'Exif':exifD,'GPS':gps});
-  }catch(e){ return null; }
-}
+$btnDL.addEventListener('click', function(){
+  var entry = files[activeIdx];
+  if(!entry||!entry.b64) return;
+  if(entry.stamped === false){
+    var a=document.createElement('a'); a.download=entry.file.name; a.href=entry.b64; a.click();
+    return;
+  }
+  if(!canvas) return;
+  downloadWithExif(canvas, entry, entry.file.name);
+});
 
-function st(msg,type){ $st.textContent=msg; $st.className='status'+(type?' '+type:''); }
+$btnAll.addEventListener('click', function(){
+  $btnAll.disabled=true; $btnAll.textContent='⏳ Processing…';
+  var zip = new JSZip();
+  var allEntries = [];
 
-// Clear manual inputs on load — prevents browser autofill from pre-populating fields
+  groups.forEach(function(grp){
+    grp.indices.forEach(function(fi){
+      var entry=files[fi]; if(!entry||!entry.b64) return;
+      allEntries.push({entry:entry, folder:grp.name});
+    });
+  });
+  ungrouped.forEach(function(fi){
+    var entry=files[fi]; if(!entry||!entry.b64) return;
+    allEntries.push({entry:entry, folder:''});
+  });
+
+  if(!allEntries.length){ $btnAll.textContent='⬇ Download all stamped'; $btnAll.disabled=false; return; }
+
+  var processed=0;
+  allEntries.forEach(function(item){
+    var img=new Image();
+    img.onload=function(){
+      var path=item.folder?item.folder+'/'+item.entry.file.name:item.entry.file.name;
+      if(item.entry.stamped===false){
+        zip.file(path, item.entry.b64.split(',')[1], {base64:true});
+      } else {
+        var dims=scaledDims(img.naturalWidth,img.naturalHeight);
+        var c=document.createElement('canvas'); c.width=dims.w; c.height=dims.h;
+        var ctx=c.getContext('2d'); ctx.drawImage(img,0,0,dims.w,dims.h);
+        if(item.entry.stampX!==null&&item.entry.stampY!==null){ cfg.customX=item.entry.stampX; cfg.customY=item.entry.stampY; }
+        stampForEntry(ctx,c.width,c.height,item.entry);
+        var dataUrl=applyExifToDataUrl(c.toDataURL('image/jpeg',0.93),item.entry);
+        zip.file(path, dataUrl.split(',')[1], {base64:true});
+      }
+      processed++;
+      $btnAll.textContent='⏳ '+processed+'/'+allEntries.length+'…';
+      if(processed===allEntries.length){
+        zip.generateAsync({type:'blob'}).then(function(blob){
+          var a=document.createElement('a');
+          a.download='stamped_photos.zip';
+          a.href=URL.createObjectURL(blob);
+          a.click();
+          setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
+          $btnAll.textContent='⬇ Download all stamped';
+          $btnAll.disabled=false;
+        });
+      }
+    };
+    img.src=item.entry.b64;
+  });
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
 (function(){
+  // Hide manual panel until a photo is selected
+  var mp = id('manualPanel'); if(mp) mp.style.display = 'none';
+  // Clear any browser-autofilled values in manual override inputs
   ['manualDate','manualTime','manualGPS','manualAddr'].forEach(function(x){
     var el = id(x); if(el) el.value = '';
   });
 })();
-</script>
-<!-- HELP MODAL -->
-<div class="help-overlay" id="helpOverlay">
-  <div class="help-modal">
-    <div class="help-modal-header">
-      <div class="help-modal-title">// EXIF Stamper — User Guide</div>
-      <button class="help-modal-close" id="helpClose">✕</button>
-    </div>
-    <div class="help-modal-tabs" id="helpTabs">
-      <button class="help-tab-chevron" id="helpTabPrev" title="Previous tab">&#8249;</button>
-      <div class="help-tabs-scroll" id="helpTabsScroll">
-        <button class="help-tab on" data-tab="overview">Overview</button>
-        <button class="help-tab" data-tab="loading">Loading Photos</button>
-        <button class="help-tab" data-tab="stamp">Stamp Settings</button>
-        <button class="help-tab" data-tab="position">Positioning</button>
-        <button class="help-tab" data-tab="groups">Groups</button>
-        <button class="help-tab" data-tab="override">Manual Override</button>
-        <button class="help-tab" data-tab="download">Downloading</button>
-        <button class="help-tab" data-tab="geocoding">Geocoding</button>
-      </div>
-      <button class="help-tab-chevron" id="helpTabNext" title="Next tab">&#8250;</button>
-      <div class="help-tab-counter" id="helpTabCounter">1 / 8</div>
-    </div>
-    <div class="help-body">
 
-      <!-- OVERVIEW -->
-      <div class="help-section on" id="tab-overview">
-        <div class="help-h1">What is EXIF Stamper?</div>
-        <div class="help-p">EXIF Stamper burns metadata — GPS coordinates, reverse-geocoded address, date, and time — directly onto your photos as visible text. Everything runs locally in your browser. <strong>No photos are ever uploaded to any server.</strong></div>
-        <div class="help-h2">How it works</div>
-        <ul class="help-ul">
-          <li>Load photos (or a ZIP file) into the app</li>
-          <li>The app reads each photo's EXIF metadata automatically</li>
-          <li>GPS coordinates are reverse-geocoded to a street address</li>
-          <li>A text stamp is drawn onto the canvas preview</li>
-          <li>Download individual photos or all photos as a ZIP</li>
-        </ul>
-        <div class="help-h2">Layout</div>
-        <div class="help-kv">
-          <span class="help-key">Left panel</span><span class="help-val">Loaded images list — click to select, hover for controls</span>
-          <span class="help-key">Center</span><span class="help-val">Live canvas preview — drag or click to reposition the stamp</span>
-          <span class="help-key">Bottom bar</span><span class="help-val">Stamp settings — fields, font, alignment, color, position presets</span>
-          <span class="help-key">Right panel</span><span class="help-val">EXIF data table, geocoded address, and manual override fields</span>
-        </div>
-        <div class="help-tip">
-          <div class="help-tip-label">✓ Tip</div>
-          <p>The stamp is non-destructive during editing — the original file bytes are preserved. The stamp is only baked in when you download.</p>
-        </div>
-      </div>
-
-      <!-- LOADING -->
-      <div class="help-section" id="tab-loading">
-        <div class="help-h1">Loading Photos</div>
-        <div class="help-h2">Drag & Drop</div>
-        <div class="help-p">Drag photos or a <strong>.zip</strong> file directly onto the drop zone in the bottom-left corner. You can drop multiple files at once.</div>
-        <div class="help-h2">Click to Browse</div>
-        <div class="help-p">Click the drop zone to open a file picker. Accepts <strong>JPG, PNG, WEBP, HEIC, TIFF, BMP, GIF</strong> and <strong>.zip</strong> files.</div>
-        <div class="help-h2">ZIP Files</div>
-        <div class="help-p">When a ZIP is loaded, photos are <strong>automatically grouped by subfolder</strong>. Photos in the ZIP root are placed ungrouped. The ZIP filename becomes the group name for root-level photos.</div>
-        <div class="help-h2">File List</div>
-        <ul class="help-ul">
-          <li><strong>Click</strong> any photo to select and preview it</li>
-          <li><strong>Checkbox</strong> on each photo — uncheck to download without stamp</li>
-          <li><strong>⇄ button</strong> (hover) — move photo to a different group or ungroup it</li>
-          <li><strong>✕ button</strong> (hover) — remove photo from the list</li>
-        </ul>
-        <div class="help-tip">
-          <div class="help-tip-label">✓ Tip</div>
-          <p>Photos are processed in parallel. Geocoding runs immediately in the background as photos load. The "Download all" button enables once all addresses are resolved.</p>
-        </div>
-      </div>
-
-      <!-- STAMP SETTINGS -->
-      <div class="help-section" id="tab-stamp">
-        <div class="help-h1">Stamp Settings</div>
-        <div class="help-h2">Stamp Fields</div>
-        <div class="help-kv">
-          <span class="help-key">Date &amp; Time</span><span class="help-val">Shows date and time from EXIF (format: MM/DD/YYYY hh:mm:ss AM/PM)</span>
-          <span class="help-key">GPS</span><span class="help-val">Decimal latitude and longitude from EXIF</span>
-          <span class="help-key">Address</span><span class="help-val">Reverse-geocoded street address from GPS coordinates</span>
-          <span class="help-key">Filename</span><span class="help-val">Original filename of the photo</span>
-        </div>
-        <div class="help-h2">Typography</div>
-        <div class="help-kv">
-          <span class="help-key">Size</span><span class="help-val">Font size in pixels (12–120px). Scales with the actual image size on download.</span>
-          <span class="help-key">Font</span><span class="help-val">Choose from 8 typefaces. Each option previews in its own font.</span>
-          <span class="help-key">B / I / U</span><span class="help-val">Bold, italic, underline toggles</span>
-          <span class="help-key">Align</span><span class="help-val">Left, center, right, or justify — aligns text within the stamp block</span>
-        </div>
-        <div class="help-h2">Color</div>
-        <div class="help-kv">
-          <span class="help-key">Text color</span><span class="help-val">Click the white swatch to open the color picker. Choose from palette or enter a custom hex value.</span>
-          <span class="help-key">BG color</span><span class="help-val">Background fill behind the stamp text</span>
-          <span class="help-key">BG opacity</span><span class="help-val">Slider controls background transparency (0% = fully transparent)</span>
-        </div>
-        <div class="help-tip">
-          <div class="help-tip-label">✓ Tip</div>
-          <p>Default is white text with a dark semi-transparent background (50% opacity). This works well on both light and dark photos.</p>
-        </div>
-      </div>
-
-      <!-- POSITION -->
-      <div class="help-section" id="tab-position">
-        <div class="help-h1">Stamp Positioning</div>
-        <div class="help-h2">Drag to Position</div>
-        <div class="help-p">Click anywhere on the canvas preview to jump the stamp to that point. Then drag the stamp ghost (dashed outline) to fine-tune its position.</div>
-        <div class="help-h2">Preset Grid</div>
-        <div class="help-p">The 3×3 grid in the Position column snaps the stamp to 9 common positions: corners, edges, and center.</div>
-        <div class="help-h2">Per-Photo Independence</div>
-        <div class="help-p">Each photo remembers its own stamp position independently. Moving the stamp on one photo does not affect others.</div>
-        <div class="help-h2">Apply Position to Group</div>
-        <div class="help-p">The <strong>↓ pos to group</strong> button (below the preset grid) copies the current photo's stamp position to every other photo in the same group. This is a one-time copy — photos remain independent afterwards.</div>
-        <div class="help-tip">
-          <div class="help-tip-label">✓ Tip</div>
-          <p>Position is stored as a ratio (0–1) of the image dimensions, so it stays proportionally correct regardless of image size or orientation.</p>
-        </div>
-      </div>
-
-      <!-- GROUPS -->
-      <div class="help-section" id="tab-groups">
-        <div class="help-h1">Groups</div>
-        <div class="help-h2">What are groups?</div>
-        <div class="help-p">Groups are collections of photos — typically from the same job site, folder, or ZIP subfolder. They appear as collapsible headers in the file list with a colored dot.</div>
-        <div class="help-h2">Creating Groups</div>
-        <ul class="help-ul">
-          <li><strong>From ZIP</strong> — subfolders become groups automatically</li>
-          <li><strong>Manually</strong> — hover a photo, click ⇄, then choose "New group…"</li>
-        </ul>
-        <div class="help-h2">Group Controls</div>
-        <div class="help-kv">
-          <span class="help-key">⬇ on header</span><span class="help-val">Download all photos in that group as a ZIP (GroupName.zip with photos inside GroupName/ folder)</span>
-          <span class="help-key">✕ on header</span><span class="help-val">Dissolve the group — photos move to ungrouped</span>
-          <span class="help-key">▾ chevron</span><span class="help-val">Collapse or expand the group in the list</span>
-        </div>
-        <div class="help-h2">Moving Photos</div>
-        <div class="help-p">Hover any photo and click the <strong>⇄</strong> button to move it to another group, create a new group, or ungroup it. Ungrouped photos appear at the top of the list with no header.</div>
-        <div class="help-h2">Manual Override — Entire Group</div>
-        <div class="help-p">In the Manual Override panel, switch scope to <strong>Entire group</strong> then click <strong>↓ Apply to all in group</strong> to apply the current photo's overrides to all photos in the group.</div>
-      </div>
-
-      <!-- MANUAL OVERRIDE -->
-      <div class="help-section" id="tab-override">
-        <div class="help-h1">Manual Override</div>
-        <div class="help-p">The Manual Override panel (right sidebar) lets you correct or replace any metadata field for individual photos or entire groups.</div>
-        <div class="help-h2">Fields</div>
-        <div class="help-kv">
-          <span class="help-key">Date</span><span class="help-val">Override the EXIF date. Format: MM/DD/YYYY</span>
-          <span class="help-key">Time</span><span class="help-val">Override the EXIF time. Format: HH:MM:SS</span>
-          <span class="help-key">GPS</span><span class="help-val">Override GPS coordinates. Accepts: 26.184133,-80.263028 or 26.184133 -80.263028</span>
-          <span class="help-key">Address</span><span class="help-val">Override the geocoded address with any text. Will NOT change GPS coordinates.</span>
-        </div>
-        <div class="help-h2">Auto-fill behavior</div>
-        <ul class="help-ul">
-          <li><strong>Type GPS</strong> → Address field auto-fills from reverse geocoding</li>
-          <li><strong>Clear GPS</strong> → Address restores from EXIF GPS coordinates</li>
-          <li><strong>Clear Address</strong> → Address restores from GPS (manual or EXIF)</li>
-          <li><strong>Type Address</strong> → GPS field is NOT changed (address is independent)</li>
-        </ul>
-        <div class="help-h2">Scope</div>
-        <div class="help-kv">
-          <span class="help-key">This photo</span><span class="help-val">Override applies only to the currently selected photo</span>
-          <span class="help-key">Entire group</span><span class="help-val">Shows when photo is in a group with 2+ photos. Click "↓ Apply to all in group" to propagate.</span>
-        </div>
-        <div class="help-warn">
-          <div class="help-warn-label">⚠ Note</div>
-          <p>Manual overrides are saved per-photo and persist when you switch between photos. They are also written into the downloaded JPEG's EXIF metadata.</p>
-        </div>
-      </div>
-
-      <!-- DOWNLOADING -->
-      <div class="help-section" id="tab-download">
-        <div class="help-h1">Downloading</div>
-        <div class="help-h2">Download This Image</div>
-        <div class="help-p">The <strong>⬇ This image</strong> button downloads the currently previewed photo with the stamp burned in and original EXIF metadata preserved.</div>
-        <div class="help-h2">Download All Stamped</div>
-        <div class="help-p">The <strong>⬇ Download all stamped</strong> button packages every loaded photo into a single <strong>stamped_photos.zip</strong>. Photos in groups are placed in subfolders matching the group name. Ungrouped photos go in the ZIP root.</div>
-        <div class="help-h2">Download Group</div>
-        <div class="help-p">Click <strong>⬇</strong> on a group header to download only that group's photos as <strong>GroupName.zip</strong>, with all photos inside a <strong>GroupName/</strong> folder.</div>
-        <div class="help-h2">Stamp Checkbox</div>
-        <div class="help-p">Each photo has a checkbox in the file list. <strong>Unchecked photos are downloaded without any stamp</strong> — the original file bytes are used as-is.</div>
-        <div class="help-h2">Geocoding Gate</div>
-        <div class="help-p">The "Download all" button shows <strong>⏳ Geocoding X/Y…</strong> while addresses are being resolved. It enables automatically when all photos have been geocoded.</div>
-        <div class="help-tip">
-          <div class="help-tip-label">✓ Tip</div>
-          <p>EXIF metadata is fully preserved in downloads. Manual date, time, and GPS overrides are also written back into the saved JPEG's EXIF tags.</p>
-        </div>
-      </div>
-
-      <!-- GEOCODING -->
-      <div class="help-section" id="tab-geocoding">
-        <div class="help-h1">Geocoding</div>
-        <div class="help-p">Geocoding converts GPS coordinates into a human-readable street address. It runs automatically in the background when photos are loaded.</div>
-        <div class="help-h2">Default Provider</div>
-        <div class="help-p"><strong>Nominatim</strong> (OpenStreetMap) is used by default — completely free, no API key required, no usage limits. Requests are spaced 1.1 seconds apart to respect Nominatim's usage policy.</div>
-        <div class="help-h2">Alternative Providers</div>
-        <div class="help-kv">
-          <span class="help-key">LocationIQ</span><span class="help-val">5,000 requests/day free. More accurate for some regions. Requires free API key from locationiq.com. Falls back to Nominatim at limit.</span>
-          <span class="help-key">OpenCage</span><span class="help-val">2,500 requests/day free. Requires API key from opencagedata.com.</span>
-        </div>
-        <div class="help-h2">Switching Providers</div>
-        <div class="help-p">Open the HTML file in a text editor and change the config at the top of the script:</div>
-        <div class="help-p" style="background:#0a0a0a;border:1px solid #1e1e1e;padding:10px;color:#4caf50;">var GEOCODER = 'locationiq';<br>var LOCATIONIQ_KEY = 'pk.your_key_here';</div>
-        <div class="help-h2">Geocoding Cache</div>
-        <div class="help-p">Addresses are cached by coordinate. If multiple photos share the same GPS location (rounded to 5 decimal places), only one geocoding request is made.</div>
-        <div class="help-warn">
-          <div class="help-warn-label">⚠ Note</div>
-          <p>Geocoding requires an internet connection. Photos without GPS coordinates will show "No GPS data" and are skipped in the geocoding queue.</p>
-        </div>
-      </div>
-
-    </div><!-- end help-body -->
-  </div><!-- end help-modal -->
-</div><!-- end help-overlay -->
-
-<script>
 // ─── HELP MODAL ───────────────────────────────────────────────────────────────
 (function(){
   var overlay  = document.getElementById('helpOverlay');
@@ -2532,17 +2517,8 @@ function st(msg,type){ $st.textContent=msg; $st.className='status'+(type?' '+typ
     sections.forEach(function(s,i){ if(s) s.classList.toggle('on', i===idx); });
     current = idx;
     if(counter) counter.textContent = (idx+1)+' / '+tabs.length;
-    if(btnPrev) btnPrev.disabled = idx===0;
-    if(btnNext) btnNext.disabled = idx===tabs.length-1;
-    // Scroll active tab into view
-    var activeTab = tabs[idx];
-    var scrollEl = document.getElementById('helpTabsScroll');
-    if(activeTab && scrollEl){
-      var tabLeft = activeTab.offsetLeft;
-      var tabW    = activeTab.offsetWidth;
-      var scrollW = scrollEl.offsetWidth;
-      scrollEl.scrollLeft = tabLeft - scrollW/2 + tabW/2;
-    }
+    if(btnPrev) btnPrev.disabled = (idx===0);
+    if(btnNext) btnNext.disabled = (idx===tabs.length-1);
   }
 
   // Tab clicks
@@ -2550,9 +2526,9 @@ function st(msg,type){ $st.textContent=msg; $st.className='status'+(type?' '+typ
     t.addEventListener('click', function(){ goTo(i); });
   });
 
-  // Chevrons
-  if(btnPrev) btnPrev.addEventListener('click', function(){ goTo(current-1); });
-  if(btnNext) btnNext.addEventListener('click', function(){ goTo(current+1); });
+  // Chevrons — use explicit function to always read latest current value
+  if(btnPrev) btnPrev.addEventListener('click', function(e){ e.stopPropagation(); goTo(current-1); });
+  if(btnNext) btnNext.addEventListener('click', function(e){ e.stopPropagation(); goTo(current+1); });
 
   // Open / close
   btnHelp.addEventListener('click', function(){ overlay.classList.add('open'); goTo(current); });
