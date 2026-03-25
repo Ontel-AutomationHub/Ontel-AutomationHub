@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FTTH Automations - QA Hub</title>
+    <title>Photo Tools - FTTH QA Hub</title>
     <style>
         * {
             margin: 0;
@@ -182,90 +182,42 @@
             <div class="header-left">
                 <img src="images/FTTH.png" alt="FTTH" class="logo-small">
                 <div>
-                    <h1>FTTH Automations</h1>
-                    <p>6 tools for fiber installation quality assurance &#8226; 6 Active</p>
+                    <h1>Photo Stamping, Mapping & Renaming</h1>
+                    <p>2 tools for photo documentation &bull; 2 Active</p>
                 </div>
             </div>
-            <a href="index.html" class="back-button">&#8592; Back to Hub</a>
+            <a href="ftth.html" class="back-button">&#8592; Back to FTTH</a>
         </div>
 
         <div class="tools-grid">
-            <!-- Tool 1: RAW PDF Callouts Generator -->
-            <div class="tool-card" onclick="window.location.href='ftth-raw-callouts.html'">
-                <div class="tool-icon">&#128269;</div>
-                <div class="tool-title">RAW PDF Callouts Generator</div>
-                <div class="tool-description">
-                    Generate callout sheets from raw PDF construction drawings and create KML files for Google Maps visualization.
-                </div>
-                <span class="tool-status status-active">Active</span>
-                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='ftth-raw-callouts.html'">Open Tools</button>
-            </div>
 
-            <!-- Tool 2: Redlined CDs Extractor to DEF -->
-            <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/5d062b8d-669a-4192-b5e9-b68694872cdb', '_blank')">
-                <div class="tool-icon">&#128196;</div>
-                <div class="tool-title">Redlined CDs Extractor to DEF</div>
-                <div class="tool-description">
-                    Extract redlined construction drawing data and map it directly into DEF spreadsheet format for closeout documentation.
-                </div>
-                <span class="tool-status status-active">Active</span>
-                <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/5d062b8d-669a-4192-b5e9-b68694872cdb', '_blank')">Launch Tool</button>
-            </div>
-
-            <!-- Tool 3: Documents & Testing Tools -->
-            <div class="tool-card" onclick="window.location.href='ftth-docs-tools.html'">
-                <div class="tool-icon">&#128221;</div>
-                <div class="tool-title">Documents & Testing Tools</div>
-                <div class="tool-description">
-                    Document automation, photo-to-map mapping, and quality assurance tools for FTTH installations.
-                </div>
-                <span class="tool-status status-active">Active</span>
-                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='ftth-docs-tools.html'">Open Tools</button>
-            </div>
-
-            <!-- Tool 4: Photo Stamping, Mapping and Renaming -->
-            <div class="tool-card" onclick="window.location.href='ftth-photo-tools.html'">
+            <!-- Tool 1: Photo Stamp -->
+            <div class="tool-card" onclick="window.location.href='Photo_Stamper.html'">
                 <div class="tool-icon">&#128247;</div>
-                <div class="tool-title">Photo Stamping, Mapping and Renaming</div>
+                <div class="tool-title">Photo Stamp</div>
                 <div class="tool-description">
-                    Stamp EXIF data on photos, map geotagged photos to KML locations, and batch rename files for organized project documentation.
+                    Burn EXIF data stamps onto photos — date, time, GPS coordinates, and address. Supports batch processing, grouping, manual overrides, and ZIP download. No API key required.
                 </div>
                 <span class="tool-status status-active">Active</span>
-                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='ftth-photo-tools.html'">Open Tools</button>
+                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='Photo_Stamper.html'">Open Tool</button>
             </div>
 
-            <!-- Tool 4: Redline Extractor -->
-            <div class="tool-card" onclick="window.location.href='ftth-callouts.html'">
-                <div class="tool-icon">&#128203;</div>
-                <div class="tool-title">Redline Extractor</div>
+            <!-- Tool 2: Photo GPS Mapper -->
+            <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/35f5c6a7-cd3b-4f61-a423-0c012833b1fc', '_blank')">
+                <div class="tool-icon">&#128205;</div>
+                <div class="tool-title">Photo GPS Mapper</div>
                 <div class="tool-description">
-                    Generate standardized redline reports and extract redline data from screenshots for field crew coordination.
+                    Map geotagged photos to KML locations and batch rename files for organized project documentation.
                 </div>
                 <span class="tool-status status-active">Active</span>
-                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='ftth-callouts.html'">Open Tools</button>
+                <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/35f5c6a7-cd3b-4f61-a423-0c012833b1fc', '_blank')">Launch Tool</button>
             </div>
 
-            <!-- Tool 6: Review Generator -->
-            <div class="tool-card" onclick="window.location.href='ftth-review-generator.html'">
-                <div class="tool-icon">&#9989;</div>
-                <div class="tool-title">Review Generator</div>
-                <div class="tool-description">
-                    Automated fiber installation review with intelligent analysis of OTDR results, photos, and compliance checks.
-                </div>
-                <span class="tool-status status-active">Active</span>
-                <button class="launch-button" onclick="event.stopPropagation(); window.location.href='ftth-review-generator.html'">Open Tools</button>
-            </div>
         </div>
 
         <div class="footer">
             <p>&#128295; FTTH Automation Tools | Managed by QA Team</p>
         </div>
     </div>
-
-    <script>
-        function launchTool(toolId) {
-            alert('Tool "' + toolId + '" is coming soon!\n\nWe will add the actual automation here.');
-        }
-    </script>
 </body>
 </html>
