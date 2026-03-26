@@ -57,6 +57,49 @@
             font-size: 0.95em;
             margin-top: 15px;
             font-weight: 600;
+            cursor: default;
+            transition: opacity 0.3s;
+        }
+
+        .version-badge.loading {
+            opacity: 0.6;
+        }
+
+        /* Tooltip for commit info */
+        .version-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .version-tooltip {
+            display: none;
+            position: absolute;
+            bottom: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #222;
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 0.82em;
+            white-space: nowrap;
+            z-index: 10;
+            pointer-events: none;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .version-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: #222;
+        }
+
+        .version-wrapper:hover .version-tooltip {
+            display: block;
         }
 
         .categories-grid {
@@ -168,17 +211,10 @@
             }
         }
 
-        /* Pulse animation for attracting clicks */
         @keyframes pulse {
-            0% {
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            }
-            50% {
-                box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4);
-            }
-            100% {
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            }
+            0%   { box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+            50%  { box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4); }
+            100% { box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
         }
 
         .category-card {
@@ -195,7 +231,16 @@
         <div class="header">
             <h1>🚀 QA Automation Hub</h1>
             <p>Your Central Command for Quality Assurance Tools</p>
-            <div class="version-badge">Version 1.0 - Updated: February 10, 2026</div>
+
+            <!-- Version badge with hover tooltip showing commit details -->
+            <div class="version-wrapper">
+                <div class="version-badge loading" id="versionBadge">
+                    ⏳ Loading version...
+                </div>
+                <div class="version-tooltip" id="versionTooltip">
+                    Fetching commit info...
+                </div>
+            </div>
         </div>
 
         <div class="categories-grid">
@@ -272,10 +317,49 @@
         // Display last sync time
         document.getElementById('lastSync').textContent = new Date().toLocaleString();
 
-        // Auto-refresh sync time every 5 minutes
         setInterval(function() {
             document.getElementById('lastSync').textContent = new Date().toLocaleString();
         }, 300000);
+
+        // ─────────────────────────────────────────────
+        // AUTO VERSION from version.json (written by
+        // GitHub Actions on every push to main)
+        // ─────────────────────────────────────────────
+        async function loadVersion() {
+            const badge   = document.getElementById('versionBadge');
+            const tooltip = document.getElementById('versionTooltip');
+
+            try {
+                // Cache-bust so we always get the freshest file
+                const res = await fetch('version.json?t=' + Date.now());
+                if (!res.ok) throw new Error('version.json not found');
+                const data = await res.json();
+
+                // Format: "Version X.Y – Updated: Month DD, YYYY"
+                const date = new Date(data.date);
+                const formatted = date.toLocaleDateString('en-US', {
+                    year: 'numeric', month: 'long', day: 'numeric'
+                });
+
+                badge.textContent = `Version ${data.version} – Updated: ${formatted}`;
+                badge.classList.remove('loading');
+
+                // Tooltip shows commit SHA + message
+                const shortSha = (data.commit || '').slice(0, 7);
+                tooltip.textContent = shortSha
+                    ? `📦 Commit ${shortSha}: ${data.message || 'no message'}`
+                    : 'No commit info available';
+
+            } catch (err) {
+                // Graceful fallback — never break the page
+                badge.textContent = 'Version 1.0 – Updated: February 10, 2026';
+                badge.classList.remove('loading');
+                tooltip.textContent = '⚠️ Could not load version.json';
+                console.warn('Version fetch failed:', err);
+            }
+        }
+
+        loadVersion();
     </script>
 </body>
 </html>

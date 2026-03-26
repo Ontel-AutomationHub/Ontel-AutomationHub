@@ -1,0 +1,58 @@
+name: Update Version Badge
+
+on:
+  push:
+    branches:
+      - main        # triggers on every push to main
+      - master      # also covers repos using master
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to commit version.json back to the repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so we can read commit info
+
+      - name: Generate version.json
+        run: |
+          # Pull info from the triggering commit
+          COMMIT_SHA="${{ github.sha }}"
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+          PUSH_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Auto-increment version from git tag (falls back to 1.0)
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0")
+          VERSION="${LATEST_TAG#v}"   # strip leading 'v'
+
+          # Write version.json
+          cat > version.json <<EOF
+          {
+            "version": "$VERSION",
+            "date": "$PUSH_DATE",
+            "commit": "$COMMIT_SHA",
+            "message": "$COMMIT_MSG"
+          }
+          EOF
+
+          echo "✅ version.json written:"
+          cat version.json
+
+      - name: Commit and push version.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add version.json
+
+          # Only commit if there's actually a change
+          if git diff --staged --quiet; then
+            echo "No changes to version.json — skipping commit."
+          else
+            git commit -m "chore: auto-update version.json [skip ci]"
+            git push
+          fi
