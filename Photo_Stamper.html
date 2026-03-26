@@ -11,10 +11,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=Roboto+Mono:wght@400;700&family=Share+Tech+Mono&family=IBM+Plex+Mono&family=Oswald:wght@400;600&family=Anton&family=Bebas+Neue&family=Rajdhani:wght@500;700&display=swap');
 
 :root {
-  --blue: #0a6b61;
-  --blue-light: #0d9488;
+  --blue: #085f56;
+  --blue-light: #0a7a6e;
   --blue-pale: #e0f4f2;
-  --border: #c8d4d0;
+  --border: #b8ccc8;
   --bg: #a8b4b1;
   --panel: #ffffff;
   --panel2: #f4f7f6;
@@ -22,7 +22,7 @@
   --text2: #3a5450;
   --text3: #6a8a85;
   --active-bg: #d0edea;
-  --active-text: #0d9488;
+  --active-text: #085f56;
   --hover-bg: #e8f7f5;
   --red: #e24b4a;
   --green: #22a861;
@@ -32,8 +32,7 @@
 html, body { height: 100%; overflow: hidden; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--bg); color: var(--text);
   height: 100vh; width: 100vw; overflow: hidden;
   display: flex; flex-direction: column;
 }
@@ -41,41 +40,22 @@ body {
 /* ── TOP BAR ── */
 .topbar {
   display:flex; align-items:center; justify-content:space-between;
-  background: linear-gradient(135deg, #0d9488 0%, #0a6b61 100%);
-  flex-shrink:0; width:100%; position:relative; overflow:hidden;
-  min-height:56px; padding: 0 16px;
-  box-shadow: 0 2px 12px rgba(0,119,182,0.18);
+  background: linear-gradient(135deg, #0a7a6e 0%, #085f56 100%);
+  flex-shrink:0; width:100%; min-height:56px; padding:0 16px;
+  box-shadow: 0 2px 12px rgba(8,95,86,0.25);
 }
-.topbar-left { display:flex; align-items:center; gap:0; }
-.topbar-logo {
-  display:flex; flex-direction:column; justify-content:center;
-  padding:0 16px 0 4px; border-right:1px solid rgba(255,255,255,0.2);
-}
-.topbar-wordmark {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size:1rem; font-weight:700; color:#fff; line-height:1.1; letter-spacing:0.02em;
-}
+.topbar-left { display:flex; align-items:center; }
+.topbar-logo { display:flex; flex-direction:column; justify-content:center; padding:0 16px 0 4px; border-right:1px solid rgba(255,255,255,0.2); }
+.topbar-wordmark { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:1rem; font-weight:700; color:#fff; line-height:1.1; }
 .topbar-wordmark span { color:rgba(255,255,255,0.6); font-weight:400; }
-.topbar-tagline { font-size:0.78rem; color:rgba(255,255,255,0.55); margin-top:2px; letter-spacing:0.04em; }
+.topbar-tagline { font-size:0.72rem; color:rgba(255,255,255,0.65); margin-top:2px; }
 .topbar-tags { display:flex; align-items:center; gap:6px; padding:0 16px; }
-.topbar-tag {
-  font-size:0.7rem; color:rgba(255,255,255,0.75);
-  background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.25);
-  padding:3px 10px; border-radius:20px; white-space:nowrap;
-}
+.topbar-tag { font-size:0.75rem; color:rgba(255,255,255,0.85); background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.25); padding:3px 10px; border-radius:20px; white-space:nowrap; }
 .topbar-btns { display:flex; align-items:center; gap:8px; padding:0 4px; }
-.btn {
-  padding:0.45rem 1.1rem; background:#fff; color:#0077B6;
-  border:none; font-family:inherit; font-size:0.78rem; font-weight:600;
-  letter-spacing:0.04em; cursor:pointer; transition:all 0.15s;
-  white-space:nowrap; border-radius:20px; box-shadow:0 2px 8px rgba(0,0,0,0.1);
-}
-.btn:hover { background:#e8f4f8; transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+.btn { padding:0.45rem 1.1rem; background:#fff; color:#085f56; border:none; font-family:inherit; font-size:0.82rem; font-weight:600; cursor:pointer; transition:all 0.15s; white-space:nowrap; border-radius:20px; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+.btn:hover { background:#e0f4f2; transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.15); }
 .btn:disabled { background:rgba(255,255,255,0.25); color:rgba(255,255,255,0.45); cursor:not-allowed; transform:none; box-shadow:none; }
-.btn.outline {
-  background:rgba(255,255,255,0.15); color:#fff;
-  border:1px solid rgba(255,255,255,0.4); box-shadow:none;
-}
+.btn.outline { background:rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.4); box-shadow:none; }
 .btn.outline:hover { background:rgba(255,255,255,0.25); transform:translateY(-1px); }
 .btn.outline:disabled { background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.3); border-color:rgba(255,255,255,0.15); cursor:not-allowed; transform:none; }
 
@@ -83,28 +63,22 @@ body {
 .main { display:grid; grid-template-columns:260px 1fr 280px; grid-template-rows:1fr 190px; grid-template-areas:"files preview exif" "upload stamp exif"; width:100%; flex:1; min-height:0; overflow:hidden; }
 
 /* ── PANEL HEADERS ── */
-.panel-hdr {
-  font-size:0.7rem; font-weight:600; letter-spacing:0.1em; text-transform:uppercase;
-  color:var(--text2); padding:0.5rem 0.9rem;
-  border-bottom:1px solid var(--border); flex-shrink:0;
-  display:flex; align-items:center; justify-content:space-between;
-  background:var(--panel2);
-}
+.panel-hdr { font-size:0.78rem; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:var(--text2); padding:0.5rem 0.9rem; border-bottom:1px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:space-between; background:var(--panel2); }
 .section { padding:0.7rem 0.8rem; }
-.sec { font-size:0.80rem; color:var(--text3); letter-spacing:0.1em; text-transform:uppercase; margin:0.7rem 0 0.4rem; font-weight:600; }
+.sec { font-size:0.78rem; color:var(--text3); letter-spacing:0.1em; text-transform:uppercase; margin:0.7rem 0 0.4rem; font-weight:600; }
 .sec:first-child { margin-top:0; }
-.hint { font-size:0.80rem; color:var(--text3); font-style:italic; padding:0.3rem 0; }
+.hint { font-size:0.78rem; color:var(--text3); font-style:italic; padding:0.3rem 0; }
 
 /* ── FILE LIST ── */
 .left-files { grid-area:files; display:flex; flex-direction:column; overflow:hidden; border-right:1px solid var(--border); background:var(--panel); }
 .file-scroll { overflow-y:auto; flex:1; }
 .file-scroll::-webkit-scrollbar { width:4px; }
-.file-scroll::-webkit-scrollbar-track { background:var(--bg); }
-.file-scroll::-webkit-scrollbar-thumb { background:#b0cdd8; border-radius:4px; }
-.group-header { display:flex; align-items:center; gap:5px; padding:5px 8px 4px; cursor:pointer; border-bottom:1px solid var(--border); user-select:none; position:sticky; top:0; background:#eef6fb; z-index:1; }
+.file-scroll::-webkit-scrollbar-track { background:var(--panel2); }
+.file-scroll::-webkit-scrollbar-thumb { background:#8aaba6; border-radius:4px; }
+.group-header { display:flex; align-items:center; gap:5px; padding:5px 8px 4px; cursor:pointer; border-bottom:1px solid var(--border); user-select:none; position:sticky; top:0; background:#eaf2f0; z-index:1; }
 .group-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-.group-name { font-size:0.72rem; color:var(--text); letter-spacing:0.03em; font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.group-count { font-size:0.78rem; color:var(--text3); flex-shrink:0; }
+.group-name { font-size:0.80rem; color:var(--text); font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.group-count { font-size:0.75rem; color:var(--text3); flex-shrink:0; }
 .group-chevron { font-size:0.73rem; color:var(--text3); flex-shrink:0; transition:transform 0.15s; }
 .group-header.collapsed .group-chevron { transform:rotate(-90deg); }
 .group-files { overflow:hidden; }
@@ -118,35 +92,35 @@ body {
 .file-item.on { background:var(--active-bg); }
 .fn { color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
 .file-item.on .fn { color:var(--active-text); font-weight:600; }
-.fsz { color:var(--text3); flex-shrink:0; font-size:0.78rem; }
+.fsz { color:var(--text3); flex-shrink:0; font-size:0.75rem; }
 .file-active-dot { width:5px; height:5px; border-radius:50%; background:var(--blue); flex-shrink:0; opacity:0; }
 .file-item.on .file-active-dot { opacity:1; }
 .file-item-thumb { width:28px; height:28px; object-fit:cover; flex-shrink:0; border-radius:4px; border:1px solid var(--border); }
-.file-remove { display:none; margin-left:auto; flex-shrink:0; background:transparent; border:none; color:var(--text3); font-size:0.75rem; cursor:pointer; padding:0 2px; line-height:1; transition:color 0.15s; }
+.file-remove { display:none; margin-left:auto; flex-shrink:0; background:transparent; border:none; color:var(--text3); font-size:0.80rem; cursor:pointer; padding:0 2px; line-height:1; transition:color 0.15s; }
 .file-item:hover .file-remove { display:block; }
 .file-remove:hover { color:var(--red); }
 .file-stamp-chk { flex-shrink:0; width:13px; height:13px; accent-color:var(--blue); cursor:pointer; margin:0; }
 .file-item.unstamped .fn { opacity:0.45; }
 .file-item.unstamped .file-item-thumb { opacity:0.35; }
-.file-move-btn { display:none; flex-shrink:0; background:transparent; border:none; color:var(--text3); font-size:0.7rem; cursor:pointer; padding:0 2px; line-height:1; transition:color 0.15s; }
+.file-move-btn { display:none; flex-shrink:0; background:transparent; border:none; color:var(--text3); font-size:0.80rem; cursor:pointer; padding:0 2px; line-height:1; transition:color 0.15s; }
 .file-item:hover .file-move-btn { display:block; }
 .file-move-btn:hover { color:var(--blue); }
-.drag-handle { flex-shrink:0; color:var(--border); font-size:0.7rem; cursor:grab; padding:0 3px; line-height:1; user-select:none; transition:color 0.15s; }
+.drag-handle { flex-shrink:0; color:#aac8c4; font-size:0.80rem; cursor:grab; padding:0 4px; line-height:1; user-select:none; transition:color 0.15s; }
 .file-item:hover .drag-handle { color:var(--text3); }
 .drag-handle:active { cursor:grabbing; }
-.file-item.dragging { opacity:0.35; background:var(--bg); }
+.file-item.dragging { opacity:0.35; background:var(--panel2); }
 .file-item.drag-over-top { border-top:2px solid var(--blue); }
 .file-item.drag-over-bottom { border-bottom:2px solid var(--blue); }
 .group-header.drag-over { background:var(--active-bg); border:1px dashed var(--blue); }
-.drop-zone-ungrouped { height:4px; transition:height 0.15s, background 0.15s; }
-.drop-zone-ungrouped.drag-over { height:24px; background:rgba(0,119,182,0.08); border:1px dashed var(--blue); }
+.drop-zone-ungrouped { height:4px; transition:height 0.15s,background 0.15s; }
+.drop-zone-ungrouped.drag-over { height:24px; background:rgba(8,95,86,0.08); border:1px dashed var(--blue); }
 .drop-zone-newgroup { margin:6px 6px 4px; border:1px dashed var(--border); padding:6px 8px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; min-height:28px; cursor:default; border-radius:6px; }
-.drop-zone-newgroup.drag-over { border-color:var(--blue); background:rgba(0,119,182,0.06); }
+.drop-zone-newgroup.drag-over { border-color:var(--blue); background:rgba(8,95,86,0.06); }
 .drop-zone-newgroup-label { font-size:0.72rem; color:var(--text3); letter-spacing:0.1em; text-transform:uppercase; pointer-events:none; transition:color 0.15s; }
 .drop-zone-newgroup.drag-over .drop-zone-newgroup-label { color:var(--blue); }
-.group-move-menu { position:fixed; z-index:99999; background:#fff; border:1px solid var(--border); padding:4px 0; min-width:160px; box-shadow:0 6px 24px rgba(0,119,182,0.15); display:none; border-radius:10px; }
+.group-move-menu { position:fixed; z-index:99999; background:#fff; border:1px solid var(--border); padding:4px 0; min-width:160px; box-shadow:0 6px 24px rgba(8,95,86,0.15); display:none; border-radius:10px; }
 .group-move-menu.open { display:block; }
-.group-move-item { padding:6px 14px; font-size:0.72rem; color:var(--text2); cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.group-move-item { padding:6px 14px; font-size:0.80rem; color:var(--text2); cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
 .group-move-item:hover { background:var(--hover-bg); color:var(--blue); }
 .group-move-item .gm-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 .group-move-item.gm-new { color:var(--text3); border-top:1px solid var(--border); margin-top:2px; padding-top:8px; }
@@ -159,21 +133,21 @@ body {
 .drop-zone-merged { border:2px dashed var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; transition:border-color 0.2s,background 0.2s; flex:1; text-align:center; padding:0.5rem; margin:0.5rem; border-radius:12px; }
 .drop-zone-merged:hover, .drop-zone-merged.drag-over { border-color:var(--blue); background:var(--active-bg); }
 .drop-icon-merged { font-size:1.8rem; margin-bottom:0.3rem; line-height:1; }
-.drop-text-merged { font-size:0.72rem; color:var(--text2); font-weight:600; letter-spacing:0.04em; }
+.drop-text-merged { font-size:0.80rem; color:var(--text2); font-weight:600; }
 .drop-sub-merged { font-size:0.75rem; color:var(--text3); margin-top:0.2rem; }
 .status { font-size:0.75rem; padding:2px 0 0; min-height:14px; color:var(--green); text-align:center; }
-.status.w { color:#e07b00; }
+.status.w { color:#c07800; }
 .status.e { color:var(--red); }
 
 /* ── CENTER PREVIEW ── */
-.center-panel { grid-area:preview; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:#e8f0f5; height:100%; width:100%; }
+.center-panel { grid-area:preview; display:flex; flex-direction:column; min-height:0; overflow:hidden; background:#c8d4d0; height:100%; width:100%; }
 .canvas-wrap { flex:1; min-height:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; touch-action:none; user-select:none; -webkit-user-select:none; }
-canvas { max-width:100%; max-height:100%; width:auto; height:auto; display:block; border-radius:4px; box-shadow:0 4px 20px rgba(0,0,0,0.12); }
-.ph { text-align:center; color:var(--text3); font-size:0.75rem; letter-spacing:0.1em; text-transform:uppercase; padding:2rem; }
-.ph-icon { font-size:2.8rem; display:block; margin-bottom:0.6rem; opacity:0.35; }
+canvas { max-width:100%; max-height:100%; width:auto; height:auto; display:block; border-radius:4px; box-shadow:0 4px 20px rgba(0,0,0,0.15); }
+.ph { text-align:center; color:var(--text2); font-size:0.82rem; letter-spacing:0.1em; text-transform:uppercase; padding:2rem; font-weight:600; }
+.ph-icon { font-size:2.8rem; display:block; margin-bottom:0.6rem; opacity:0.4; }
 .stamp-overlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
 .stamp-ghost { position:absolute; background:transparent; border:1.5px dashed transparent; cursor:grab; pointer-events:all; user-select:none; display:none; box-sizing:border-box; touch-action:none; }
-.stamp-ghost.dragging { cursor:grabbing; background:transparent; }
+.stamp-ghost.dragging { cursor:grabbing; }
 .stamp-ghost-label { font-family:"Courier New",monospace; font-size:10px; color:var(--blue); padding:2px 3px; white-space:nowrap; opacity:0.7; }
 
 /* ── STAMP SETTINGS ZONE ── */
@@ -181,22 +155,21 @@ canvas { max-width:100%; max-height:100%; width:auto; height:auto; display:block
 .sz-group { display:flex; flex-direction:column; justify-content:flex-start; padding:0.6rem 0.85rem; border-right:1px solid var(--border); overflow:hidden; min-width:0; }
 .sz-group:last-child { border-right:none; }
 .sz-group.grow { flex:1; }
-.sz-group-title { font-size:0.7rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue); margin-bottom:0.6rem; }
+.sz-group-title { font-size:0.78rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue); margin-bottom:0.6rem; }
 .sz-checks { display:flex; flex-direction:column; justify-content:center; gap:0; }
 .sz-chk { display:flex; align-items:center; gap:7px; cursor:pointer; padding:0.2rem 0.4rem; transition:background 0.12s; border-radius:6px; }
 .sz-chk:hover { background:var(--hover-bg); }
 .sz-chk input[type="checkbox"] { accent-color:var(--blue); width:14px; height:14px; flex-shrink:0; cursor:pointer; margin:0; }
-.sz-chk-label { font-size:0.85rem; color:var(--text2); transition:color 0.15s; white-space:nowrap; line-height:1.3; }
+.sz-chk-label { font-size:0.90rem; color:var(--text2); transition:color 0.15s; white-space:nowrap; line-height:1.3; }
 .sz-chk:has(input:checked) .sz-chk-label { color:var(--text); font-weight:600; }
-.sz-chk:hover .sz-chk-label { color:var(--text); }
 .sz-row { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.7rem; }
 .sz-row:last-child { margin-bottom:0; }
-.sz-lbl { font-size:0.72rem; color:var(--text2); font-weight:600; letter-spacing:0.04em; text-transform:uppercase; width:54px; flex-shrink:0; text-align:right; }
+.sz-lbl { font-size:0.80rem; color:var(--text2); font-weight:600; text-transform:uppercase; width:54px; flex-shrink:0; text-align:right; }
 .sz-ctrl { display:flex; align-items:center; gap:0.3rem; flex:1; min-width:0; overflow:hidden; }
 .sz-ctrl input[type="range"] { flex:1; min-width:50px; height:3px; }
 .stamp-zone .style-btn { height:28px; min-width:32px; padding:0 8px; font-size:14px; }
 .sz-pgrid { display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:3px; width:100%; flex:1; }
-.sz-pb { width:100%; height:100%; background:var(--bg); border:1px solid var(--border); color:var(--text3); font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.12s; padding:0; border-radius:6px; transform:scale(0.75); }
+.sz-pb { width:100%; height:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text3); font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.12s; padding:0; border-radius:6px; transform:scale(0.75); }
 .sz-pb:hover { background:var(--active-bg); color:var(--blue); border-color:var(--blue-light); }
 .sz-pb.on { background:var(--active-bg); border-color:var(--blue); color:var(--blue); }
 .sz-pb.dead { cursor:default; background:transparent; border-color:transparent; color:transparent; }
@@ -207,47 +180,45 @@ canvas { max-width:100%; max-height:100%; width:auto; height:auto; display:block
 /* ── RIGHT PANEL ── */
 .right-panel { grid-area:exif; grid-row:1/-1; border-left:1px solid var(--border); overflow-y:auto; scrollbar-width:thin; background:var(--panel); }
 .right-panel::-webkit-scrollbar { width:4px; }
-.right-panel::-webkit-scrollbar-thumb { background:#b0cdd8; border-radius:4px; }
+.right-panel::-webkit-scrollbar-thumb { background:#8aaba6; border-radius:4px; }
 .exif-tbl { font-size:0.80rem; width:100%; border-collapse:collapse; }
 .exif-tbl tr { border-bottom:1px solid var(--border); }
 .exif-tbl td { padding:4px 2px; vertical-align:top; }
 .exif-tbl td:first-child { color:var(--text3); width:44%; font-weight:600; }
 .exif-tbl td:last-child { color:var(--text); word-break:break-all; }
 .addr-box { margin-top:0.5rem; padding:0.4rem 0.6rem; background:var(--blue-pale); border-left:3px solid var(--blue); font-size:0.78rem; color:var(--text2); line-height:1.5; border-radius:0 6px 6px 0; }
-.addr-box.loading { color:var(--text3); font-style:italic; border-color:var(--border); background:var(--bg); }
-.addr-box.err { border-color:#ccc; color:var(--text3); background:var(--bg); }
-.manual-panel { margin-top:0.6rem; padding:0.5rem 0.6rem; background:var(--bg); border-left:3px solid var(--border); border-radius:0 6px 6px 0; }
+.addr-box.loading { color:var(--text3); font-style:italic; border-color:var(--border); background:var(--panel2); }
+.addr-box.err { border-color:#ccc; color:var(--text3); background:var(--panel2); }
+.manual-panel { margin-top:0.6rem; padding:0.5rem 0.6rem; background:var(--panel2); border-left:3px solid var(--border); border-radius:0 6px 6px 0; }
 .manual-panel.visible { border-color:var(--blue); background:var(--blue-pale); }
 .manual-title { font-size:0.75rem; color:var(--text2); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.4rem; }
 .manual-row { display:flex; align-items:center; gap:5px; margin-bottom:0.35rem; }
 .manual-lbl { font-size:0.75rem; color:var(--text2); font-weight:600; width:54px; flex-shrink:0; }
-.manual-inp { flex:1; background:#fff; border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:0.7rem; padding:3px 7px; outline:none; transition:border-color 0.15s; border-radius:5px; }
-.manual-inp:focus { border-color:var(--blue); box-shadow:0 0 0 2px rgba(0,119,182,0.1); }
+.manual-inp { flex:1; background:#fff; border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:0.78rem; padding:3px 7px; outline:none; transition:border-color 0.15s; border-radius:5px; }
+.manual-inp:focus { border-color:var(--blue); box-shadow:0 0 0 2px rgba(8,95,86,0.12); }
 .manual-inp::placeholder { color:var(--text3); }
 .manual-hint { font-size:0.72rem; color:var(--text3); padding:2px 0 0; font-style:italic; }
-.badge-missing { font-size:0.72rem; background:var(--blue-pale); color:var(--blue); border:1px solid #b0d4e8; padding:1px 5px; letter-spacing:0.06em; margin-left:3px; border-radius:4px; }
+.badge-missing { font-size:0.72rem; background:var(--blue-pale); color:var(--blue); border:1px solid #8ac8c0; padding:1px 5px; letter-spacing:0.06em; margin-left:3px; border-radius:4px; }
 .scope-btn { flex:1; padding:3px 6px; background:transparent; color:var(--text3); border:1px solid var(--border); font-size:0.75rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; transition:all 0.15s; border-radius:5px; }
 .scope-btn.on { background:var(--active-bg); color:var(--blue); border-color:var(--blue); }
-.scope-btn:hover:not(.on) { color:var(--text2); border-color:#aac8d8; }
+.scope-btn:hover:not(.on) { color:var(--text2); border-color:#8aaba6; }
 
 /* ── SHARED CONTROLS ── */
 .row { display:flex; align-items:center; gap:6px; margin-bottom:0.4rem; }
 .lbl { font-size:0.78rem; color:var(--text2); font-weight:600; letter-spacing:0.06em; text-transform:uppercase; width:58px; flex-shrink:0; }
 input[type="range"] { -webkit-appearance:none; width:100%; height:3px; background:var(--border); outline:none; cursor:pointer; border-radius:3px; }
-input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; background:var(--blue); border-radius:50%; cursor:pointer; box-shadow:0 1px 4px rgba(0,119,182,0.3); }
-.rval { font-size:0.78rem; color:var(--blue); font-weight:600; width:38px; text-align:right; flex-shrink:0; }
-label { display:flex; align-items:center; gap:6px; font-size:0.72rem; color:var(--text2); margin-bottom:0.3rem; cursor:pointer; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; background:var(--blue); border-radius:50%; cursor:pointer; box-shadow:0 1px 4px rgba(8,95,86,0.3); }
+.rval { font-size:0.82rem; color:var(--blue); font-weight:600; width:38px; text-align:right; flex-shrink:0; }
+label { display:flex; align-items:center; gap:6px; font-size:0.80rem; color:var(--text2); margin-bottom:0.3rem; cursor:pointer; }
 label input[type="checkbox"] { accent-color:var(--blue); width:13px; height:13px; }
-.font-select { flex:1; background:#fff; border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:0.82rem; padding:5px 22px 5px 8px; outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%230077B6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 7px center; transition:border-color 0.15s; min-width:0; display:none; border-radius:6px; }
+.font-select { flex:1; background:#fff; border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:0.85rem; padding:5px 22px 5px 8px; outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23085f56'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 7px center; transition:border-color 0.15s; min-width:0; display:none; border-radius:6px; }
 .font-select:focus { border-color:var(--blue); }
 .font-select option { background:#fff; color:var(--text); }
-
-/* Custom font picker */
 .font-picker { flex:1; position:relative; min-width:0; height:28px; flex-shrink:1; }
 .font-picker-btn { width:100%; height:28px; background:#fff; border:1px solid var(--border); color:var(--text); font-size:0.88rem; padding:0 22px 0 8px; outline:none; cursor:pointer; text-align:left; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; transition:border-color 0.15s; box-sizing:border-box; display:flex; align-items:center; position:relative; border-radius:6px; }
 .font-picker-btn:hover, .font-picker-btn.open { border-color:var(--blue); }
 .font-picker-btn::after { content:'▾'; position:absolute; right:7px; top:50%; transform:translateY(-50%); font-size:9px; color:var(--blue); pointer-events:none; }
-.font-picker-drop { position:fixed; z-index:99999; background:#fff; border:1px solid var(--border); display:none; flex-direction:column; min-width:160px; max-height:240px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,119,182,0.15); border-radius:10px; }
+.font-picker-drop { position:fixed; z-index:99999; background:#fff; border:1px solid var(--border); display:none; flex-direction:column; min-width:160px; max-height:240px; overflow-y:auto; box-shadow:0 8px 24px rgba(8,95,86,0.15); border-radius:10px; }
 .font-picker-drop.open { display:flex; }
 .font-picker-opt { padding:7px 12px; cursor:pointer; color:var(--text2); font-size:0.95rem; white-space:nowrap; transition:background 0.1s; line-height:1.3; }
 .font-picker-opt:hover { background:var(--hover-bg); color:var(--blue); }
@@ -265,21 +236,21 @@ label input[type="checkbox"] { accent-color:var(--blue); width:13px; height:13px
 .color-pick-btn { width:28px; height:22px; border:1px solid var(--border); cursor:pointer; flex-shrink:0; position:relative; transition:border-color 0.15s; border-radius:5px; }
 .color-pick-btn:hover { border-color:var(--blue); }
 .color-pick-btn::after { content:"▾"; position:absolute; right:-14px; top:50%; transform:translateY(-50%); font-size:9px; color:var(--blue); pointer-events:none; }
-.color-pick-dropdown { position:fixed; z-index:99999; background:#fff; border:1px solid var(--border); padding:8px; display:none; flex-direction:column; gap:5px; width:182px; box-shadow:0 8px 24px rgba(0,119,182,0.15); border-radius:10px; }
+.color-pick-dropdown { position:fixed; z-index:99999; background:#fff; border:1px solid var(--border); padding:8px; display:none; flex-direction:column; gap:5px; width:182px; box-shadow:0 8px 24px rgba(8,95,86,0.15); border-radius:10px; }
 .color-pick-dropdown.open { display:flex; }
 .color-pick-palette { display:grid; grid-template-columns:repeat(8,18px); gap:3px; }
 .color-swatch { width:18px; height:18px; border:1px solid var(--border); cursor:pointer; flex-shrink:0; transition:transform 0.1s,border-color 0.1s; border-radius:3px; }
 .color-swatch:hover { transform:scale(1.2); border-color:var(--blue); }
 .color-swatch.active { border:2px solid var(--blue); }
 .color-pick-custom { display:flex; align-items:center; gap:5px; border-top:1px solid var(--border); padding-top:6px; margin-top:1px; }
-.color-pick-custom label { font-size:0.73rem; color:var(--text2); font-weight:600; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
+.color-pick-custom label { font-size:0.72rem; color:var(--text2); font-weight:600; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
 .color-pick-custom input[type="color"] { width:28px; height:20px; border:1px solid var(--border); background:transparent; cursor:pointer; padding:0; border-radius:4px; }
 
 /* ── HELP MODAL ── */
-.help-overlay { position:fixed; inset:0; background:rgba(0,60,100,0.55); z-index:999999; display:none; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(3px); }
+.help-overlay { position:fixed; inset:0; background:rgba(0,40,35,0.55); z-index:999999; display:none; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(3px); }
 .help-overlay.open { display:flex; }
-.help-modal { background:#fff; border:1px solid var(--border); width:100%; max-width:820px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,119,182,0.2); border-radius:16px; overflow:hidden; }
-.help-modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid var(--border); flex-shrink:0; background: linear-gradient(135deg, #0d9488 0%, #0a6b61 100%); }
+.help-modal { background:#fff; border:1px solid var(--border); width:100%; max-width:820px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(8,95,86,0.2); border-radius:16px; overflow:hidden; }
+.help-modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid var(--border); flex-shrink:0; background:linear-gradient(135deg, #0a7a6e 0%, #085f56 100%); }
 .help-modal-title { font-size:0.95rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#fff; }
 .help-modal-close { background:rgba(255,255,255,0.2); border:none; color:#fff; font-size:1.1rem; cursor:pointer; padding:2px 8px; transition:background 0.15s; line-height:1; border-radius:6px; }
 .help-modal-close:hover { background:rgba(255,255,255,0.35); }
@@ -288,29 +259,29 @@ label input[type="checkbox"] { accent-color:var(--blue); width:13px; height:13px
 .help-tab-chevron:hover { color:var(--blue); }
 .help-tab-chevron:disabled { color:var(--border); cursor:default; }
 .help-tabs-scroll { display:flex; flex:1; overflow:hidden; }
-.help-tab { padding:10px 18px; font-size:0.74rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text3); cursor:pointer; border:none; background:transparent; border-bottom:2px solid transparent; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
+.help-tab { padding:10px 18px; font-size:0.78rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text3); cursor:pointer; border:none; background:transparent; border-bottom:2px solid transparent; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
 .help-tab:hover { color:var(--text2); }
 .help-tab.on { color:var(--blue); border-bottom-color:var(--blue); }
-.help-tab-counter { font-size:0.78rem; color:var(--text3); padding:0 10px; display:flex; align-items:center; flex-shrink:0; border-left:1px solid var(--border); margin-left:auto; }
+.help-tab-counter { font-size:0.75rem; color:var(--text3); padding:0 10px; display:flex; align-items:center; flex-shrink:0; border-left:1px solid var(--border); margin-left:auto; }
 .help-body { overflow-y:auto; padding:28px 28px 36px; flex:1; }
 .help-section { display:none; }
 .help-section.on { display:block; }
 .help-h1 { font-size:1.1rem; color:var(--blue); font-weight:700; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 16px; }
-.help-h2 { font-size:0.85rem; color:var(--blue); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin:24px 0 10px; border-left:3px solid var(--blue); padding-left:10px; }
-.help-p { font-size:0.85rem; color:var(--text2); line-height:1.75; margin:0 0 12px; }
+.help-h2 { font-size:0.88rem; color:var(--blue); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin:24px 0 10px; border-left:3px solid var(--blue); padding-left:10px; }
+.help-p { font-size:0.88rem; color:var(--text2); line-height:1.75; margin:0 0 12px; }
 .help-p strong { color:var(--text); }
 .help-ul { margin:0 0 14px 0; padding-left:18px; }
-.help-ul li { font-size:0.85rem; color:var(--text2); line-height:1.9; }
+.help-ul li { font-size:0.88rem; color:var(--text2); line-height:1.9; }
 .help-ul li strong { color:var(--text); }
 .help-kv { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0 0 14px; }
-.help-key { font-size:0.75rem; color:var(--blue); font-weight:700; white-space:nowrap; padding:3px 10px; background:var(--blue-pale); border:1px solid #b0d4e8; align-self:start; border-radius:5px; }
-.help-val { font-size:0.8rem; color:var(--text2); line-height:1.7; }
+.help-key { font-size:0.78rem; color:var(--blue); font-weight:700; white-space:nowrap; padding:3px 10px; background:var(--blue-pale); border:1px solid #8ac8c0; align-self:start; border-radius:5px; }
+.help-val { font-size:0.82rem; color:var(--text2); line-height:1.7; }
 .help-tip { background:#edfbf3; border:1px solid #a8e6c0; padding:12px 16px; margin:14px 0; border-radius:8px; }
-.help-tip-label { font-size:0.80rem; color:var(--green); font-weight:700; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
-.help-tip p { font-size:0.8rem; color:#2a7a50; margin:0; line-height:1.7; }
+.help-tip-label { font-size:0.72rem; color:var(--green); font-weight:700; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
+.help-tip p { font-size:0.82rem; color:#2a7a50; margin:0; line-height:1.7; }
 .help-warn { background:#fff8ed; border:1px solid #f5d08a; padding:12px 16px; margin:14px 0; border-radius:8px; }
-.help-warn-label { font-size:0.80rem; color:#c07800; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
-.help-warn p { font-size:0.8rem; color:#7a5000; margin:0; line-height:1.7; }
+.help-warn-label { font-size:0.72rem; color:#c07800; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
+.help-warn p { font-size:0.82rem; color:#7a5000; margin:0; line-height:1.7; }
 </style>
 </head>
 <body>
@@ -484,6 +455,11 @@ label input[type="checkbox"] { accent-color:var(--blue); width:13px; height:13px
           <span class="manual-lbl">GPS</span>
           <input class="manual-inp" id="manualGPS" type="text" placeholder="e.g. 26.184133,-80.263028 or 26.184133 -80.263028" autocomplete="new-password">
         </div>
+        <div id="nearestAddrWrap" style="display:none;margin:-2px 0 4px 0;padding:4px 6px;background:#0a0a0a;border:1px solid #1e1e1e;border-top:none;">
+          <div style="font-size:0.55rem;color:#555;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px;font-family:'Courier New',monospace;">Nearest address</div>
+          <div id="nearestAddrText" style="font-size:0.65rem;color:#888;font-family:'Courier New',monospace;line-height:1.4;"></div>
+          <button id="btnUseNearest" style="margin-top:4px;width:100%;padding:3px 5px;background:transparent;color:#f0b429;border:1px solid #f0b429;font-family:'Courier New',monospace;font-size:0.55rem;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;transition:all 0.15s;">↑ Use this address</button>
+        </div>
         <div class="manual-row">
           <span class="manual-lbl">Address</span>
           <input class="manual-inp" id="manualAddr" type="text" placeholder="Type or auto-fill from GPS" autocomplete="new-password">
@@ -643,14 +619,14 @@ label input[type="checkbox"] { accent-color:var(--blue); width:13px; height:13px
       <div class="help-section" id="tab-geocoding">
         <div class="help-h1">Geocoding</div>
         <div class="help-p">GPS coordinates are automatically converted to street addresses when photos load.</div>
-        <div class="help-h2">Default: Nominatim (OpenStreetMap)</div>
-        <div class="help-p">Completely free, no API key, no sign-up. Uses a zoom-fallback strategy for better accuracy.</div>
-        <div class="help-h2">Alternative Providers</div>
+        <div class="help-h2">Default: Census Bureau + Nominatim</div>
+        <div class="help-p">No API key required. For US addresses, the <strong>US Census Bureau geocoder</strong> is queried first — it uses TIGER/USPS data and accurately resolves house numbers. For non-US addresses (or when Census finds no match), it falls back to <strong>Nominatim</strong> (OpenStreetMap).</div>
+        <div class="help-h2">Optional Paid Providers</div>
         <div class="help-kv">
-          <span class="help-key">LocationIQ</span><span class="help-val">5,000/day free — set LOCATIONIQ_KEY in the file</span>
-          <span class="help-key">OpenCage</span><span class="help-val">2,500/day free — set OPENCAGE_KEY in the file</span>
+          <span class="help-key">LocationIQ</span><span class="help-val">5,000/day free — set GEOCODER='locationiq' and LOCATIONIQ_KEY in the file</span>
+          <span class="help-key">OpenCage</span><span class="help-val">2,500/day free — set GEOCODER='opencage' and OPENCAGE_KEY in the file</span>
         </div>
-        <div class="help-warn"><div class="help-warn-label">⚠ Note</div><p>Geocoding requires an internet connection. Photos without GPS show "No GPS data".</p></div>
+        <div class="help-warn"><div class="help-warn-label">⚠ Note</div><p>Geocoding requires an internet connection. Photos without GPS show "No GPS data". The Census geocoder only covers US addresses.</p></div>
       </div>
 
     </div>
@@ -659,7 +635,8 @@ label input[type="checkbox"] { accent-color:var(--blue); width:13px; height:13px
 
 <script>
 // ─── GEOCODING CONFIG ─────────────────────────────────────────────────────────
-var GEOCODER          = 'nominatim'; // 'nominatim' | 'opencage' | 'locationiq'
+var GEOCODER          = 'nominatim'; // 'nominatim' | 'geocodio' | 'opencage' | 'locationiq'
+var GEOCODIO_KEY      = '';          // geocod.io — 2,500/day free, best for US addresses
 var OPENCAGE_KEY      = '';
 var LOCATIONIQ_KEY    = '';
 var ANTHROPIC_API_KEY = ''; // Add your key for "Scan photo for metadata" feature
@@ -807,7 +784,11 @@ function ingest(fileList, groupName){
           geocode(lat, lon, function(addr){
             entry.address = addr;
             geoDecrement();
-            if(activeIdx === idx) redraw();
+            if(activeIdx === idx){
+              // Update address display if not manually overridden
+              if(!entry.manualAddr) showAddr(addr);
+              redraw();
+            }
           });
         } else {
           entry.address = '';
@@ -1372,11 +1353,88 @@ function runQueue(){
   var job=geoQueue.shift();
   fetchAddress(job.lat, job.lon, function(addr){
     geoCache[job.key]=addr; job.cb(addr);
-    var delay = (GEOCODER==='nominatim') ? 2200 : 200;
+    var delay = 1200; // respect Nominatim 1 req/sec policy
     setTimeout(function(){ geoBusy=false; runQueue(); }, delay);
   });
 }
 function fetchAddress(lat, lon, cb){
+  // If a paid provider is configured, use it directly
+  if((GEOCODER==='opencage' && OPENCAGE_KEY) || (GEOCODER==='locationiq' && LOCATIONIQ_KEY)){
+    fetchAddressProviders(lat, lon, cb);
+    return;
+  }
+  // Default: US Census Bureau first (free, no key, TIGER data) → Nominatim fallback
+  fetchAddressCensus(lat, lon, function(addr){
+    if(addr){ cb(addr); }
+    else { fetchAddressNominatim(lat, lon, cb); }
+  });
+}
+
+function fetchAddressCensus(lat, lon, cb){
+  var headers = {'Accept':'application/json'};
+  var d   = 0.0011; // ~120m bounding box
+  var vb  = (lon-d).toFixed(7)+','+(lat+d).toFixed(7)+','+(lon+d).toFixed(7)+','+(lat-d).toFixed(7);
+
+  // Delay start to avoid colliding with the main geocoding queue
+  // The queue delay is 2500ms so we start after it has likely moved on
+  setTimeout(function(){
+
+    // Step 1: reverse geocode to get road + city names
+    fetch('https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&accept-language=en&zoom=18'
+        + '&lat=' + lat.toFixed(7) + '&lon=' + lon.toFixed(7), {headers:headers})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(rev){
+        var a    = rev && rev.address;
+        var road = a && (a.road || a.pedestrian || a.footway || a.path || '');
+        var city = a && (a.city || a.town || a.village || a.suburb || a.neighbourhood || a.county || '');
+        if(!road || !road.trim()){ cb(''); return; }
+
+        // Step 2: structured search with proximity bias
+        var searchUrl = 'https://nominatim.openstreetmap.org/search'
+          + '?format=json&addressdetails=1&accept-language=en&limit=10&bounded=1'
+          + '&viewbox=' + vb
+          + '&lat=' + lat.toFixed(7)
+          + '&lon=' + lon.toFixed(7)
+          + '&street=' + encodeURIComponent(road)
+          + (city ? '&city=' + encodeURIComponent(city) : '');
+
+        setTimeout(function(){
+          fetch(searchUrl, {headers:headers})
+            .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+            .then(function(results){
+              function haversine(lat1, lon1, lat2, lon2){
+                var R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+                var a=Math.sin(dLat/2)*Math.sin(dLat/2)
+                    +Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)
+                    *Math.sin(dLon/2)*Math.sin(dLon/2);
+                return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+              }
+              var best=null, bestDist=Infinity;
+              (results||[]).forEach(function(r){
+                if(!r.address||!r.address.house_number) return;
+                var rlat=parseFloat(r.lat), rlon=parseFloat(r.lon);
+                if(isNaN(rlat)||isNaN(rlon)) return;
+                var dist=haversine(lat,lon,rlat,rlon);
+                if(dist<bestDist){ bestDist=dist; best=r; }
+              });
+              if(!best){ cb(''); return; }
+              var ba=best.address;
+              var street=ba.house_number+' '+(ba.road||ba.pedestrian||road);
+              var cityS=ba.city||ba.town||ba.village||ba.suburb||ba.neighbourhood||ba.county||city;
+              var region=(ba.state&&ba.postcode)?ba.state+' '+ba.postcode:(ba.state||ba.postcode||'');
+              var ctry=(ba.country_code&&ba.country_code.toUpperCase()!=='US')?ba.country:'';
+              cb([street,cityS,region,ctry].filter(Boolean).join(', '));
+            })
+            .catch(function(){ cb(''); });
+        }, 1200);
+      })
+      .catch(function(){ cb(''); });
+
+  }, 3000); // start after main queue has had time to process
+}
+
+function fetchAddressProviders(lat, lon, cb){
+  // Named providers (opencage, locationiq) — only used if configured
   var headers = {'Accept':'application/json'};
 
   if(GEOCODER==='opencage' && OPENCAGE_KEY){
@@ -1408,44 +1466,95 @@ function fetchAddress(lat, lon, cb){
 }
 
 function fetchAddressNominatim(lat, lon, cb){
-  // Strategy: try zoom=18 (house level) first.
-  // If result has no house_number, retry zoom=17 (street level) — sometimes more accurate.
-  // Use extratags=1 to get additional OSM tags for better matching.
-  var base = 'https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&namedetails=1&accept-language=en'
-    + '&lat=' + lat.toFixed(8) + '&lon=' + lon.toFixed(8);
+  var base    = 'https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&namedetails=1&accept-language=en'
+              + '&lat=' + lat.toFixed(8) + '&lon=' + lon.toFixed(8);
   var headers = {'Accept':'application/json'};
 
   function hasHouseNumber(data){
     return data && data.address && data.address.house_number;
   }
 
-  // First attempt: zoom=18 (most specific — tries to snap to a building/house)
-  fetch(base + '&zoom=18', {headers:headers})
+  // Step 1: Try featuretype=house first — snaps to nearest mapped address node
+  fetch(base + '&zoom=18&featuretype=house', {headers:headers})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(data18){
-      if(hasHouseNumber(data18)){
-        // Got a house number — best result, use it
-        cb(parseAddress(data18));
-      } else {
-        // No house number at zoom 18 — try zoom 17 (road segment level)
-        // Add a small delay to respect Nominatim's rate limit
-        setTimeout(function(){
-          fetch(base + '&zoom=17', {headers:headers})
-            .then(function(r){ return r.json(); })
-            .then(function(data17){
-              // Pick whichever has a house number; prefer 17 if it does
-              if(hasHouseNumber(data17)){
-                cb(parseAddress(data17));
-              } else {
-                // Neither has house number — use zoom 18 result (more specific OSM object)
-                cb(parseAddress(data18));
-              }
-            })
-            .catch(function(){
-              cb(parseAddress(data18));
-            });
-        }, 1100);
+    .then(function(dataHouse){
+
+      if(hasHouseNumber(dataHouse)){
+        // Got a house node directly — most accurate result
+        cb(parseAddress(dataHouse));
+        return;
       }
+
+      // Step 2: featuretype=house found nothing — fall back to plain zoom=18
+      fetch(base + '&zoom=18', {headers:headers})
+        .then(function(r){ return r.json(); })
+        .then(function(data18){
+
+          // Step 3: forward-search nearest mapped address on the same road
+          var road = data18 && data18.address && (data18.address.road || data18.address.pedestrian);
+          var city = data18 && data18.address &&
+                     (data18.address.city || data18.address.town || data18.address.village ||
+                      data18.address.suburb || data18.address.county);
+
+          if(road && city){
+            var delta   = 0.0014; // ~150m bounding box
+            var viewbox = [lon-delta, lat+delta, lon+delta, lat-delta].join(',');
+            var searchUrl = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&accept-language=en'
+              + '&q=' + encodeURIComponent(road + ', ' + city)
+              + '&viewbox=' + viewbox + '&bounded=1';
+
+            setTimeout(function(){
+              fetch(searchUrl, {headers:headers})
+                .then(function(r){ return r.json(); })
+                .then(function(results){
+                  // Find closest result that has a house number
+                  var best = null, bestDist = Infinity;
+                  (results||[]).forEach(function(r){
+                    if(!r.address || !r.address.house_number) return;
+                    var rlat = parseFloat(r.lat), rlon = parseFloat(r.lon);
+                    var d = Math.sqrt(Math.pow(rlat-lat,2) + Math.pow(rlon-lon,2));
+                    if(d < bestDist){ bestDist = d; best = r; }
+                  });
+
+                  if(best && best.address.house_number){
+                    var a      = best.address;
+                    var street = a.house_number + ' ' + (a.road || road);
+                    var cityStr= a.city||a.town||a.village||a.suburb||a.neighbourhood||a.county||city;
+                    var region = (a.state&&a.postcode)?a.state+' '+a.postcode:(a.state||a.postcode||'');
+                    var country= (a.country_code&&a.country_code.toUpperCase()!=='US')?a.country:'';
+                    var parts  = [street,cityStr,region,country].filter(function(p){ return p&&p.trim(); });
+                    cb(parts.join(', '));
+                  } else if(hasHouseNumber(data18)){
+                    cb(parseAddress(data18));
+                  } else {
+                    // Last resort: zoom=17 reverse
+                    setTimeout(function(){
+                      fetch(base+'&zoom=17', {headers:headers})
+                        .then(function(r){ return r.json(); })
+                        .then(function(data17){
+                          cb(parseAddress(hasHouseNumber(data17) ? data17 : data18));
+                        })
+                        .catch(function(){ cb(parseAddress(data18)); });
+                    }, 1100);
+                  }
+                })
+                .catch(function(){ cb(parseAddress(data18)); });
+            }, 1100);
+
+          } else if(hasHouseNumber(data18)){
+            cb(parseAddress(data18));
+          } else {
+            setTimeout(function(){
+              fetch(base+'&zoom=17', {headers:headers})
+                .then(function(r){ return r.json(); })
+                .then(function(data17){
+                  cb(parseAddress(hasHouseNumber(data17) ? data17 : data18));
+                })
+                .catch(function(){ cb(parseAddress(data18)); });
+            }, 1100);
+          }
+        })
+        .catch(function(){ cb(''); });
     })
     .catch(function(){ cb(''); });
 }
@@ -2178,7 +2287,71 @@ function updateManualPanel(entry,idx){
   var showScope=grp&&grp.indices.length>1;
   id('manualScope').style.display=showScope?'flex':'none';
   id('btnApplyGroup').style.display=showScope&&manualScope==='group'?'block':'none';
+
+  // Show nearest address suggestion for current GPS
+  var lat = entry.manualLat ? parseFloat(entry.manualLat) : dms(entry.exif&&entry.exif.GPSLatitude, entry.exif&&entry.exif.GPSLatitudeRef);
+  var lon = entry.manualLon ? parseFloat(entry.manualLon) : dms(entry.exif&&entry.exif.GPSLongitude, entry.exif&&entry.exif.GPSLongitudeRef);
+  if(lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon)){
+    showNearestAddressSuggestion(lat, lon, entry);
+  } else {
+    hideNearestSuggestion();
+  }
 }
+
+// ─── NEAREST ADDRESS SUGGESTION ───────────────────────────────────────────────
+var _nearestCache = {};
+var _nearestCurrent = null; // addr string for the "use this" button
+
+function hideNearestSuggestion(){
+  var wrap = id('nearestAddrWrap');
+  if(wrap) wrap.style.display = 'none';
+  _nearestCurrent = null;
+}
+
+function showNearestAddressSuggestion(lat, lon, entry){
+  var wrap = id('nearestAddrWrap');
+  var text = id('nearestAddrText');
+  if(!wrap || !text) return;
+
+  var cacheKey = lat.toFixed(5)+','+lon.toFixed(5);
+
+  function display(addr){
+    if(!addr){ hideNearestSuggestion(); return; }
+    _nearestCurrent = addr;
+    text.textContent = addr;
+    wrap.style.display = 'block';
+  }
+
+  if(_nearestCache[cacheKey] !== undefined){
+    display(_nearestCache[cacheKey]);
+    return;
+  }
+
+  // Show loading state
+  text.textContent = 'Searching…';
+  wrap.style.display = 'block';
+  _nearestCurrent = null;
+
+  fetchAddressCensus(lat, lon, function(addr){
+    _nearestCache[cacheKey] = addr || '';
+    display(addr);
+  });
+}
+
+// Wire up "Use this address" button
+(function(){
+  var btn = id('btnUseNearest');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    if(!_nearestCurrent || activeIdx < 0 || !files[activeIdx]) return;
+    var entry = files[activeIdx];
+    entry.manualAddr = _nearestCurrent;
+    var addrEl = id('manualAddr');
+    if(addrEl) addrEl.value = _nearestCurrent;
+    showAddr(_nearestCurrent);
+    redraw();
+  });
+})();
 
 function replaceWithClone(el){ var c=el.cloneNode(true); el.parentNode.replaceChild(c,el); return c; }
 (function(){
@@ -2250,10 +2423,12 @@ function onManualGPSChange(entry){
     // GPS cleared — restore from EXIF GPS
     entry.manualLat = null;
     entry.manualLon = null;
+    hideNearestSuggestion();
     var exifLat = dms(entry.exif.GPSLatitude, entry.exif.GPSLatitudeRef);
     var exifLon = dms(entry.exif.GPSLongitude, entry.exif.GPSLongitudeRef);
     if(exifLat !== null && exifLon !== null){
       resolveAddressFromCoords(exifLat, exifLon, entry, files.indexOf(entry));
+      showNearestAddressSuggestion(exifLat, exifLon, entry);
     } else {
       entry.address = '';
       entry.manualAddr = null;
@@ -2266,6 +2441,9 @@ function onManualGPSChange(entry){
 
   entry.manualLat = String(parsed.lat);
   entry.manualLon = String(parsed.lon);
+
+  // Update nearest address suggestion for new GPS
+  showNearestAddressSuggestion(parsed.lat, parsed.lon, entry);
 
   // Auto-resolve address from new GPS
   resolveAddressFromCoords(parsed.lat, parsed.lon, entry, files.indexOf(entry));
@@ -2301,6 +2479,51 @@ id('manualDate').addEventListener('input', function(){ if(activeIdx>=0&&files[ac
 id('manualTime').addEventListener('input', function(){ if(activeIdx>=0&&files[activeIdx]) onManualDateTimeChange(files[activeIdx]); });
 id('manualGPS').addEventListener('input',  function(){ if(activeIdx>=0&&files[activeIdx]) onManualGPSChange(files[activeIdx]); });
 id('manualAddr').addEventListener('input', function(){ if(activeIdx>=0&&files[activeIdx]) onManualAddrChange(files[activeIdx]); });
+
+// ─── APPLY TO ALL IN GROUP ────────────────────────────────────────────────────
+id('btnApplyGroup').addEventListener('click', function(){
+  if(activeIdx < 0) return;
+  var src = files[activeIdx];
+  if(!src) return;
+
+  // Find group containing the active photo
+  var grp = null;
+  for(var g=0; g<groups.length; g++){
+    if(groups[g].indices.indexOf(activeIdx) !== -1){ grp=groups[g]; break; }
+  }
+  if(!grp || grp.indices.length <= 1){
+    st('No group found.', 'w');
+    setTimeout(function(){ st('',''); }, 2000);
+    return;
+  }
+
+  var count = 0;
+  grp.indices.forEach(function(fi){
+    if(fi === activeIdx || !files[fi]) return; // skip current photo
+    var tgt = files[fi];
+    if(src.manualDate)  tgt.manualDate  = src.manualDate;
+    if(src.manualTime)  tgt.manualTime  = src.manualTime;
+    if(src.manualLat)   tgt.manualLat   = src.manualLat;
+    if(src.manualLon)   tgt.manualLon   = src.manualLon;
+    if(src.manualAddr)  tgt.manualAddr  = src.manualAddr;
+    // Re-geocode each target if GPS was applied and they don't have an address yet
+    if(src.manualLat && src.manualLon){
+      var lat = parseFloat(src.manualLat), lon = parseFloat(src.manualLon);
+      if(!isNaN(lat) && !isNaN(lon)){
+        tgt.address = null;
+        geoIncrement();
+        geocode(lat, lon, function(addr){
+          tgt.address = addr;
+          geoDecrement();
+        });
+      }
+    }
+    count++;
+  });
+
+  st('Applied to ' + count + ' photo'+(count===1?'':'s')+' in "'+grp.name+'".', '');
+  setTimeout(function(){ st('',''); }, 2500);
+});
 
 // ─── SCAN PHOTO FOR METADATA (OCR via Tesseract.js — no API key needed) ────────
 id('btnScanPhoto').addEventListener('click', function(){
