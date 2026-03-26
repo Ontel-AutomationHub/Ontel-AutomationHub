@@ -57,61 +57,6 @@
             font-size: 0.95em;
             margin-top: 15px;
             font-weight: 600;
-            cursor: default;
-            transition: opacity 0.3s;
-        }
-
-        .version-badge.loading {
-            opacity: 0.6;
-        }
-
-        /* Tooltip for commit info */
-        .version-wrapper {
-            position: relative;
-            display: inline-block;
-        }
-
-        .version-tooltip {
-            display: none;
-            position: absolute;
-            bottom: 120%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #222;
-            color: #fff;
-            padding: 10px 16px;
-            border-radius: 12px;
-            font-size: 0.82em;
-            white-space: nowrap;
-            z-index: 10;
-            pointer-events: none;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-        }
-
-        .version-tooltip::after {
-            content: '';
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 6px solid transparent;
-            border-top-color: #222;
-        }
-
-        .version-wrapper:hover .version-tooltip {
-            display: block;
-        }
-
-        .visitors-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: white;
-            padding: 10px 25px;
-            border-radius: 25px;
-            font-size: 0.95em;
-            margin-top: 10px;
-            margin-left: 10px;
-            font-weight: 600;
         }
 
         .categories-grid {
@@ -130,20 +75,19 @@
             cursor: pointer;
             overflow: hidden;
             position: relative;
+            animation: pulse 3s infinite;
         }
 
         .category-card:hover {
             transform: translateY(-15px) scale(1.02);
             box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+            animation: none;
         }
 
         .category-card::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
             opacity: 0;
             transition: opacity 0.3s;
@@ -228,14 +172,6 @@
             50%  { box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4); }
             100% { box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
         }
-
-        .category-card {
-            animation: pulse 3s infinite;
-        }
-
-        .category-card:hover {
-            animation: none;
-        }
     </style>
 </head>
 <body>
@@ -243,17 +179,7 @@
         <div class="header">
             <h1>🚀 Automation Hub</h1>
             <p>A compilation of tools and automations to make work easier, accurate, and efficient.</p>
-
-            <!-- Version badge with hover tooltip showing commit details -->
-            <div class="version-wrapper">
-                <div class="version-badge loading" id="versionBadge">
-                    ⏳ Loading version...
-                </div>
-                <div class="version-tooltip" id="versionTooltip">
-                    Fetching commit info...
-                </div>
-            </div>
-            <div class="visitors-badge" id="visitorsBadge">👥 Loading visits...</div>
+            <div class="version-badge">Version 1.0 – Updated: March 26, 2026</div>
         </div>
 
         <div class="categories-grid">
@@ -327,76 +253,10 @@
     </div>
 
     <script>
-        // Display last sync time
         document.getElementById('lastSync').textContent = new Date().toLocaleString();
-
         setInterval(function() {
             document.getElementById('lastSync').textContent = new Date().toLocaleString();
         }, 300000);
-
-        // ─────────────────────────────────────────────
-        // AUTO VERSION from version.json (written by
-        // GitHub Actions on every push to main)
-        // ─────────────────────────────────────────────
-        async function loadVersion() {
-            const badge   = document.getElementById('versionBadge');
-            const tooltip = document.getElementById('versionTooltip');
-
-            try {
-                // Cache-bust so we always get the freshest file
-                const res = await fetch('version.json?t=' + Date.now());
-                if (!res.ok) throw new Error('version.json not found');
-                const data = await res.json();
-
-                // Format: "Version X.Y – Updated: Month DD, YYYY"
-                const date = new Date(data.date);
-                const formatted = date.toLocaleDateString('en-US', {
-                    year: 'numeric', month: 'long', day: 'numeric'
-                });
-
-                badge.textContent = `Version ${data.version} – Updated: ${formatted}`;
-                badge.classList.remove('loading');
-
-                // Tooltip shows commit SHA + message
-                const shortSha = (data.commit || '').slice(0, 7);
-                tooltip.textContent = shortSha
-                    ? `📦 Commit ${shortSha}: ${data.message || 'no message'}`
-                    : 'No commit info available';
-
-            } catch (err) {
-                // Graceful fallback — never break the page
-                badge.textContent = 'Version 1.0 – Updated: February 10, 2026';
-                badge.classList.remove('loading');
-                tooltip.textContent = '⚠️ Could not load version.json';
-                console.warn('Version fetch failed:', err);
-            }
-        }
-
-        loadVersion();
-    </script>
-    <!-- GoatCounter tracking -->
-    <script data-goatcounter="https://jeraldallawan.goatcounter.com/count"
-            async src="//gc.zgo.at/count.js"></script>
-
-    <script>
-        // Fetch total visit count from GoatCounter API
-        async function loadVisitorCount() {
-            const badge = document.getElementById('visitorsBadge');
-            try {
-                const res = await fetch('https://jeraldallawan.goatcounter.com/api/v0/stats/total', {
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                if (!res.ok) throw new Error('API error');
-                const data = await res.json();
-                const total = data.total || 0;
-                badge.textContent = `👥 ${total.toLocaleString()} Total Visits`;
-            } catch (err) {
-                // GoatCounter public API may require auth — fallback to pageviews count.js method
-                badge.textContent = '👥 Visit counter active';
-                console.warn('Visitor count fetch failed:', err);
-            }
-        }
-        loadVisitorCount();
     </script>
 </body>
 </html>
