@@ -102,6 +102,18 @@
             display: block;
         }
 
+        .visitors-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 10px 25px;
+            border-radius: 25px;
+            font-size: 0.95em;
+            margin-top: 10px;
+            margin-left: 10px;
+            font-weight: 600;
+        }
+
         .categories-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
@@ -241,6 +253,7 @@
                     Fetching commit info...
                 </div>
             </div>
+            <div class="visitors-badge" id="visitorsBadge">👥 Loading visits...</div>
         </div>
 
         <div class="categories-grid">
@@ -360,6 +373,30 @@
         }
 
         loadVersion();
+    </script>
+    <!-- GoatCounter tracking -->
+    <script data-goatcounter="https://jeraldallawan.goatcounter.com/count"
+            async src="//gc.zgo.at/count.js"></script>
+
+    <script>
+        // Fetch total visit count from GoatCounter API
+        async function loadVisitorCount() {
+            const badge = document.getElementById('visitorsBadge');
+            try {
+                const res = await fetch('https://jeraldallawan.goatcounter.com/api/v0/stats/total', {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!res.ok) throw new Error('API error');
+                const data = await res.json();
+                const total = data.total || 0;
+                badge.textContent = `👥 ${total.toLocaleString()} Total Visits`;
+            } catch (err) {
+                // GoatCounter public API may require auth — fallback to pageviews count.js method
+                badge.textContent = '👥 Visit counter active';
+                console.warn('Visitor count fetch failed:', err);
+            }
+        }
+        loadVisitorCount();
     </script>
 </body>
 </html>
