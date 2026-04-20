@@ -1,11 +1,11 @@
 {
-  "generated": "2026-04-20T20:48:33.788Z",
+  "generated": "2026-04-20T20:58:11.202Z",
   "folderName": "Crew Certificates",
   "stats": {
     "markets": 13,
     "companies": 76,
     "crews": 168,
-    "files": 309,
+    "files": 310,
     "expired": 53,
     "expiringSoon": 2
   },
@@ -3801,6 +3801,22 @@
       "size": 105864,
       "createdDate": "2026-02-11",
       "modifiedDate": "2026-02-11"
+    },
+    {
+      "market": "BAWA",
+      "company": "Nova Tower Experts",
+      "crewName": "Oscar Contreras",
+      "fileName": "CPR_01302028.jpg",
+      "certificateType": "CPR Certification",
+      "expirationDate": "01/30/2028",
+      "daysUntilExpiration": 651,
+      "expired": false,
+      "fileUrl": "https://drive.google.com/file/d/18gEzxhcxWZA4Qa6AlnMEJMwDRmEc9E5g/view",
+      "fileId": "18gEzxhcxWZA4Qa6AlnMEJMwDRmEc9E5g",
+      "mimeType": "image/jpeg",
+      "size": 78403,
+      "createdDate": "2026-04-20",
+      "modifiedDate": "2026-04-20"
     },
     {
       "market": "BAWA",
