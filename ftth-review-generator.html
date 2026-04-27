@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Review Generator - FTTH QA</title>
+    <title>Review and Documents Generator - FTTH QA</title>
     <style>
         * {
             margin: 0;
@@ -199,8 +199,8 @@
             <div class="header-left">
                 <img src="images/FTTH.png" alt="FTTH" class="logo-small">
                 <div>
-                    <h1>Review Generator</h1>
-                    <p>Automated review and data extraction tools for FTTH QA <span class="tool-count">1 Tool</span></p>
+                    <h1>Review and Documents Generator</h1>
+                    <p>Helps generate review notes and documents for FTTH QA <span class="tool-count">2 Tools</span></p>
                 </div>
             </div>
             <a href="ftth.html" class="back-button">&#8592; Back to FTTH</a>
@@ -221,10 +221,25 @@
                 <span class="tool-status status-active">Active</span>
                 <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/latest/f572b083-9c60-455c-9dbf-29441d20725f', '_blank')">Launch Tool</button>
             </div>
+
+            <!-- Tool 2: RL-BL Generator -->
+            <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/latest/ac483315-c1b3-489f-b769-b8cb59e31735', '_blank')">
+                <div class="tool-icon">&#128221;</div>
+                <div class="tool-title">RL-BL Generator</div>
+                <div class="tool-description">
+                    Generate Redline-Borelog (RL-BL) documents for FTTH project closeout documentation.
+                </div>
+                <div class="tool-usage">
+                    <strong>&#128161; How to use:</strong>
+                    Upload project source files to generate standardized Redline-Borelog documents for closeout submission.
+                </div>
+                <span class="tool-status status-active">Active</span>
+                <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/latest/ac483315-c1b3-489f-b769-b8cb59e31735', '_blank')">Launch Tool</button>
+            </div>
         </div>
 
         <div class="footer">
-            <p>&#9989; Review Generator | FTTH QA Automation Suite</p>
+            <p>&#9989; Review and Documents Generator | FTTH QA Automation Suite</p>
         </div>
     </div>
 </body>
