@@ -329,6 +329,42 @@ table.pt{width:100%;border-collapse:collapse;font-size:11.5px;}
         </div>
         <span class="cfg-hint" id="hTMA">per sector</span>
       </div>
+            <!-- BBU row -->
+      <div class="cfg-row">
+        <span class="cfg-lbl">BBU</span>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input class="ninput" type="number" id="nBBU" value="1" min="0" max="9">
+          <div class="nbtns">
+            <button class="nbtn" onclick="chgN('nBBU',1,0,9)">&#9650;</button>
+            <button class="nbtn" onclick="chgN('nBBU',-1,0,9)">&#9660;</button>
+          </div>
+        </div>
+        <span class="cfg-hint" id="hBBU">per site</span>
+      </div>
+      <!-- Card Add row -->
+      <div class="cfg-row">
+        <span class="cfg-lbl">Card Add</span>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input class="ninput" type="number" id="nCard" value="1" min="0" max="9">
+          <div class="nbtns">
+            <button class="nbtn" onclick="chgN('nCard',1,0,9)">&#9650;</button>
+            <button class="nbtn" onclick="chgN('nCard',-1,0,9)">&#9660;</button>
+          </div>
+        </div>
+        <span class="cfg-hint" id="hCard">per site</span>
+      </div>
+      <!-- Power Booster row -->
+      <div class="cfg-row">
+        <span class="cfg-lbl">Pwr Booster</span>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input class="ninput" type="number" id="nPB" value="1" min="0" max="9">
+          <div class="nbtns">
+            <button class="nbtn" onclick="chgN('nPB',1,0,9)">&#9650;</button>
+            <button class="nbtn" onclick="chgN('nPB',-1,0,9)">&#9660;</button>
+          </div>
+        </div>
+        <span class="cfg-hint" id="hPB">per site</span>
+      </div>
       <!-- Hybrid row -->
       <div class="cfg-row">
         <span class="cfg-lbl">Hybrids</span>
@@ -2148,16 +2184,20 @@ function buildTabs(){
     allTabs.push({id:`Hybrid Mainline::${h}`,sheet:'Hybrid Mainline',hybridNum:h,sector:null,displayName:`Hybrid #${h} / Mainline`,fixed:false,hybrid:true});
   }
   const activeFix = ACTIVE_FIX_SHEETS || FIX_SHEETS;
-  for(const sh of activeFix) allTabs.push({id:sh,sheet:sh,sector:null,displayName:sh,fixed:true});
+  const multiGate = {'BBU Install':'nBBU','Card Add':'nCard','Power Booster':'nPB'};
+  for(const sh of activeFix){
+    if(multiGate[sh] && getCount(multiGate[sh],0,9) === 0) continue;
+    allTabs.push({id:sh,sheet:sh,sector:null,displayName:sh,fixed:true});
+  }
   return allTabs;
 }
 
 function onChg(){
   buildTabs();
-  const hints={nAnt:'hAnt',nRRH:'hRRH',nTMA:'hTMA',nHyb:'hHyb'};
+  const hints={nAnt:'hAnt',nRRH:'hRRH',nTMA:'hTMA',nHyb:'hHyb',nBBU:'hBBU',nCard:'hCard',nPB:'hPB'};
   for(const [inp,hint] of Object.entries(hints)){
     const v=getCount(inp,0,9), el=document.getElementById(hint);
-    const isHyb = inp==='nHyb';
+    const isHyb = inp==='nHyb'||inp==='nBBU'||inp==='nCard'||inp==='nPB';
     if(v===0){el.textContent='— excluded';el.style.color='#ef4444';}
     else{el.textContent=isHyb?'hybrid cables':'per sector';el.style.color='var(--text3)';}
   }
@@ -2263,7 +2303,32 @@ function getReqs(tab){
       return row;
     });
   }
-  if(tab.fixed) return SHEET_DATA.fixed[tab.sheet] || [];
+  if(tab.fixed){
+    const rows = SHEET_DATA.fixed[tab.sheet] || [];
+    // Multi-unit expansion for BBU Install, Card Add, Power Booster
+    const multiCfg = {
+      'BBU Install':  {inputId:'nBBU',  prefix:'BBU'},
+      'Card Add':     {inputId:'nCard', prefix:'CARD'},
+      'Power Booster':{inputId:'nPB',   prefix:'POWER BOOSTER'},
+    };
+    const cfg = multiCfg[tab.sheet];
+    if(cfg){
+      const n = getCount(cfg.inputId, 0, 9);
+      if(n === 0) return [];
+      if(n === 1) return rows; // no prefix when only 1
+      // n > 1: repeat rows for each unit with prefix
+      const out = [];
+      for(let u = 1; u <= n; u++){
+        for(const r of rows){
+          const row = [...r];
+          row[4] = cfg.prefix + '#' + u + ' - ' + row[4];
+          out.push(row);
+        }
+      }
+      return out;
+    }
+    return rows;
+  }
   const sec = tab.sector;
   // For Epsilon/Zeta (beyond Delta), derive from Alpha and substitute sector name
   const srcSec = SRC_SECTORS.includes(sec) ? sec : 'Alpha';
@@ -2459,7 +2524,7 @@ function fitTabList(){
 document.addEventListener('DOMContentLoaded', fitTabList);
 window.addEventListener('resize', fitTabList);
 
-['nSec','nAnt','nRRH','nTMA','nHyb'].forEach(id=>{
+['nSec','nAnt','nRRH','nTMA','nHyb','nBBU','nCard','nPB'].forEach(id=>{
   document.getElementById(id).addEventListener('change',onChg);
   document.getElementById(id).addEventListener('input',onChg);
 });
