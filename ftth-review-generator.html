@@ -200,7 +200,7 @@
                 <img src="images/FTTH.png" alt="FTTH" class="logo-small">
                 <div>
                     <h1>Review and Documents Generator</h1>
-                    <p>Helps generate review notes and documents for FTTH QA <span class="tool-count">2 Tools</span></p>
+                    <p>Helps generate review notes and documents for FTTH QA <span class="tool-count">3 Tools</span></p>
                 </div>
             </div>
             <a href="ftth.html" class="back-button">&#8592; Back to FTTH</a>
@@ -222,7 +222,22 @@
                 <button class="launch-button" onclick="event.stopPropagation(); window.open('https://claude.ai/artifacts/latest/9e3dfa6f-8afc-4765-a659-7f0496ce5aae')">Launch Tool</button>
             </div>
 
-            <!-- Tool 2: RL-BL Generator -->
+            <!-- Tool 2: Daisy Chain Diagram vs Fulcrum Table -->
+            <div class="tool-card" onclick="window.open('splitter-compare.html', '_blank')">
+                <div class="tool-icon">&#128300;</div>
+                <div class="tool-title">Daisy Chain Diagram vs Fulcrum Table</div>
+                <div class="tool-description">
+                    Compare splice counts between the Daisy Chain Diagram and the Fulcrum Value, and flag matches or mismatches.
+                </div>
+                <div class="tool-usage">
+                    <strong>&#128161; How to use:</strong>
+                    Enter the site name, DCD port ranges, and Fulcrum Value splice count to generate a comparison table you can save or copy as an image, plus a copyable match/mismatch note.
+                </div>
+                <span class="tool-status status-active">Active</span>
+                <button class="launch-button" onclick="event.stopPropagation(); window.open('splitter-compare.html', '_blank')">Launch Tool</button>
+            </div>
+
+            <!-- Tool 3: RL-BL Generator -->
             <div class="tool-card" onclick="window.open('https://claude.ai/artifacts/latest/ac483315-c1b3-489f-b769-b8cb59e31735', '_blank')">
                 <div class="tool-icon">&#128221;</div>
                 <div class="tool-title">RL-BL Generator</div>

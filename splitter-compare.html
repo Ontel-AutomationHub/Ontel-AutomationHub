@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DCD ↔ Fulcrum Value Splice Comparison</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0f172a;
+    color: #f1f5f9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px; }
+  header { margin-bottom: 32px; border-bottom: 1px solid #334155; padding-bottom: 20px; }
+  .eyebrow {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #94a3b8; margin: 0 0 4px;
+  }
+  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: #fff; margin: 0; }
+  .desc { font-size: 14px; color: #94a3b8; margin: 8px 0 0; max-width: 640px; line-height: 1.5; }
+  .desc code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+  label.field { display: block; margin-bottom: 16px; }
+  label.field:last-child { margin-bottom: 0; }
+  .field-label {
+    display: block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em; color: #cbd5e1; margin-bottom: 4px;
+  }
+  input[type="text"] {
+    width: 100%; margin-top: 4px; border-radius: 8px; border: 1px solid #475569;
+    background: #0f172a; color: #f1f5f9; padding: 8px 12px; font-size: 14px;
+  }
+  input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  input::placeholder { color: #64748b; }
+  input:focus { outline: none; box-shadow: 0 0 0 2px #94a3b8; border-color: #94a3b8; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 560px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+
+  .hint { display: block; min-height: 16px; margin-top: 4px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #94a3b8; }
+  .hint.bad { color: #f87171; }
+  .hint b { font-weight: 700; color: #f1f5f9; }
+
+  .row-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; gap: 12px; }
+  .error { font-size: 14px; color: #f87171; min-height: 20px; }
+
+  button {
+    cursor: pointer; font-size: 14px; font-weight: 500; border-radius: 8px;
+    transition: background 0.15s ease;
+  }
+  #extractBtn {
+    background: #f1f5f9; color: #0f172a; border: none; padding: 10px 22px;
+  }
+  #extractBtn:hover { background: #fff; }
+
+  .btn-outline {
+    background: #1e293b; color: #e2e8f0; border: 1px solid #475569; padding: 7px 14px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-outline:hover { background: #334155; }
+
+  .output-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .output-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; }
+  .actions { display: flex; align-items: center; gap: 8px; }
+  #toast { font-size: 12px; color: #94a3b8; max-width: 220px; margin: 0; }
+
+  .subtext { font-size: 12px; color: #94a3b8; margin: 0 0 8px; }
+  #preview { max-width: 100%; border-radius: 8px; border: 1px solid #334155; box-shadow: 0 4px 16px rgba(0,0,0,0.3); display: block; }
+
+  .note-box {
+    margin-top: 16px; border-radius: 8px; border: 1px solid #334155; background: #1e293b;
+    padding: 16px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  }
+  .note-text { font-size: 14px; color: #e2e8f0; margin: 0; line-height: 1.5; }
+
+  #outputWrap { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Fiber QA · Splitter Verification</p>
+    <h1>DCD &harr; Fulcrum Value Splice Comparison</h1>
+    <p class="desc">
+      For the Daisy Chain Diagram, enter port ranges (e.g. <code>40-41</code>) or whole numbers,
+      separating multiple values with commas — <code>40-41, 45-50</code>. Its splitters are summed
+      automatically. For Fulcrum Value, enter the splice count directly. The two totals are then compared.
+    </p>
+  </header>
+
+  <div class="card">
+    <label class="field">
+      <span class="field-label">Site name</span>
+      <input type="text" id="site" placeholder="e.g. D-HCS520" />
+    </label>
+
+    <div class="grid2">
+      <label class="field">
+        <span class="field-label">Daisy chain diagram</span>
+        <input type="text" id="dcd" class="mono" placeholder="e.g. 40-41, 52-65" />
+        <span id="dcdSum" class="hint"></span>
+      </label>
+      <label class="field">
+        <span class="field-label">Fulcrum value (splices)</span>
+        <input type="text" id="fulcrum" class="mono" placeholder="e.g. 8" />
+        <span id="fulcrumSum" class="hint"></span>
+      </label>
+    </div>
+
+    <div class="row-bottom">
+      <span class="error" id="error"></span>
+      <button id="extractBtn">Extract</button>
+    </div>
+  </div>
+
+  <div id="outputWrap">
+    <div class="output-head">
+      <span class="output-label">Output</span>
+      <div class="actions">
+        <span id="toast"></span>
+        <button class="btn-outline" id="saveBtn">Save as image</button>
+        <button class="btn-outline" id="copyBtn">Copy as image</button>
+      </div>
+    </div>
+    <p class="subtext">Right-click (or long-press on mobile) the table below to copy or save it as an image.</p>
+    <img id="preview" alt="Splitter comparison table" />
+
+    <div class="note-box">
+      <p class="note-text" id="noteText"></p>
+      <button class="btn-outline" id="copyNoteBtn" style="flex-shrink:0">Copy note</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- parsing / splitter logic ------------------------------------------------
+function parseSplitter(input) {
+  const s = String(input || "").trim();
+  if (!s) return { count: null, display: "", empty: true };
+  const range = s.match(/(\d+)\s*-\s*(\d+)/);
+  if (range) {
+    const start = parseInt(range[1], 10);
+    const end = parseInt(range[2], 10);
+    return { count: Math.abs(end - start) + 1, display: `${start}-${end}` };
+  }
+  const num = s.match(/^\s*(\d+)\s*$/);
+  if (num) return { count: parseInt(num[1], 10), display: num[1] };
+  return { count: null, display: s, invalid: true };
+}
+
+function summarize(str) {
+  const tokens = String(str || "").split(",").map((t) => t.trim()).filter(Boolean);
+  const items = [];
+  let total = 0;
+  let hasInvalid = false;
+  tokens.forEach((t) => {
+    const p = parseSplitter(t);
+    if (p.invalid || p.count == null) {
+      hasInvalid = true;
+      items.push({ display: t, count: null, invalid: true });
+    } else {
+      items.push(p);
+      total += p.count;
+    }
+  });
+  return { items, total, hasInvalid };
+}
+
+function parseFulcrum(input) {
+  const s = String(input || "").trim();
+  if (!s) return { count: null, empty: true };
+  const num = s.match(/^\s*(\d+)\s*$/);
+  if (num) return { count: parseInt(num[1], 10) };
+  return { count: null, invalid: true };
+}
+
+function buildNote(data) {
+  if (data.match) {
+    return "Splice count from Daisy Chain Diagram matches the Construction Drawings.";
+  }
+  return `Splice count from Daisy Chain Diagram (${data.dcd.total}) do not match the Splice Count in Construction Drawings (${data.fulcrum.count}).`;
+}
+
+// --- canvas rendering for image export ---------------------------------------
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function wrapTokens(ctx, tokens, maxWidth, font) {
+  ctx.font = font;
+  const lines = [];
+  let cur = [];
+  tokens.forEach((tok) => {
+    const trial = [...cur, tok].join(", ");
+    if (ctx.measureText(trial).width > maxWidth && cur.length) {
+      lines.push(cur.join(", "));
+      cur = [tok];
+    } else {
+      cur.push(tok);
+    }
+  });
+  if (cur.length) lines.push(cur.join(", "));
+  return lines.length ? lines : [""];
+}
+
+function centerLeft(ctx, cx, cy, cw, ch, text, font, color) {
+  ctx.fillStyle = color;
+  ctx.font = font;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, cx + 14, cy + ch / 2);
+}
+
+function drawLines(ctx, cx, cy, cw, ch, lines, font, color, bg, cellBox) {
+  cellBox(cx, cy, cw, ch, bg);
+  ctx.fillStyle = color;
+  ctx.font = font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const lineH = 18;
+  let ly = cy + ch / 2 - (lines.length * lineH) / 2 + lineH / 2;
+  lines.forEach((ln) => {
+    ctx.fillText(ln, cx + cw / 2, ly);
+    ly += lineH;
+  });
+}
+
+function drawTotal(ctx, cx, cy, cw, ch, total, color, bg, cellBox) {
+  cellBox(cx, cy, cw, ch, bg);
+  ctx.fillStyle = color;
+  ctx.font = "700 20px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(total), cx + cw / 2, cy + ch / 2);
+}
+
+const C = {
+  pageBg: "#ffffff", headerBg: "#334155", subBg: "#475569", headerText: "#ffffff",
+  subText: "#e2e8f0", body: "#ffffff", siteText: "#0f172a", value: "#334155",
+  matchNum: "#059669", mismatchNum: "#dc2626",
+  matchBadge: "#d1fae5", matchBadgeText: "#065f46",
+  mismatchBadge: "#fee2e2", mismatchBadgeText: "#991b1b",
+  grid: "#94a3b8", outer: "#64748b",
+};
+
+// Columns: Site | DCD Value | DCD Splices | Fulcrum Splices | Status
+function buildCanvas(data) {
+  const scale = 2;
+  const pad = 14;
+  const cols = [{ w: 160 }, { w: 150 }, { w: 110 }, { w: 110 }, { w: 140 }];
+  const tableW = cols.reduce((a, c) => a + c.w, 0);
+  const hGroup = 38;
+  const hSub = 30;
+  const lineH = 18;
+
+  const measure = document.createElement("canvas").getContext("2d");
+  const monoFont = "13px ui-monospace, SFMono-Regular, Menlo, monospace";
+  const dcdLines = wrapTokens(measure, data.dcd.items.map((i) => i.display), cols[1].w - 20, monoFont);
+  const hData = Math.max(56, dcdLines.length * lineH + 24);
+
+  const totalW = tableW + pad * 2;
+  const totalH = hGroup + hSub + hData + pad * 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = totalW * scale;
+  canvas.height = totalH * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+
+  const x = [];
+  let acc = pad;
+  cols.forEach((c) => { x.push(acc); acc += c.w; });
+
+  ctx.fillStyle = C.pageBg;
+  ctx.fillRect(0, 0, totalW, totalH);
+
+  const top = pad;
+  const groupFont = "700 13px ui-sans-serif, system-ui, Arial";
+  const subFont = "600 12px ui-sans-serif, system-ui, Arial";
+
+  const cellBox = (cx, cy, cw, ch, bg) => {
+    if (bg) { ctx.fillStyle = bg; ctx.fillRect(cx, cy, cw, ch); }
+    ctx.strokeStyle = C.grid;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx + 0.5, cy + 0.5, cw, ch);
+  };
+  const centerText = (cx, cy, cw, ch, text, font, color) => {
+    ctx.fillStyle = color;
+    ctx.font = font;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, cx + cw / 2, cy + ch / 2);
+  };
+
+  cellBox(x[0], top, cols[0].w, hGroup + hSub, C.headerBg);
+  centerLeft(ctx, x[0], top, cols[0].w, hGroup + hSub, "Site Name", groupFont, C.headerText);
+  cellBox(x[1], top, cols[1].w + cols[2].w, hGroup, C.headerBg);
+  centerText(x[1], top, cols[1].w + cols[2].w, hGroup, "Daisy Chain Diagram", groupFont, C.headerText);
+  cellBox(x[3], top, cols[3].w, hGroup, C.headerBg);
+  centerText(x[3], top, cols[3].w, hGroup, "Fulcrum Value", groupFont, C.headerText);
+  cellBox(x[4], top, cols[4].w, hGroup + hSub, C.headerBg);
+  centerText(x[4], top, cols[4].w, hGroup + hSub, "Status", groupFont, C.headerText);
+
+  const sy = top + hGroup;
+  ["Value", "Splices", "Splices"].forEach((label, k) => {
+    const ci = k + 1;
+    cellBox(x[ci], sy, cols[ci].w, hSub, C.subBg);
+    centerText(x[ci], sy, cols[ci].w, hSub, label, subFont, C.subText);
+  });
+
+  const dy = sy + hSub;
+  const numColor = data.match ? C.matchNum : C.mismatchNum;
+  cellBox(x[0], dy, cols[0].w, hData, C.body);
+  centerLeft(ctx, x[0], dy, cols[0].w, hData, data.site, "600 14px ui-sans-serif, system-ui, Arial", C.siteText);
+
+  drawLines(ctx, x[1], dy, cols[1].w, hData, dcdLines, monoFont, C.value, C.body, cellBox);
+  drawTotal(ctx, x[2], dy, cols[2].w, hData, data.dcd.total, numColor, C.body, cellBox);
+  drawTotal(ctx, x[3], dy, cols[3].w, hData, data.fulcrum.count, numColor, C.body, cellBox);
+
+  cellBox(x[4], dy, cols[4].w, hData, C.body);
+  const label = data.match ? "Match" : "Mismatch";
+  ctx.font = "600 12px ui-sans-serif, system-ui, Arial";
+  const bw = ctx.measureText(label).width + 32;
+  const bh = 26;
+  const bx = x[4] + cols[4].w / 2 - bw / 2;
+  const by = dy + hData / 2 - bh / 2;
+  ctx.fillStyle = data.match ? C.matchBadge : C.mismatchBadge;
+  roundRect(ctx, bx, by, bw, bh, 13);
+  ctx.fill();
+  ctx.fillStyle = data.match ? C.matchBadgeText : C.mismatchBadgeText;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("● " + label, x[4] + cols[4].w / 2, by + bh / 2 + 1);
+
+  ctx.strokeStyle = C.outer;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(pad + 0.5, top + 0.5, tableW, hGroup + hSub + hData);
+
+  return canvas;
+}
+
+// --- app wiring ---------------------------------------------------------------
+let result = null;
+let toastTimer = null;
+
+function flash(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.textContent = ""; }, 4000);
+}
+
+document.getElementById("dcd").addEventListener("input", (e) => {
+  const sum = summarize(e.target.value);
+  const el = document.getElementById("dcdSum");
+  if (sum.items.length === 0) { el.textContent = ""; el.classList.remove("bad"); return; }
+  if (sum.hasInvalid) { el.textContent = "check the values"; el.classList.add("bad"); }
+  else { el.innerHTML = `splitter total = <b>${sum.total}</b>`; el.classList.remove("bad"); }
+});
+
+document.getElementById("fulcrum").addEventListener("input", (e) => {
+  const p = parseFulcrum(e.target.value);
+  const el = document.getElementById("fulcrumSum");
+  if (!e.target.value.trim()) { el.textContent = ""; el.classList.remove("bad"); return; }
+  if (p.invalid || p.count == null) { el.textContent = "enter a whole number"; el.classList.add("bad"); }
+  else { el.innerHTML = `splices = <b>${p.count}</b>`; el.classList.remove("bad"); }
+});
+
+document.getElementById("extractBtn").addEventListener("click", () => {
+  const site = document.getElementById("site").value;
+  const dcd = document.getElementById("dcd").value;
+  const fulcrum = document.getElementById("fulcrum").value;
+  const errEl = document.getElementById("error");
+  document.getElementById("outputWrap").style.display = "none";
+
+  if (!site.trim()) { errEl.textContent = "Enter a site name."; return; }
+  const d = summarize(dcd);
+  const f = parseFulcrum(fulcrum);
+  if (d.items.length === 0 || f.empty) {
+    errEl.textContent = "Enter at least one DCD value and a Fulcrum Value splice count.";
+    return;
+  }
+  if (d.hasInvalid) {
+    errEl.textContent = "DCD values must be port ranges (e.g. 40-41, 35-37) or whole numbers.";
+    return;
+  }
+  if (f.invalid || f.count == null) {
+    errEl.textContent = "Fulcrum Value must be a whole number of splices.";
+    return;
+  }
+  errEl.textContent = "";
+
+  result = { site: site.trim(), dcd: d, fulcrum: f, match: d.total === f.count };
+  const url = buildCanvas(result).toDataURL("image/png");
+  document.getElementById("preview").src = url;
+  document.getElementById("noteText").textContent = buildNote(result);
+  document.getElementById("outputWrap").style.display = "block";
+});
+
+document.getElementById("saveBtn").addEventListener("click", () => {
+  if (!result) return;
+  const url = buildCanvas(result).toDataURL("image/png");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `splitter-${result.site.replace(/[^\w.-]+/g, "_")}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  document.getElementById("preview").src = url;
+  flash("If nothing downloaded, right-click / long-press the image below to save.");
+});
+
+document.getElementById("copyBtn").addEventListener("click", () => {
+  if (!result) return;
+  if (!(navigator.clipboard && window.ClipboardItem)) {
+    document.getElementById("preview").src = buildCanvas(result).toDataURL("image/png");
+    flash("Clipboard unavailable — right-click / long-press the image below to copy.");
+    return;
+  }
+  try {
+    const canvas = buildCanvas(result);
+    const blobPromise = new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    navigator.clipboard
+      .write([new window.ClipboardItem({ "image/png": blobPromise })])
+      .then(() => flash("Image copied to clipboard."))
+      .catch(() => {
+        document.getElementById("preview").src = canvas.toDataURL("image/png");
+        flash("Clipboard blocked here — right-click / long-press the image below to copy.");
+      });
+  } catch (e) {
+    document.getElementById("preview").src = buildCanvas(result).toDataURL("image/png");
+    flash("Clipboard blocked here — right-click / long-press the image below to copy.");
+  }
+});
+
+document.getElementById("copyNoteBtn").addEventListener("click", () => {
+  if (!result) return;
+  const note = buildNote(result);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(note)
+      .then(() => flash("Note copied to clipboard."))
+      .catch(() => flash("Clipboard blocked — select and copy the note manually."));
+  } else {
+    flash("Clipboard unavailable — select and copy the note manually.");
+  }
+});
+</script>
+</body>
+</html>
