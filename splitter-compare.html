@@ -180,9 +180,9 @@ function parseFulcrum(input) {
 
 function buildNote(data) {
   if (data.match) {
-    return "Splice count from Daisy Chain Diagram matches the Construction Drawings.";
+    return "Splice count from Daisy Chain Diagram matches the Fulcrum Value.";
   }
-  return `Splice count from Daisy Chain Diagram (${data.dcd.total}) do not match the Splice Count in Construction Drawings (${data.fulcrum.count}).`;
+  return `Splice count from Daisy Chain Diagram (${data.dcd.total}) do not match the Splice Count in Fulcrum (${data.fulcrum.count}). Fulcrum value is utilized.`;
 }
 
 // --- canvas rendering for image export ---------------------------------------
