@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talonview Report Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root{--bg:#0c0c0f;--surface:#13131a;--border:#1f1f2e;--accent-f:#ff4d4d;--accent-p:#f5a623;--accent-blue:#4d8fff;--text:#e8e8f0;--text-muted:#5a5a72;--text-dim:#8888aa;--green:#3dd68c;--card:#16161f;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-height:100vh;overflow-x:hidden;}
+    body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(77,143,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(77,143,255,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+    .wrap{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:48px 24px 80px;}
+    .header{margin-bottom:48px;}
+    .header-tag{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent-blue);margin-bottom:12px;display:block;}
+    .header h1{font-family:'Syne',sans-serif;font-size:clamp(28px,5vw,48px);font-weight:800;line-height:1;color:var(--text);margin-bottom:10px;}
+    .header h1 span{color:var(--accent-f);}
+    .header p{font-size:12px;color:var(--text-muted);letter-spacing:.5px;}
+    .upload-zone{border:1.5px dashed var(--border);border-radius:12px;padding:48px 32px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);margin-bottom:32px;position:relative;overflow:hidden;}
+    .upload-zone::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(77,143,255,.06) 0%,transparent 70%);pointer-events:none;}
+    .upload-zone:hover,.upload-zone.drag{border-color:var(--accent-blue);background:#13131f;}
+    .upload-icon{font-size:36px;margin-bottom:16px;display:block;}
+    .upload-zone h2{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px;color:var(--text);}
+    .upload-zone p{font-size:11px;color:var(--text-muted);letter-spacing:.5px;}
+    .upload-zone strong{color:var(--accent-blue);}
+    #fileInput{display:none;}
+    .stats{display:none;gap:1px;margin-bottom:32px;border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+    .stats.show{display:flex;}
+    .stat{flex:1;padding:18px 20px;background:var(--surface);text-align:center;}
+    .stat-val{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;display:block;line-height:1;margin-bottom:6px;}
+    .stat-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);}
+    .stat.fail .stat-val{color:var(--accent-f);}
+    .stat.pending .stat-val{color:var(--accent-p);}
+    .stat.forms .stat-val{color:var(--accent-blue);}
+    .session-bar{display:none;align-items:center;gap:12px;padding:12px 18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:24px;font-size:11px;}
+    .session-bar.show{display:flex;}
+    .session-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 6px var(--green);}
+    .session-name{color:var(--text-dim);flex:1;}
+    .session-name strong{color:var(--text);font-weight:500;}
+    /* Toolbar */
+    .toolbar{display:none;align-items:center;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
+    .toolbar.show{display:flex;}
+    .toolbar-left{display:flex;gap:10px;flex-wrap:wrap;flex:1;}
+    .toolbar-right{display:flex;gap:6px;}
+    .btn{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:1px;padding:10px 18px;border-radius:6px;border:1px solid var(--border);cursor:pointer;transition:all .15s;background:var(--surface);color:var(--text-dim);}
+    .btn:hover{border-color:var(--accent-blue);color:var(--text);}
+    .btn.primary{background:var(--accent-blue);border-color:var(--accent-blue);color:#000;font-weight:500;}
+    .btn.primary:hover{background:#6ba8ff;color:#000;}
+    .btn.docx-btn{background:rgba(61,214,140,.12);border-color:rgba(61,214,140,.3);color:var(--green);}
+    .btn.docx-btn:hover{background:rgba(61,214,140,.2);border-color:var(--green);}
+    .btn.xlsx-btn{background:rgba(77,143,255,.12);border-color:rgba(77,143,255,.3);color:var(--accent-blue);}
+    .btn.xlsx-btn:hover{background:rgba(77,143,255,.2);border-color:var(--accent-blue);}
+    .btn.success{background:var(--green);border-color:var(--green);color:#000;}
+    .btn.view-btn{border-color:var(--border);color:var(--text-muted);}
+    .btn.view-btn.active{background:var(--accent-blue);border-color:var(--accent-blue);color:#000;font-weight:500;}
+    /* Notes bar */
+    .notes-bar{display:none;align-items:center;gap:20px;padding:12px 18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:20px;font-size:11px;flex-wrap:wrap;}
+    .notes-bar.show{display:flex;}
+    .notes-label{color:var(--text-muted);letter-spacing:.5px;flex-shrink:0;}
+    .notes-check{display:flex;align-items:center;gap:8px;color:var(--text-dim);cursor:pointer;letter-spacing:.5px;}
+    .notes-check input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent-blue);cursor:pointer;}
+    /* Views */
+    .view-panel{display:none;}
+    .view-panel.active{display:block;}
+    /* Report view */
+    .section{margin-bottom:32px;}
+    .section-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+    .section-badge{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:4px;flex-shrink:0;}
+    .badge-f{background:rgba(255,77,77,.15);color:var(--accent-f);border:1px solid rgba(255,77,77,.3);}
+    .badge-p{background:rgba(245,166,35,.12);color:var(--accent-p);border:1px solid rgba(245,166,35,.25);}
+    .section-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:600;color:var(--text);flex:1;}
+    .section-count{font-size:10px;color:var(--text-muted);letter-spacing:1px;}
+    .form-group{margin-bottom:20px;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+    .form-name{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.5px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);color:var(--text-dim);display:flex;align-items:center;gap:8px;}
+    .form-name::before{content:'▸';font-size:10px;color:var(--accent-blue);}
+    .item-list{padding:8px 0;}
+    .item{padding:9px 16px 9px 32px;font-size:12px;color:var(--text-dim);line-height:1.5;border-bottom:1px solid rgba(255,255,255,.03);position:relative;transition:background .15s;}
+    .item:last-child{border-bottom:none;}
+    .item:hover{background:rgba(255,255,255,.02);color:var(--text);}
+    .item::before{content:'○';position:absolute;left:16px;font-size:8px;top:11px;color:var(--text-muted);}
+    .item.fail::before{color:var(--accent-f);content:'●';}
+    .item.pending::before{color:var(--accent-p);content:'○';}
+    .item.submitted::before{color:#a78bfa;content:'◈';}
+    .empty{text-align:center;padding:48px;color:var(--text-muted);font-size:12px;}
+    /* Edited view */
+    .edited-section{margin-bottom:32px;}
+    .edited-section-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+    .edited-form-group{margin-bottom:20px;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+    .edited-form-name{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:.5px;padding:11px 16px;background:var(--surface);border-bottom:1px solid var(--border);color:var(--text-dim);width:100%;display:block;outline:none;white-space:pre-wrap;min-height:1.4em;}
+    .edited-form-name:focus{color:var(--text);background:#1c1c28;}
+    .edited-item{border-bottom:1px solid rgba(255,255,255,.03);position:relative;}
+    .edited-item:last-child{border-bottom:none;}
+    .edited-item-content{width:100%;background:transparent;border:none;outline:none;font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);padding:9px 16px 9px 32px;line-height:1.5;display:block;white-space:pre-wrap;min-height:1.4em;}
+    .edited-item-content:focus{background:rgba(255,255,255,.02);}
+    .edited-item::before{content:'○';position:absolute;left:16px;font-size:8px;top:11px;color:var(--text-muted);pointer-events:none;}
+    .edited-item.fail::before{color:var(--accent-f);content:'●';}
+    .edited-item.pending::before{color:var(--accent-p);content:'○';}
+    .edited-item.submitted::before{color:#a78bfa;content:'◈';}
+    /* Yellow = added text via ::after trick not possible; use data-* diff approach */
+    /* We'll use a MutationObserver to wrap new chars in spans */
+    .added{color:#f5e642;}
+    ::-webkit-scrollbar{width:4px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+    .animate{animation:fadeUp .4s ease both;}
+    .delay-1{animation-delay:.05s;}
+    .processing{text-align:center;padding:32px;font-size:12px;color:var(--text-muted);letter-spacing:1px;}
+    .dot-anim::after{content:'';animation:dots 1.2s steps(4,end) infinite;}
+    @keyframes dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}};
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header animate">
+    <span class="header-tag">Talonview · Report Generator</span>
+    <h1>Rejection &amp; Pending<br><span>Photo Report</span></h1>
+    <p>Upload an exported Talonview Excel or CSV file to generate the F/P lists</p>
+  </div>
+  <div class="upload-zone animate delay-1" id="dropZone">
+    <span class="upload-icon">⬆</span>
+    <h2>Drop your file here</h2>
+    <p>or <strong>click to browse</strong> &nbsp;·&nbsp; .xlsx, .xls, .csv supported</p>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+  </div>
+  <div class="session-bar" id="sessionBar">
+    <div class="session-dot"></div>
+    <div class="session-name">Session: <strong id="sessionName">—</strong></div>
+  </div>
+  <div class="stats" id="stats">
+    <div class="stat fail"><span class="stat-val" id="cntF">0</span><span class="stat-label">Rejected (F)</span></div>
+    <div class="stat pending"><span class="stat-val" id="cntP">0</span><span class="stat-label">Pending (P)</span></div>
+    <div class="stat forms"><span class="stat-val" id="cntForms">0</span><span class="stat-label">Forms Affected</span></div>
+  </div>
+  <div class="toolbar" id="toolbar">
+    <div class="toolbar-left">
+      <button class="btn primary" id="btnCopy">Copy Text</button>
+      <button class="btn docx-btn" id="btnDocx">⬇ Download Word (.docx)</button>
+      <button class="btn xlsx-btn" id="btnXlsx">⬇ Download Excel (.xlsx)</button>
+      <button class="btn" id="btnReset">↩ New File</button>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn view-btn active" id="btnViewReport" onclick="switchView('report')">Report</button>
+      <button class="btn view-btn" id="btnViewEdited" onclick="switchView('edited')">Edited</button>
+    </div>
+  </div>
+  <!-- Notes checkbox bar — shown only in Edited view -->
+  <div class="notes-bar" id="notesBar">
+    <span class="notes-label">Do you want to add the notes in:</span>
+    <label class="notes-check"><input type="checkbox" id="chkDocx"> Word doc (.docx)</label>
+    <label class="notes-check"><input type="checkbox" id="chkXlsx"> Excel (.xlsx)</label>
+  </div>
+
+  <div class="view-panel active" id="panelReport"><div id="output"></div></div>
+  <div class="view-panel" id="panelEdited"><div id="editedWrap"></div></div>
+</div>
+
+<script>
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const outputEl   = document.getElementById('output');
+const statsEl    = document.getElementById('stats');
+const toolbar    = document.getElementById('toolbar');
+const sessionBar = document.getElementById('sessionBar');
+const btnCopy    = document.getElementById('btnCopy');
+const btnReset   = document.getElementById('btnReset');
+const btnDocx    = document.getElementById('btnDocx');
+const btnXlsx    = document.getElementById('btnXlsx');
+
+let rawText     = '';
+let reportData  = null;
+let currentView = 'report';
+
+// ── Saved notes cache (persists across tab switches) ─────────────────────────
+let savedNotesMap = {}; // label → { html, added }
+
+function saveCurrentNotes() {
+  document.querySelectorAll('#editedWrap .edited-item-content').forEach(el => {
+    const original = el.dataset.original || '';
+    savedNotesMap[original] = { innerHTML: el.innerHTML, original };
+  });
+}
+
+// ── View switcher ─────────────────────────────────────────────────────────────
+function switchView(v) {
+  // Save notes before leaving edited view
+  if (currentView === 'edited') saveCurrentNotes();
+
+  currentView = v;
+  document.getElementById('panelReport').classList.toggle('active', v === 'report');
+  document.getElementById('panelEdited').classList.toggle('active', v === 'edited');
+  document.getElementById('btnViewReport').classList.toggle('active', v === 'report');
+  document.getElementById('btnViewEdited').classList.toggle('active', v === 'edited');
+  document.getElementById('notesBar').classList.toggle('show', v === 'edited');
+  if (v === 'edited' && reportData) {
+    const wrap = document.getElementById('editedWrap');
+    // Only rebuild if empty (first time); otherwise restore saved notes
+    if (!wrap.hasChildNodes()) {
+      buildEditedView(reportData);
+    } else {
+      restoreSavedNotes();
+    }
+  }
+}
+
+// ── Edited view builder ───────────────────────────────────────────────────────
+// Uses contenteditable divs so we can wrap new characters in <span class="added">
+function makeEditable(container, originalText, cssClass) {
+  container.className = cssClass;
+  container.contentEditable = 'true';
+  container.spellcheck = false;
+  // Store original as plain text
+  container.dataset.original = originalText;
+  container.textContent = originalText;
+
+  container.addEventListener('input', function() {
+    const el = this;
+    // Save caret position
+    const sel = window.getSelection();
+    const range = sel.getRangeAt(0);
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(el);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
+    const caretPos = preCaretRange.toString().length;
+
+    const original = el.dataset.original;
+    const current  = el.textContent;
+
+    // Diff: find longest common prefix and suffix
+    let prefixLen = 0;
+    while (prefixLen < original.length && prefixLen < current.length && original[prefixLen] === current[prefixLen]) prefixLen++;
+    let suffixLen = 0;
+    while (suffixLen < (original.length - prefixLen) && suffixLen < (current.length - prefixLen) &&
+           original[original.length - 1 - suffixLen] === current[current.length - 1 - suffixLen]) suffixLen++;
+
+    const addedStart = prefixLen;
+    const addedEnd   = current.length - suffixLen;
+    const addedText  = current.slice(addedStart, addedEnd);
+
+    // Rebuild inner HTML: prefix (original color) + added (yellow) + suffix (original color)
+    const prefix = current.slice(0, addedStart);
+    const suffix = current.slice(addedEnd);
+
+    if (addedText) {
+      el.innerHTML = esc(prefix) + '<span class="added">' + esc(addedText) + '</span>' + esc(suffix);
+    } else {
+      el.textContent = current;
+    }
+
+    // Restore caret
+    try {
+      const newRange = document.createRange();
+      let charCount = 0, found = false;
+      function findNode(node) {
+        if (found) return;
+        if (node.nodeType === 3) {
+          if (charCount + node.length >= caretPos) {
+            newRange.setStart(node, caretPos - charCount);
+            newRange.collapse(true);
+            found = true;
+          } else { charCount += node.length; }
+        } else { for (const c of node.childNodes) findNode(c); }
+      }
+      findNode(el);
+      if (found) { sel.removeAllRanges(); sel.addRange(newRange); }
+    } catch(e){}
+  });
+
+  return container;
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function buildEditedView({ formOrder, rejected, pending, submitted }) {
+  const wrap = document.getElementById('editedWrap');
+  wrap.innerHTML = '';
+
+  function addSection(formList, bucket, badgeClass, heading, itemClass) {
+    if (!formList.length) return;
+    const lbl = badgeClass === 'badge-f' ? 'F' : 'P';
+    const sec = document.createElement('div');
+    sec.className = 'edited-section';
+    const hdr = document.createElement('div');
+    hdr.className = 'edited-section-header';
+    hdr.innerHTML = `<span class="section-badge ${badgeClass}">(${lbl})</span><span class="section-title">${heading}</span>`;
+    sec.appendChild(hdr);
+
+    for (const f of formList) {
+      const fc = f.replace(/"/g,'').trim();
+      const grp = document.createElement('div');
+      grp.className = 'edited-form-group';
+      const nameEl = document.createElement('div');
+      makeEditable(nameEl, fc, 'edited-form-name');
+      grp.appendChild(nameEl);
+
+      const list = document.createElement('div');
+      list.className = 'item-list';
+      for (const it of (bucket[f] || [])) {
+        const row = document.createElement('div');
+        row.className = `edited-item ${itemClass}`;
+        const cel = document.createElement('div');
+        makeEditable(cel, it.label, 'edited-item-content');
+        row.appendChild(cel);
+        list.appendChild(row);
+      }
+      grp.appendChild(list);
+      sec.appendChild(grp);
+    }
+    wrap.appendChild(sec);
+  }
+
+  addSection(formOrder.filter(f => rejected[f].length > 0),  rejected,  'badge-f', 'The following photos were rejected in Talonview', 'fail');
+  addSection(formOrder.filter(f => pending[f].length > 0),   pending,   'badge-p', 'The following photos were not yet uploaded / submitted in Talonview', 'pending');
+  addSection(formOrder.filter(f => submitted[f] && submitted[f].length > 0), submitted, 'badge-p', 'The following photo requirements were submitted and pending approval in Talonview forms', 'submitted');
+  // Restore any previously saved notes
+  restoreSavedNotes();
+}
+
+// ── Copy Text ─────────────────────────────────────────────────────────────────
+function copyStr(btn, text) {
+  // Try clipboard API first, fall back to execCommand for iframe contexts
+  const doFallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!'; btn.classList.add('success');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('success'); }, 2000);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copied!'; btn.classList.add('success');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('success'); }, 2000);
+    }).catch(() => doFallback());
+  } else {
+    doFallback();
+  }
+}
+
+btnCopy.addEventListener('click', () => {
+  if (currentView === 'edited') {
+    const lines = [];
+    document.querySelectorAll('#editedWrap .edited-section').forEach(sec => {
+      const badge   = sec.querySelector('.section-badge').textContent;
+      const heading = sec.querySelector('.section-title').textContent;
+      lines.push(badge + ' ' + heading + ':');
+      sec.querySelectorAll('.edited-form-group').forEach(grp => {
+        lines.push('\u00b7       ' + grp.querySelector('.edited-form-name').textContent.trim() + ':');
+        grp.querySelectorAll('.edited-item-content').forEach(el => lines.push('o   ' + el.textContent.trim()));
+      });
+      lines.push('');
+    });
+    copyStr(btnCopy, lines.join('\n'));
+  } else {
+    copyStr(btnCopy, rawText);
+  }
+});
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+btnReset.addEventListener('click', () => {
+  outputEl.innerHTML = '';
+  document.getElementById('editedWrap').innerHTML = '';
+  statsEl.classList.remove('show'); toolbar.classList.remove('show'); sessionBar.classList.remove('show');
+  dropZone.style.display = ''; fileInput.value = '';
+  rawText = ''; reportData = null; savedNotesMap = {};
+  switchView('report');
+});
+
+btnDocx.addEventListener('click', () => { if (reportData) generateDocx(reportData); });
+btnXlsx.addEventListener('click', () => { if (reportData) generateXlsx(reportData); });
+
+function handleFile(file) {
+  dropZone.style.display = 'none';
+  outputEl.innerHTML = '<div class="processing dot-anim">Processing file</div>';
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  if (ext === 'csv') { reader.onload = e => parseData(e.target.result); reader.readAsText(file); }
+  else {
+    reader.onload = e => {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      parseXlsxRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' }));
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+// ── CSV row parser ────────────────────────────────────────────────────────────
+function parseRow(line) {
+  const cols=[]; let cur='', inQ=false;
+  for (let c=0;c<line.length;c++) {
+    const ch=line[c];
+    if(ch==='"'){if(inQ&&line[c+1]==='"'){cur+='"';c++;}else inQ=!inQ;}
+    else if(ch===','&&!inQ){cols.push(cur);cur='';}
+    else cur+=ch;
+  }
+  cols.push(cur); return cols;
+}
+
+function colEFilter(title, cf) {
+  const isH = cf.toUpperCase().includes('HOUSTON');
+  const tu  = title.toUpperCase();
+  const isPhoto = tu.startsWith('PHOTO REQUIREMENT')||tu.startsWith('UPLOAD PHOTO')||tu.startsWith('RESUBMIT PHOTO')||tu.startsWith('PHOTO UPLOAD');
+  const isDoc   = tu.startsWith('DOCUMENT UPLOAD');
+  const docSkip = ['TMO COP QUESTIONNAIRE','PERMITS AND INSPECTIONS','TOWER VALIDATION','SITE VALIDATION'].some(s=>cf.toUpperCase().includes(s));
+  return isH || isPhoto || (isDoc && !docSkip);
+}
+
+function initForm(r,p,s,name,order) { if(!r[name]){r[name]=[];p[name]=[];s[name]=[];order.push(name);} }
+
+// ── XLSX parser ───────────────────────────────────────────────────────────────
+function parseXlsxRows(rows) {
+  let sn=''; const m=String(rows[0][0]||'').match(/Session name:\s*(.+)/); if(m) sn=m[1].trim();
+  const r={},p={},s={},fo=[]; let cf='';
+  for (const row of rows) {
+    const c0=String(row[0]||'').trim();
+    if(c0.startsWith('Form name:')){cf=c0.replace(/^Form name:\s*/i,'').trim();initForm(r,p,s,cf,fo);continue;}
+    if(!cf||c0==='Tabs IDs')continue;
+    const tn=String(row[1]||'').trim(),ti=String(row[4]||'').trim(),q=String(row[9]||'').trim(),sr=row[12];
+    if(!q||!colEFilter(ti,cf))continue;
+    const num=(sr===null||sr==='') ? null : Number(sr);
+    if(num!==null&&[1,4,6].indexOf(num)!==-1)continue;
+    const label=tn?tn+' - '+q:q;
+    if(num===null) p[cf].push({label});
+    else if(num===0) s[cf].push({label});
+    else r[cf].push({label});
+  }
+  reportData={sessionName:sn,formOrder:fo,rejected:r,pending:p,submitted:s};
+  renderResults(reportData);
+}
+
+// ── CSV parser ────────────────────────────────────────────────────────────────
+function parseData(csvText) {
+  const lines=csvText.split('\n'); let sn='';
+  const m=lines[0].match(/Session name:\s*(.+?)(?:"|$)/); if(m) sn=m[1].trim().replace(/,$/,'');
+  const r={},p={},s={},fo=[]; let cf='';
+  for (const raw of lines) {
+    const rt=raw.replace(/^"+|"+$/g,'').trim();
+    const fm=rt.match(/^Form name:\s*(.+?)(?:,+)?\s*$/i)||raw.match(/^"?Form name:\s*(.+?)"?(?:,+)?\s*$/i);
+    if(fm){cf=fm[1].trim();initForm(r,p,s,cf,fo);continue;}
+    if(!cf)continue;
+    if(raw.startsWith('Tabs IDs')||raw.startsWith('"Tabs IDs'))continue;
+    if(raw.startsWith('"Session')||raw.startsWith('"Time of'))continue;
+    const cols=parseRow(raw); if(cols.length<13)continue;
+    const tn=(cols[1]||'').trim(),ti=(cols[4]||'').trim(),q=(cols[9]||'').trim(),sr=(cols[12]||'').trim();
+    if(!q||!colEFilter(ti,cf))continue;
+    const snum=sr===''?'blank':sr;
+    if(snum!=='blank'&&['1','4','6'].indexOf(String(snum))!==-1)continue;
+    const label=tn?tn+' - '+q:q;
+    if(snum==='blank') p[cf].push({label});
+    else if(snum==='0') s[cf].push({label});
+    else r[cf].push({label});
+  }
+  reportData={sessionName:sn,formOrder:fo,rejected:r,pending:p,submitted:s};
+  renderResults(reportData);
+}
+
+// ── Form prefix ───────────────────────────────────────────────────────────────
+function getFormPrefix(f) {
+  const u=f.toUpperCase();
+  if(u.includes('HOUSTON DAILY'))        return 'HOU Daily';
+  if(u.includes('HOUSTON SUPPLEMENTAL')) return 'HOU Supp';
+  if(u.includes('HOUSTON'))              return 'HOU';
+  if(u.includes('HYBRID')||u.includes('MAINLINE CABLE')) return 'HYBRID';
+  if(u.includes('ICE BRIDGE'))           return 'ICE B';
+  if(u.includes('OVERHEAD'))             return 'OVERHEAD';
+  if(u.includes('BATTERY CABINET'))      return 'BATT CAB';
+  if(u.includes('AAV'))                  return 'AAV';
+  if(u.includes('CO-LOCATE'))            return 'CO-LOC';
+  if(u.includes('BATTERY RACK'))         return 'BATT RACK';
+  if(u.includes('ROUTER'))              return 'ROUTER';
+  if(u.includes('EXPANSION CABINET'))   return 'EXP CAB';
+  if(u.includes('EQUIPMENT RACK'))      return 'EQUIP RACK';
+  if(u.includes('GENERATOR'))           return 'GEN';
+  if(u.includes('RADIO UNIT'))          return 'RADIO U';
+  if(u.includes('PRE-EXISTING'))        return 'POST-CON';
+  return f.replace(/\s+INSTALLED\s+V[\d.]+\s*\(.*?\)/gi,'').replace(/\s+NSB\s+V[\d.]+\s*\(.*?\)/gi,'').replace(/\s+V[\d.]+\s*\(.*?\)/gi,'').replace(/\s+V[\d.]+\s*$/gi,'').replace(/"/g,'').trim();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function renderResults({sessionName,formOrder,rejected,pending,submitted}) {
+  let tF=0,tP=0,tS=0; const aff=new Set();
+  for(const f of formOrder){
+    if(rejected[f].length){tF+=rejected[f].length;aff.add(f);}
+    if(pending[f].length){tP+=pending[f].length;aff.add(f);}
+    if(submitted[f]&&submitted[f].length){tS+=submitted[f].length;aff.add(f);}
+  }
+  if(sessionName){document.getElementById('sessionName').textContent=sessionName;sessionBar.classList.add('show');}
+  document.getElementById('cntF').textContent=tF;
+  document.getElementById('cntP').textContent=tP;
+  document.getElementById('cntForms').textContent=aff.size;
+  statsEl.classList.add('show'); toolbar.classList.add('show');
+
+  let html=''; const lines=[];
+  function sec(total,flist,bucket,bc,heading,ic){
+    if(!flist.length)return;
+    const lbl=bc==='badge-f'?'F':'P';
+    html+=`<div class="section animate"><div class="section-header"><span class="section-badge ${bc}">(${lbl})</span><span class="section-title">${heading}</span><span class="section-count">${total} item${total!==1?'s':''}</span></div>`;
+    lines.push(`(${lbl}) ${heading}:`);
+    for(const f of flist){
+      const fc=f.replace(/"/g,'').trim();
+      html+=`<div class="form-group"><div class="form-name">${escHtml(fc)}</div><div class="item-list">`;
+      lines.push('\u00b7       '+fc+':');
+      for(const it of bucket[f]){html+=`<div class="item ${ic}">${escHtml(it.label)}</div>`;lines.push('o   '+it.label);}
+      html+=`</div></div>`;
+    }
+    html+=`</div>`;lines.push('');
+  }
+  sec(tF,formOrder.filter(f=>rejected[f].length>0),  rejected, 'badge-f','The following photos were rejected in Talonview','fail');
+  sec(tP,formOrder.filter(f=>pending[f].length>0),   pending,  'badge-p','The following photos were not yet uploaded / submitted in Talonview','pending');
+  sec(tS,formOrder.filter(f=>submitted[f]&&submitted[f].length>0),submitted,'badge-p','The following photo requirements were submitted and pending approval in Talonview forms','submitted');
+  if(!tF&&!tP&&!tS) html='<div class="empty">No rejected or pending items found in this file.</div>';
+  outputEl.innerHTML=html;
+  rawText=lines.join('\n');
+}
+
+// ── Collect edited notes from DOM ─────────────────────────────────────────────
+// Returns a flat array of { original, current, added } per item
+// "added" is the yellow-span text only; if nothing added, added===''
+function getEditedNotes() {
+  const notes = []; // { original, current, note }
+  document.querySelectorAll('#editedWrap .edited-item-content').forEach(el => {
+    const original = el.dataset.original || '';
+    const current  = el.textContent.trim();
+    // Extract just the yellow added text from spans
+    let added = '';
+    el.querySelectorAll('span.added').forEach(sp => { added += sp.textContent; });
+    if (added) notes.push({ original, current, added });
+  });
+  return notes; // keyed by original label
+}
+
+function restoreSavedNotes() {
+  document.querySelectorAll('#editedWrap .edited-item-content').forEach(el => {
+    const original = el.dataset.original || '';
+    if (savedNotesMap[original]) {
+      el.innerHTML = savedNotesMap[original].innerHTML;
+    }
+  });
+}
+
+// Also update getNotesMap to check savedNotesMap as fallback
+function getNotesMap() {
+  // First save current state if on edited view
+  if (currentView === 'edited') saveCurrentNotes();
+  const map = {};
+  // Use savedNotesMap
+  for (const [label, data] of Object.entries(savedNotesMap)) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = data.innerHTML;
+    let added = '';
+    tmp.querySelectorAll('span.added').forEach(sp => { added += sp.textContent; });
+    if (added) map[label] = added;
+  }
+  return map;
+}
+
+// ── Excel ─────────────────────────────────────────────────────────────────────
+function generateXlsx({sessionName,formOrder,rejected,pending,submitted}){
+  const includeNotes = document.getElementById('chkXlsx').checked;
+  const notesMap = includeNotes ? getNotesMap() : {};
+
+  const wb=XLSX.utils.book_new();
+  const rr=[['Status','Form','Item','Notes']];
+  for(const f of formOrder){
+    const px=getFormPrefix(f);
+    for(const it of rejected[f])        rr.push(['F',px,it.label,notesMap[it.label]||'']);
+    for(const it of pending[f])         rr.push(['P',px,it.label,notesMap[it.label]||'']);
+    for(const it of(submitted[f]||[]))  rr.push(['S',px,it.label,notesMap[it.label]||'']);
+  }
+  const wsR=XLSX.utils.aoa_to_sheet(rr);
+  wsR['!cols']=[{wch:8},{wch:30},{wch:100},{wch:60}];
+  XLSX.utils.book_append_sheet(wb,wsR,'Report');
+
+  const ih=['milestone_name','milestone_description','task_name','task_description','task_scheduled','task_use_time','task_duration','task_duration_unit','task_assignment','task_scheduled_comment','task_status','requirement_name','requirement_description','requirement_type','requirement_status','file_requirement_max','file_requirement_min','file_requirement_enforced'];
+  const ir=[ih];
+  const mkR=(px,it)=>{
+    const note = notesMap[it.label] || '';
+    // Col L = prefix - label (note) if note exists, else prefix - label
+    const rn = (px ? px+' - '+it.label : it.label) + (note ? ' '+note : '');
+    return['3. Crew COP Requirements',null,'4. COP Punch Items','(MasTec) Place any materials from a return visit here. If no return visit is required, Ontel will move the status of this task to "Cancelled".',null,false,null,'hours',null,null,'pending',rn,'','file','pending',1,1,false];
+  };
+  // Submitted items go to Report tab only — excluded from Import tab
+  for(const f of formOrder){const px=getFormPrefix(f);for(const it of rejected[f])ir.push(mkR(px,it));for(const it of pending[f])ir.push(mkR(px,it));}
+  const wsI=XLSX.utils.aoa_to_sheet(ir);
+  const ic=Array(18).fill({wch:18});ic[3]={wch:60};ic[11]={wch:100};
+  wsI['!cols']=ic;
+  XLSX.utils.book_append_sheet(wb,wsI,'Import');
+  XLSX.writeFile(wb,(sessionName||'Talonview_Report').replace(/[\\/:*?"<>|]/g,'_')+'.xlsx');
+}
+
+// ── Word ──────────────────────────────────────────────────────────────────────
+function xmlEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');}
+function mkPara(runs,opts={}){const{numId,ilvl,spacing}=opts;let pPr='';if(numId!==undefined)pPr+=`<w:numPr><w:ilvl w:val="${ilvl||0}"/><w:numId w:val="${numId}"/></w:numPr>`;if(spacing)pPr+=`<w:spacing w:before="${spacing.before||0}" w:after="${spacing.after||0}"/>`;const px=pPr?`<w:pPr>${pPr}</w:pPr>`:'';const rx=runs.map(r=>{let rp='';if(r.bold)rp+='<w:b/>';if(r.italic)rp+='<w:i/>';if(r.color)rp+=`<w:color w:val="${r.color}"/>`;if(r.size)rp+=`<w:sz w:val="${r.size}"/><w:szCs w:val="${r.size}"/>`;return`<w:r>${rp?`<w:rPr>${rp}</w:rPr>`:''}<w:t xml:space="preserve">${xmlEsc(r.text)}</w:t></w:r>`;}).join('');return`<w:p>${px}${rx}</w:p>`;}
+
+function generateDocx({sessionName,formOrder,rejected,pending,submitted}){
+  const includeNotes = document.getElementById('chkDocx').checked;
+  const notesMap = includeNotes ? getNotesMap() : {};
+
+  const numXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xB7;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr></w:lvl><w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="o"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
+  let body='';
+  body+=mkPara([{text:'Talonview Photo Report',bold:true,size:36,color:'1F3864'}],{spacing:{before:0,after:200}});
+  if(sessionName)body+=mkPara([{text:'Session: ',bold:true,size:20,color:'444444'},{text:sessionName,size:20,color:'444444'}],{spacing:{before:0,after:160}});
+  body+=mkPara([{text:'Generated: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),size:18,color:'888888'}],{spacing:{before:0,after:400}});
+  const blt=f=>`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F3864"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xmlEsc(f.replace(/"/g,'').trim())}</w:t></w:r></w:p>`;
+
+  // Sub: original text normal, added note bold+italic appended
+  const sub=(lbl,col)=>{
+    const note = notesMap[lbl];
+    if(includeNotes && note) {
+      return `<w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr><w:color w:val="${col}"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">${xmlEsc(lbl)} </w:t></w:r><w:r><w:rPr><w:b/><w:i/><w:color w:val="${col}"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">${xmlEsc(note)}</w:t></w:r></w:p>`;
+    }
+    return `<w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr><w:color w:val="${col}"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">${xmlEsc(lbl)}</w:t></w:r></w:p>`;
+  };
+
+  const fF=formOrder.filter(f=>rejected[f].length>0);if(fF.length){body+=mkPara([{text:'(F) The following photos were rejected in Talonview:',bold:true,size:24,color:'C00000'}],{spacing:{before:200,after:160}});for(const f of fF){body+=blt(f);for(const it of rejected[f])body+=sub(it.label,'C00000');}body+=mkPara([{text:''}],{spacing:{before:0,after:200}});}
+  const pF=formOrder.filter(f=>pending[f].length>0);if(pF.length){body+=mkPara([{text:'(P) The following photos were not yet uploaded / submitted in Talonview:',bold:true,size:24,color:'BF8F00'}],{spacing:{before:200,after:160}});for(const f of pF){body+=blt(f);for(const it of pending[f])body+=sub(it.label,'7F6000');}body+=mkPara([{text:''}],{spacing:{before:0,after:200}});}
+  const sF=formOrder.filter(f=>submitted[f]&&submitted[f].length>0);if(sF.length){body+=mkPara([{text:'(P) The following photo requirements were submitted and pending approval in Talonview forms:',bold:true,size:24,color:'7C3AED'}],{spacing:{before:200,after:160}});for(const f of sF){body+=blt(f);for(const it of submitted[f])body+=sub(it.label,'7C3AED');}}
+  const docXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+  const zip=new JSZip();
+  zip.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>`);
+  zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  zip.file('word/document.xml',docXml);zip.file('word/numbering.xml',numXml);
+  zip.file('word/_rels/document.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>`);
+  zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}).then(blob=>{
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=((reportData.sessionName||'Talonview_Report').replace(/[\\/:*?"<>|]/g,'_'))+'.docx';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  });
+}
+</script>
+</body>
+</html>

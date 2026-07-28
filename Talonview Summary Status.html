@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talonview Status Summary</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      padding: 20px;
+      color: #fff;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      font-size: 1.8rem;
+      background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      text-align: center;
+      color: #888;
+      margin-bottom: 30px;
+      font-size: 0.9rem;
+    }
+    .upload-area {
+      border: 2px dashed #3a7bd5;
+      border-radius: 16px;
+      padding: 40px;
+      text-align: center;
+      background: rgba(58, 123, 213, 0.1);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-bottom: 20px;
+    }
+    .upload-area:hover {
+      background: rgba(58, 123, 213, 0.2);
+      border-color: #00d2ff;
+    }
+    .upload-area.dragover {
+      background: rgba(0, 210, 255, 0.2);
+      border-color: #00d2ff;
+    }
+    .upload-icon { font-size: 3rem; margin-bottom: 10px; }
+    input[type="file"] { display: none; }
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 10px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+    }
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .dot-submitted { background: #fbbf24; }
+    .dot-blank { background: #94a3b8; }
+    .dot-rejected { background: #f87171; }
+    .pie-container {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .pie-container h3 {
+      color: #00d2ff;
+      margin-bottom: 10px;
+      font-size: 1rem;
+    }
+    .pie-chart { width: 150px; height: 150px; margin: 0 auto; }
+    .pie-legend {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      font-size: 0.8rem;
+    }
+    .pie-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .pie-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .results {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 20px;
+      display: none;
+    }
+    .results.show { display: block; }
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .results h2 { font-size: 1.2rem; color: #00d2ff; }
+    .copy-btn {
+      background: linear-gradient(90deg, #3a7bd5, #00d2ff);
+      border: none;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin-top: 15px;
+      width: 100%;
+      display: none;
+    }
+    .copy-btn.show { display: block; }
+    .copy-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4);
+    }
+    .stat-submitted { color: #fbbf24; }
+    .stat-blank { color: #94a3b8; }
+    .stat-rejected { color: #f87171; }
+    .text-output {
+      background: #0d1117;
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 20px;
+      font-family: 'Consolas', monospace;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      color: #c9d1d9;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .text-red { color: #f87171; }
+    .text-orange { color: #fbbf24; }
+    .text-green { color: #4ade80; }
+    .total-summary {
+      background: linear-gradient(90deg, rgba(58,123,213,0.2), rgba(0,210,255,0.2));
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .total-item { text-align: center; }
+    .total-value { font-size: 1.5rem; font-weight: bold; }
+    .total-label { font-size: 0.75rem; color: #888; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Talonview Status Summary</h1>
+    <p class="subtitle">Upload Excel file • Column H = Form Name • Column M = Status</p>
+    
+    <div class="upload-area" id="dropZone">
+      <div class="upload-icon">📁</div>
+      <p>Drag & drop Excel file here or <strong>click to browse</strong></p>
+      <p style="color:#666; font-size:0.8rem; margin-top:10px;">.xlsx, .xls supported</p>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+    
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot dot-submitted"></div> 0 = Submitted</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4ade80;"></div> 1, 4, 6 = Pass</div>
+      <div class="legend-item"><div class="legend-dot dot-blank"></div> Blank = Blank</div>
+      <div class="legend-item"><div class="legend-dot dot-rejected"></div> 2, 5, 7 = Rejected</div>
+    </div>
+    
+    <div class="results" id="results">
+      <div class="results-header"><h2>📋 Results</h2></div>
+      <div class="total-summary" id="totalSummary"></div>
+      <div class="pie-container" id="pieContainer" style="display:none;">
+        <h3>PHOTO REQUIREMENT Status</h3>
+        <canvas id="pieCanvas" width="300" height="350" style="margin:0 auto; display:block;"></canvas>
+        <div class="pie-legend" id="pieLegend"></div>
+        <div class="session-name" id="sessionName" style="margin-top:10px; font-size:0.9rem; color:#00d2ff;"></div>
+      </div>
+      <div class="text-output" id="textOutput"></div>
+      <button class="copy-btn" id="copyBtn">📋 Copy Text</button>
+    </div>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const copyBtn = document.getElementById('copyBtn');
+    let outputText = '';
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => { if (e.target.files.length) processFile(e.target.files[0]); });
+    copyBtn.addEventListener('click', copyResults);
+
+    function processFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        try {
+          analyzeData(json);
+        } catch(err) {
+          document.getElementById('results').classList.add('show');
+          document.getElementById('textOutput').textContent = 'Error processing file:\n' + err.message + '\n' + err.stack;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // null = any blank J qualifies; array = only those specific J values qualify
+    var REQUIRED_DOC_CONFIG = {
+      'TOWER VALIDATION V6.2 (W/AI)': null,
+      'SITE VALIDATION V6.2 (W/AI)': null,
+      'PERMITS AND INSPECTIONS V6.2 (W/AI)': null,
+      'TMO - POST VSS CHECKLIST V6': ['Torque validation form - document upload']
+    };
+
+    function analyzeData(rows) {
+      const formStats = {};
+      let totals = { submitted: 0, blank: 0, rejected: 0 };
+      let photoTotals = { submitted: 0, ignored: 0, blank: 0, rejected: 0 };
+      let sessionName = '';
+      // requiredDocBlanks: { formName -> Set of J values }
+      const requiredDocBlanks = {};
+      const requiredDocRejected = {};
+      const requiredDocSubmitted = {};
+
+      // Get session name from cell A1 (first row, first column)
+      if (rows[0] && rows[0][0]) {
+        sessionName = rows[0][0].toString().trim();
+      }
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const formName = (row[7] || '').toString().trim();
+        const status = row[12];
+        const eVal = (row[4] || '').toString().toUpperCase().trim();
+        const jVal = (row[9] || '').toString().trim();
+        
+        if (!formName) continue;
+        
+        let eCat = 'OTHERS';
+        if (eVal.includes('DOCUMENT')) {
+          eCat = 'DOCUMENT UPLOAD';
+        } else if (eVal.includes('PHOTO')) {
+          eCat = 'PHOTO REQUIREMENT';
+        }
+        
+        const key = `${formName}|||${eCat}`;
+        
+        if (!formStats[key]) {
+          formStats[key] = { formName, eCategory: eCat, submitted: 0, blank: 0, rejected: 0 };
+        }
+        
+        const val = (status === 0 || status === '0') ? '0' : (status || '').toString().trim();
+        const isPhoto = eCat === 'PHOTO REQUIREMENT';
+        
+        if (val === '0') { 
+          formStats[key].submitted++; 
+          totals.submitted++;
+          if (isPhoto) photoTotals.submitted++;
+
+          // Track for REQUIRED DOCUMENT submitted
+          var formNameUpper0 = formName.toUpperCase();
+          var matchedKey0 = null;
+          var configKeys0 = Object.keys(REQUIRED_DOC_CONFIG);
+          for (var ck0 = 0; ck0 < configKeys0.length; ck0++) {
+            if (formNameUpper0 === configKeys0[ck0].toUpperCase()) { matchedKey0 = configKeys0[ck0]; break; }
+          }
+          if (matchedKey0 && jVal) {
+            var jFilter0 = REQUIRED_DOC_CONFIG[matchedKey0];
+            var jAllowed0 = jFilter0 === null || jFilter0.indexOf(jVal) !== -1;
+            if (jAllowed0) {
+              if (!requiredDocSubmitted[formName]) requiredDocSubmitted[formName] = [];
+              if (requiredDocSubmitted[formName].indexOf(jVal) === -1) requiredDocSubmitted[formName].push(jVal);
+            }
+          }
+        }
+        else if (val === '1' || val === '4' || val === '6') {
+          if (isPhoto) photoTotals.ignored++;
+        }
+        else if (val === '2' || val === '7' || val === '5') { 
+          formStats[key].rejected++; 
+          totals.rejected++;
+          if (isPhoto) photoTotals.rejected++;
+
+          // Track for REQUIRED DOCUMENT rejected
+          var formNameUpper2 = formName.toUpperCase();
+          var matchedKey2 = null;
+          var configKeys2 = Object.keys(REQUIRED_DOC_CONFIG);
+          for (var ck2 = 0; ck2 < configKeys2.length; ck2++) {
+            if (formNameUpper2 === configKeys2[ck2].toUpperCase()) { matchedKey2 = configKeys2[ck2]; break; }
+          }
+          if (matchedKey2 && jVal) {
+            var jFilter2 = REQUIRED_DOC_CONFIG[matchedKey2];
+            var jAllowed2 = jFilter2 === null || jFilter2.indexOf(jVal) !== -1;
+            if (jAllowed2) {
+              if (!requiredDocRejected[formName]) requiredDocRejected[formName] = [];
+              if (requiredDocRejected[formName].indexOf(jVal) === -1) requiredDocRejected[formName].push(jVal);
+            }
+          }
+        }
+        else if (val === '') { 
+          formStats[key].blank++; 
+          totals.blank++;
+          if (isPhoto) photoTotals.blank++;
+
+          // Track for REQUIRED DOCUMENT if H matches config rules
+          var formNameUpper = formName.toUpperCase();
+          var matchedKey = null;
+          var configKeys = Object.keys(REQUIRED_DOC_CONFIG);
+          for (var ck = 0; ck < configKeys.length; ck++) {
+            if (formNameUpper === configKeys[ck].toUpperCase()) { matchedKey = configKeys[ck]; break; }
+          }
+          if (matchedKey && jVal) {
+            var jFilter = REQUIRED_DOC_CONFIG[matchedKey];
+            var jAllowed = jFilter === null || jFilter.indexOf(jVal) !== -1;
+            if (jAllowed) {
+              if (!requiredDocBlanks[formName]) requiredDocBlanks[formName] = [];
+              if (requiredDocBlanks[formName].indexOf(jVal) === -1) requiredDocBlanks[formName].push(jVal);
+            }
+          }
+        }
+      }
+
+      displayResults(formStats, totals, photoTotals, requiredDocBlanks, requiredDocRejected, requiredDocSubmitted, sessionName);
+    }
+
+    function displayResults(formStats, totals, photoTotals, requiredDocBlanks, requiredDocRejected, requiredDocSubmitted, sessionName) {
+      document.getElementById('results').classList.add('show');
+      
+      document.getElementById('totalSummary').innerHTML = `
+        <div class="total-item"><div class="total-value stat-submitted">${totals.submitted}</div><div class="total-label">SUBMITTED</div></div>
+        <div class="total-item"><div class="total-value stat-blank">${totals.blank}</div><div class="total-label">BLANK</div></div>
+        <div class="total-item"><div class="total-value stat-rejected">${totals.rejected}</div><div class="total-label">REJECTED</div></div>
+      `;
+      
+      drawPieChart(photoTotals, sessionName);
+
+      const categories = {
+        'DOCUMENT UPLOAD': { rejected: {}, submitted: {}, notReceived: {} },
+        'PHOTO REQUIREMENT': { rejected: {}, submitted: {}, notReceived: {} },
+        'OTHERS': { rejected: {}, submitted: {}, notReceived: {} }
+      };
+      
+      for (const [key, stats] of Object.entries(formStats)) {
+        const displayName = stats.formName.replace(/^Form\s*/i, '').replace(/\s*name\s*/i, '');
+        const isFormName = stats.formName.toLowerCase().trim() === 'form name';
+        const eCat = stats.eCategory;
+        
+        if (!isFormName) {
+          if (stats.rejected > 0) {
+            if (!categories[eCat].rejected[displayName]) categories[eCat].rejected[displayName] = 0;
+            categories[eCat].rejected[displayName] += stats.rejected;
+          }
+          if (stats.submitted > 0) {
+            if (!categories[eCat].submitted[displayName]) categories[eCat].submitted[displayName] = 0;
+            categories[eCat].submitted[displayName] += stats.submitted;
+          }
+          if (stats.blank > 0) {
+            if (!categories[eCat].notReceived[displayName]) categories[eCat].notReceived[displayName] = 0;
+            categories[eCat].notReceived[displayName] += stats.blank;
+          }
+        }
+      }
+      
+      let textLines = [];
+
+      // === REQUIRED DOCUMENT section ===
+      const reqDocEntries = Object.entries(requiredDocBlanks);
+      const reqDocRejEntries = Object.entries(requiredDocRejected);
+      const reqDocSubEntries = Object.entries(requiredDocSubmitted);
+      if (reqDocEntries.length > 0 || reqDocRejEntries.length > 0 || reqDocSubEntries.length > 0) {
+        textLines.push('=== REQUIRED DOCUMENT ===');
+        textLines.push('');
+        
+        if (reqDocRejEntries.length > 0) {
+          textLines.push('<span class="text-red">(F) The following required documents were rejected during VSS session:</span>');
+          for (var rj = 0; rj < reqDocRejEntries.length; rj++) {
+            var rjFormName = reqDocRejEntries[rj][0];
+            var rjArr = reqDocRejEntries[rj][1];
+            textLines.push('<span class="text-red">' + rjFormName + ':</span>');
+            for (var rji = 0; rji < rjArr.length; rji++) {
+              textLines.push('<span class="text-red">  - ' + rjArr[rji] + '</span>');
+            }
+          }
+          textLines.push('');
+        }
+        
+        if (reqDocSubEntries.length > 0) {
+          textLines.push('<span class="text-green">(P) The following required documents were submitted and pending approval in Talonview forms:</span>');
+          for (var rs = 0; rs < reqDocSubEntries.length; rs++) {
+            var rsFormName = reqDocSubEntries[rs][0];
+            var rsArr = reqDocSubEntries[rs][1];
+            textLines.push('<span class="text-green">' + rsFormName + ':</span>');
+            for (var rsi = 0; rsi < rsArr.length; rsi++) {
+              textLines.push('<span class="text-green">  - ' + rsArr[rsi] + '</span>');
+            }
+          }
+          textLines.push('');
+        }
+        
+        if (reqDocEntries.length > 0) {
+          textLines.push('<span class="text-orange">(P) The following required documents were not yet uploaded / submitted in Talonview forms:</span>');
+          for (var ri = 0; ri < reqDocEntries.length; ri++) {
+            var rdFormName = reqDocEntries[ri][0];
+            var jArr = reqDocEntries[ri][1];
+            textLines.push('<span class="text-orange">' + rdFormName + ':</span>');
+            for (var ji = 0; ji < jArr.length; ji++) {
+              textLines.push('<span class="text-orange">  - ' + jArr[ji] + '</span>');
+            }
+          }
+          textLines.push('');
+        }
+      }
+      
+      for (const [eCat, data] of Object.entries(categories)) {
+        const hasData = Object.keys(data.rejected).length > 0 || 
+                        Object.keys(data.submitted).length > 0 || 
+                        Object.keys(data.notReceived).length > 0;
+        
+        if (hasData) {
+          textLines.push(`=== ${eCat} ===`);
+          textLines.push('');
+          
+          const isDoc = eCat === 'DOCUMENT UPLOAD';
+          const isOther = eCat === 'OTHERS';
+          const itemType = isDoc ? 'documents' : (isOther ? 'items' : 'photos');
+          const itemTypeSingular = isDoc ? 'document' : (isOther ? 'item' : 'photo');
+          
+          if (Object.keys(data.rejected).length > 0) {
+            textLines.push(isOther ? '<span class="text-red">(F) The following were rejected during VSS session:</span>' : `<span class="text-red">(F) The following ${itemType} were rejected during VSS session:</span>`);
+            for (const [name, count] of Object.entries(data.rejected)) {
+              textLines.push(`<span class="text-red">(${count}) ${name}</span>`);
+            }
+            textLines.push('');
+          }
+          
+          if (Object.keys(data.submitted).length > 0) {
+            textLines.push(isOther ? '<span class="text-green">(P) The following were submitted and pending approval in Talonview forms:</span>' : `<span class="text-green">(P) The following ${itemTypeSingular} requirements were submitted and pending approval in Talonview forms:</span>`);
+            for (const [name, count] of Object.entries(data.submitted)) {
+              textLines.push(`<span class="text-green">(${count}) ${name}</span>`);
+            }
+            textLines.push('');
+          }
+          
+          if (Object.keys(data.notReceived).length > 0) {
+            textLines.push(isOther ? '<span class="text-orange">(P) The following were not yet uploaded / submitted in Talonview forms:</span>' : `<span class="text-orange">(P) The following ${itemType} were not yet uploaded / submitted in Talonview forms:</span>`);
+            for (const [name, count] of Object.entries(data.notReceived)) {
+              textLines.push(`<span class="text-orange">(${count}) ${name}</span>`);
+            }
+            textLines.push('');
+          }
+        }
+      }
+      
+      outputText = textLines.join('\n');
+      document.getElementById('textOutput').innerHTML = outputText;
+      document.getElementById('copyBtn').classList.add('show');
+    }
+
+    function copyResults() {
+      const textToCopy = document.getElementById('textOutput').textContent;
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => btn.textContent = '📋 Copy Text', 2000);
+      }).catch(() => {
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => btn.textContent = '📋 Copy Text', 2000);
+      });
+    }
+    
+    function drawPieChart(data, sessionName) {
+      const total = data.submitted + data.ignored + data.blank + data.rejected;
+      if (total === 0) return;
+      
+      document.getElementById('pieContainer').style.display = 'block';
+      
+      // Display session name
+      if (sessionName) {
+        document.getElementById('sessionName').textContent = sessionName;
+      }
+      
+      const colors = {
+        submitted: '#fbbf24',
+        ignored: '#4ade80',
+        blank: '#94a3b8',
+        rejected: '#f87171'
+      };
+      
+      const labels = {
+        submitted: 'Submitted (0)',
+        ignored: 'Pass (1, 4, 6)',
+        blank: 'Blank',
+        rejected: 'Rejected (2, 5, 7)'
+      };
+      
+      let segments = [];
+      if (data.submitted > 0) segments.push({ key: 'submitted', value: data.submitted });
+      if (data.ignored > 0) segments.push({ key: 'ignored', value: data.ignored });
+      if (data.blank > 0) segments.push({ key: 'blank', value: data.blank });
+      if (data.rejected > 0) segments.push({ key: 'rejected', value: data.rejected });
+      
+      // Draw on canvas - calculate dynamic height first
+      const canvas = document.getElementById('pieCanvas');
+      const ctx = canvas.getContext('2d');
+      const canvasWidth = canvas.width;
+      const centerX = canvasWidth / 2;
+      const radius = 80;
+      const padding = 15;
+      
+      // Calculate text lines for session name
+      ctx.font = '10px Segoe UI';
+      let sessionLines = [];
+      if (sessionName) {
+        const maxWidth = canvasWidth - 20;
+        const words = sessionName.split(' ');
+        let line = '';
+        
+        for (let w = 0; w < words.length; w++) {
+          const testLine = line + words[w] + ' ';
+          const metrics = ctx.measureText(testLine);
+          if (metrics.width > maxWidth && line !== '') {
+            sessionLines.push(line.trim());
+            line = words[w] + ' ';
+          } else {
+            line = testLine;
+          }
+        }
+        sessionLines.push(line.trim());
+      }
+      
+      const textHeight = sessionLines.length * 14;
+      const legendCount = segments.length;
+      const legendHeight = legendCount * 18;
+      
+      // Calculate total height needed
+      const totalHeight = padding + textHeight + 10 + (radius * 2) + 25 + legendHeight + padding;
+      
+      // Resize canvas
+      canvas.height = totalHeight;
+      
+      // Clear canvas
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw session name with text wrapping
+      let textStartY = padding;
+      if (sessionName) {
+        ctx.fillStyle = '#00d2ff';
+        ctx.font = '10px Segoe UI';
+        ctx.textAlign = 'center';
+        
+        for (let l = 0; l < sessionLines.length; l++) {
+          ctx.fillText(sessionLines[l], centerX, textStartY + l * 14 + 10);
+        }
+        textStartY += sessionLines.length * 14 + 10;
+      }
+      
+      const centerY = textStartY + radius + 5;
+      
+      // Draw pie
+      let currentAngle = -Math.PI / 2;
+      
+      segments.forEach(seg => {
+        const sliceAngle = (seg.value / total) * 2 * Math.PI;
+        
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+        ctx.closePath();
+        ctx.fillStyle = colors[seg.key];
+        ctx.fill();
+        
+        currentAngle += sliceAngle;
+      });
+      
+      // Draw legend on canvas - centered at bottom
+      ctx.font = '10px Segoe UI';
+      
+      const legendItems = segments.map(seg => {
+        const pct = ((seg.value / total) * 100).toFixed(1);
+        return { color: colors[seg.key], text: `${labels[seg.key]}: ${seg.value} (${pct}%)` };
+      });
+      
+      const legendY = centerY + radius + 25;
+      const itemHeight = 18;
+      
+      // Find the widest legend item for alignment
+      let maxTextWidth = 0;
+      legendItems.forEach(item => {
+        const w = ctx.measureText(item.text).width;
+        if (w > maxTextWidth) maxTextWidth = w;
+      });
+      
+      const totalItemWidth = 14 + maxTextWidth;
+      const startX = centerX - totalItemWidth / 2;
+      
+      legendItems.forEach((item, i) => {
+        const y = legendY + i * itemHeight;
+        
+        // Draw color dot
+        ctx.beginPath();
+        ctx.arc(startX + 5, y, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = item.color;
+        ctx.fill();
+        
+        // Draw text
+        ctx.fillStyle = '#c9d1d9';
+        ctx.textAlign = 'left';
+        ctx.fillText(item.text, startX + 14, y + 4);
+      });
+      
+      // HTML legend
+      let legendHtml = '';
+      segments.forEach(seg => {
+        const pct = ((seg.value / total) * 100).toFixed(1);
+        legendHtml += `<div class="pie-legend-item"><div class="pie-dot" style="background:${colors[seg.key]}"></div>${labels[seg.key]}: ${seg.value} (${pct}%)</div>`;
+      });
+      document.getElementById('pieLegend').innerHTML = legendHtml;
+    }
+  </script>
+</body>
+</html>

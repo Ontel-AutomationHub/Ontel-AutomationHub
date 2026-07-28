@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>National Color Coding Standard</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+// Lightweight stand-ins for the lucide-react icons used in this tool
+const Upload = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+const Download = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+const Camera = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
+  </svg>
+);
+
+// Color mapping based on telecommunications standards
+const SECTOR_COLORS = {
+  '1': '#FF0000',     // Alpha - Red
+  '2': '#006400',     // Beta - Dark Green
+  '3': '#0000FF',     // Gamma - Blue
+  '4': '#FFFF00',     // Delta - Yellow
+  '5': '#FFFFFF',     // Epsilon - White
+  '6': '#800080'      // Zeta - Purple
+};
+
+const FREQUENCY_COLORS = {
+  '600': '#FFC0CB',   // Pink
+  '700': '#FFFFFF',   // White
+  '1900': '#FFA500',  // Orange
+  '2100': '#006400',  // Dark Green
+  '2500': '#FFFF00',  // Yellow
+  '5000': '#800080',  // LAA-5GHz - Purple
+  '28000': '#0000FF', // 28GHz - Blue
+  '39000': '#FF0000', // 39GHz - Red
+  'AWS3': '#8B4513'   // Brown
+};
+
+const TECHNOLOGY_COLORS = {
+  'G': '#FFFFFF',     // GSM - White
+  'U': '#0000FF',     // UMTS - Blue
+  'L': '#FFA500',     // LTE - Orange
+  'N': '#FFC0CB'      // 5G - Pink
+};
+
+const SPACING_COLOR = '#000000'; // Black for spacing
+
+const RFDSCableVisualizer = () => {
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const [extractedData, setExtractedData] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Handle paste event for screenshots
+  React.useEffect(() => {
+    const handlePaste = async (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          e.preventDefault();
+          const blob = items[i].getAsFile();
+          if (blob) {
+            setIsProcessing(true);
+            setError(null);
+            
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+              setUploadedImage(event.target.result);
+              
+              try {
+                const analyzed = await analyzeRFDS(event.target.result);
+                setExtractedData(analyzed);
+              } catch (err) {
+                setError("Failed to analyze image: " + err.message);
+              } finally {
+                setIsProcessing(false);
+              }
+            };
+            reader.readAsDataURL(blob);
+          }
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+
+  const parseRFDSTechnology = (techString) => {
+    // Parse technology strings like "L600", "N1900", "L2100", "LAWS3", etc.
+    
+    // Special case: Handle "LAWS3" as L + AWS3
+    if (techString.toUpperCase() === 'LAWS3') {
+      return { technology: 'L', frequency: 'AWS3' };
+    }
+    
+    // Handle "NLAA" as N + LAA (5GHz)
+    if (techString.toUpperCase() === 'NLAA') {
+      return { technology: 'N', frequency: '5000' };
+    }
+    
+    // Standard pattern: [Letter][Frequency]
+    const match = techString.match(/^([GLUN])(\d+|AWS3|LAA)$/i);
+    if (match) {
+      const tech = match[1].toUpperCase();
+      let freq = match[2];
+      
+      // Map frequency to standard values
+      if (freq === '600') freq = '600';
+      else if (freq === '700') freq = '700';
+      else if (freq === '1900') freq = '1900';
+      else if (freq === '2100') freq = '2100';
+      else if (freq === '2500') freq = '2500';
+      else if (freq.toUpperCase().includes('AWS')) freq = 'AWS3';
+      else if (freq === '28000' || freq === '28') freq = '28000';
+      else if (freq === '39000' || freq === '39') freq = '39000';
+      else if (freq.toUpperCase().includes('LAA') || freq === '5000') freq = '5000';
+      
+      return { technology: tech, frequency: freq };
+    }
+    return null;
+  };
+
+  const isLowBand = (frequency) => {
+    // Low band: 600, 700
+    // High band: 1900, 2100, 2500, AWS3, 5000, 28000, 39000
+    return frequency === '600' || frequency === '700';
+  };
+
+  const getAntennaType = (model) => {
+    // Check if it's an AIR antenna (Active Antenna - Massive MIMO)
+    if (model.toUpperCase().includes('AIR')) {
+      return 'AIR';
+    }
+    // Check for Octo antenna
+    if (model.toUpperCase().includes('OCTO')) {
+      return 'OCTO';
+    }
+    // Check for Quad antenna
+    if (model.toUpperCase().includes('QUAD')) {
+      return 'QUAD';
+    }
+    // Check for Hex antenna
+    if (model.toUpperCase().includes('HEX')) {
+      return 'HEX';
+    }
+    // Check for AEHC antenna
+    if (model.toUpperCase().includes('AEHC')) {
+      return 'AEHC';
+    }
+    // Default
+    return 'OTHER';
+  };
+
+  const getCableCount = (antennaModel, bandType = '') => {
+    const antennaType = getAntennaType(antennaModel);
+    // AIR antennas only have 2 cables
+    if (antennaType === 'AIR') {
+      return 2;
+    }
+    // HEX antennas: 2 cables for Low Band, 4 cables for High Band
+    if (antennaType === 'HEX') {
+      if (bandType === 'Low Band') {
+        return 2;
+      }
+      return 4; // High Band or no band specified
+    }
+    // AEHC antennas: 4 cables regardless of band (dark tech or not)
+    if (antennaType === 'AEHC') {
+      return 4;
+    }
+    // All other antennas have 4 cables
+    return 4;
+  };
+
+  const filterDarkTech = (technologies, antennaModel) => {
+    const antennaType = getAntennaType(antennaModel);
+    // AEHC antennas keep all technologies including dark tech
+    if (antennaType === 'AEHC') {
+      return technologies;
+    }
+    // For all other antennas, filter out dark tech
+    return technologies.filter(tech => {
+      const techUpper = tech.toUpperCase();
+      // Filter out entries that contain "DARK"
+      return !techUpper.includes('DARK');
+    });
+  };
+
+  const splitAntennaByBand = (antenna) => {
+    // First filter out dark tech (except for AEHC)
+    const filteredTechnologies = filterDarkTech(antenna.technologies, antenna.model);
+    
+    const lowBandTechs = [];
+    const highBandTechs = [];
+    
+    filteredTechnologies.forEach((tech) => {
+      const parsed = parseRFDSTechnology(tech);
+      if (parsed) {
+        if (isLowBand(parsed.frequency)) {
+          lowBandTechs.push(tech);
+        } else {
+          highBandTechs.push(tech);
+        }
+      }
+    });
+    
+    const result = [];
+    
+    // Only create groups if they have technologies
+    if (lowBandTechs.length > 0) {
+      result.push({
+        ...antenna,
+        technologies: lowBandTechs,
+        bandType: 'Low Band',
+        displayNumber: `${antenna.number}L`
+      });
+    }
+    
+    if (highBandTechs.length > 0) {
+      result.push({
+        ...antenna,
+        technologies: highBandTechs,
+        bandType: 'High Band',
+        displayNumber: `${antenna.number}H`
+      });
+    }
+    
+    // If only one band type exists, don't add suffix
+    if (result.length === 1) {
+      result[0].displayNumber = antenna.number.toString();
+      result[0].bandType = '';
+    }
+    
+    return result;
+  };
+
+  const handleImageUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setIsProcessing(true);
+    setError(null);
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      setUploadedImage(e.target.result);
+      
+      try {
+        const analyzed = await analyzeRFDS(e.target.result);
+        setExtractedData(analyzed);
+      } catch (err) {
+        setError("Failed to analyze image: " + err.message);
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const analyzeRFDS = async (imageData) => {
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: "image/png",
+                    data: imageData.split(',')[1]
+                  }
+                },
+                {
+                  type: "text",
+                  text: `Analyze this RFDS (Radio Frequency Design Sheet) screenshot carefully and extract:
+
+1. Sector number (1=Alpha, 2=Beta, 3=Gamma, etc.) - Look at the title "Sector X (Proposed)"
+2. For each antenna column (look for "Antenna" row with numbers 1, 2, 3, etc.):
+   - Antenna number
+   - Antenna model (from "Antenna Model" row)
+   - All active technologies from the "Active Tech" row in their ports (P1, P2, P3, P4, P5, P6)
+   - Technologies are formatted like: L600, N600, L700, L1900, L2100, N1900, N2500, etc.
+   - List ALL technologies found in all ports for each antenna
+
+IMPORTANT: 
+- List technologies in the order they appear from left to right across the ports
+- Include every technology shown, even if repeated
+- Technologies use format: [Letter][Frequency] where Letter is L (LTE), N (5G), U (UMTS), G (GSM)
+
+Return ONLY valid JSON in this exact format:
+{
+  "sector": 1,
+  "antennas": [
+    {
+      "number": 1,
+      "model": "FFFHH-65C-R3 (Octo)",
+      "technologies": ["L600", "N600", "L700", "L1900", "L2100", "N1900"]
+    },
+    {
+      "number": 2,
+      "model": "AIR_6419_B41",
+      "technologies": ["N2500"]
+    }
+  ]
+}`
+                }
+              ]
+            }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      const textContent = data.content.find(item => item.type === "text");
+      
+      if (textContent) {
+        const cleanText = textContent.text.replace(/```json|```/g, '').trim();
+        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+      }
+      
+      throw new Error("Could not parse RFDS data");
+    } catch (error) {
+      console.error("Analysis error:", error);
+      throw error;
+    }
+  };
+
+  const generateCableColors = (sector, technologies, cableNumber) => {
+    const colors = [];
+    
+    // Add sector colors based on cable number
+    // Cable 1: 1 sector color, Cable 2: 2 sector colors, Cable 3: 3 sector colors, Cable 4: 4 sector colors
+    const sectorColor = SECTOR_COLORS[sector.toString()] || '#808080';
+    for (let i = 0; i < cableNumber; i++) {
+      colors.push({ color: sectorColor, label: `Sector ${sector}` });
+      // Add small spacing between sector colors (except after the last one)
+      if (i < cableNumber - 1) {
+        colors.push({ color: SPACING_COLOR, label: 'Small Spacing', isSpacing: true, isSmall: true });
+      }
+    }
+    
+    // Add WIDE spacing after all sector colors
+    colors.push({ color: SPACING_COLOR, label: 'Wide Spacing', isSpacing: true, isWide: true });
+    
+    // Track used frequencies and technologies to avoid repetition
+    const usedFrequencies = new Set();
+    const usedTechnologies = new Set();
+    
+    // Collect unique frequencies first
+    const uniqueFrequencies = [];
+    technologies.forEach((tech) => {
+      const parsed = parseRFDSTechnology(tech);
+      if (parsed && !usedFrequencies.has(parsed.frequency)) {
+        uniqueFrequencies.push(parsed);
+        usedFrequencies.add(parsed.frequency);
+      }
+    });
+    
+    // Add frequency colors
+    uniqueFrequencies.forEach((parsed, index) => {
+      const freqColor = FREQUENCY_COLORS[parsed.frequency] || '#808080';
+      colors.push({ color: freqColor, label: `${parsed.frequency}MHz`, type: 'frequency' });
+      // Add small spacing between frequencies (except after the last one)
+      if (index < uniqueFrequencies.length - 1) {
+        colors.push({ color: SPACING_COLOR, label: 'Small Spacing', isSpacing: true, isSmall: true });
+      }
+    });
+    
+    // Add WIDE spacing between frequencies and technologies
+    if (uniqueFrequencies.length > 0) {
+      colors.push({ color: SPACING_COLOR, label: 'Wide Spacing', isSpacing: true, isWide: true });
+    }
+    
+    // Collect unique technologies
+    const uniqueTechnologies = [];
+    technologies.forEach((tech) => {
+      const parsed = parseRFDSTechnology(tech);
+      if (parsed && !usedTechnologies.has(parsed.technology)) {
+        uniqueTechnologies.push(parsed);
+        usedTechnologies.add(parsed.technology);
+      }
+    });
+    
+    // Add technology colors
+    uniqueTechnologies.forEach((parsed, index) => {
+      const techColor = TECHNOLOGY_COLORS[parsed.technology] || '#808080';
+      colors.push({ color: techColor, label: parsed.technology, type: 'technology' });
+      // Add small spacing between technologies (except after the last one)
+      if (index < uniqueTechnologies.length - 1) {
+        colors.push({ color: SPACING_COLOR, label: 'Small Spacing', isSpacing: true, isSmall: true });
+      }
+    });
+    
+    return colors;
+  };
+
+  const CableColumn = ({ cableNumber, sector, technologies, antennaModel, antennaNumber, bandType }) => {
+    const colors = generateCableColors(sector, technologies, cableNumber);
+    const smallSpacingHeight = 4;   // Small black line between same-type colors (reduced from 6)
+    const wideSpacingHeight = 13;   // Wide black line between different sections (reduced from 18)
+    const colorHeight = 56;          // Color band height (reduced from 80)
+    
+    return (
+      <div className="flex flex-col items-center">
+        <div className="bg-white rounded-lg shadow-lg p-3 w-24">
+          <div className="text-center font-semibold text-gray-700 mb-2 text-xs">
+            Cable {cableNumber}
+          </div>
+          <div className="border-2 border-black rounded-lg overflow-hidden">
+            {colors.map((colorItem, idx) => {
+              let height = colorHeight;
+              if (colorItem.isSpacing) {
+                height = colorItem.isWide ? wideSpacingHeight : (colorItem.isSmall ? smallSpacingHeight : smallSpacingHeight);
+              }
+              
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    backgroundColor: colorItem.color,
+                    height: `${height}px`,
+                    borderBottom: idx < colors.length - 1 ? '2px solid black' : 'none',
+                    border: colorItem.color === '#FFFFFF' ? '1px solid #ccc' : 'none'
+                  }}
+                  className="w-full"
+                  title={colorItem.label}
+                />
+              );
+            })}
+          </div>
+          <div className="text-xs text-gray-600 mt-2 text-center break-words">
+            Ant {antennaNumber}
+            {bandType && <div className="text-xs text-blue-600 font-semibold">{bandType}</div>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const SmallCableColumn = ({ cableNumber, sector, technologies, antennaModel, antennaNumber, bandType }) => {
+    const colors = generateCableColors(sector, technologies, cableNumber);
+    const smallSpacingHeight = 3;   // Extra small spacing
+    const wideSpacingHeight = 9;    // Smaller wide spacing
+    const colorHeight = 40;          // Smaller color height
+    
+    return (
+      <div className="flex flex-col items-center">
+        <div className="bg-white rounded-lg shadow-md p-2 w-16">
+          <div className="text-center font-semibold text-gray-700 mb-1 text-xs">
+            C{cableNumber}
+          </div>
+          <div className="border-2 border-black rounded-md overflow-hidden">
+            {colors.map((colorItem, idx) => {
+              let height = colorHeight;
+              if (colorItem.isSpacing) {
+                height = colorItem.isWide ? wideSpacingHeight : (colorItem.isSmall ? smallSpacingHeight : smallSpacingHeight);
+              }
+              
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    backgroundColor: colorItem.color,
+                    height: `${height}px`,
+                    borderBottom: idx < colors.length - 1 ? '1px solid black' : 'none',
+                    border: colorItem.color === '#FFFFFF' ? '1px solid #ccc' : 'none'
+                  }}
+                  className="w-full"
+                  title={colorItem.label}
+                />
+              );
+            })}
+          </div>
+          <div className="text-xs text-gray-600 mt-1 text-center break-words leading-tight">
+            {antennaNumber}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ColorLegend = () => {
+    return (
+      <div className="bg-white rounded-lg shadow-lg p-6 max-w-4xl mx-auto mb-6">
+        <h3 className="text-xl font-bold mb-4 text-gray-800">Color Code Legend</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Sector Colors */}
+          <div>
+            <h4 className="font-semibold text-gray-700 mb-2">Sector (1st Band)</h4>
+            <div className="space-y-1">
+              {Object.entries({
+                'Alpha (1)': SECTOR_COLORS['1'],
+                'Beta (2)': SECTOR_COLORS['2'],
+                'Gamma (3)': SECTOR_COLORS['3'],
+                'Delta (4)': SECTOR_COLORS['4'],
+                'Epsilon (5)': SECTOR_COLORS['5'],
+                'Zeta (6)': SECTOR_COLORS['6']
+              }).map(([label, color]) => (
+                <div key={label} className="flex items-center gap-2">
+                  <div 
+                    className="w-6 h-6 rounded border border-gray-300" 
+                    style={{ 
+                      backgroundColor: color,
+                      border: color === '#FFFFFF' ? '1px solid #333' : '1px solid #ccc'
+                    }}
+                  />
+                  <span className="text-sm">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Frequency Colors */}
+          <div>
+            <h4 className="font-semibold text-gray-700 mb-2">Frequency (2nd Band)</h4>
+            <div className="space-y-1">
+              {Object.entries({
+                '600 MHz': FREQUENCY_COLORS['600'],
+                '700 MHz': FREQUENCY_COLORS['700'],
+                '1900 MHz': FREQUENCY_COLORS['1900'],
+                '2100 MHz': FREQUENCY_COLORS['2100'],
+                '2500 MHz': FREQUENCY_COLORS['2500'],
+                'LAA-5GHz': FREQUENCY_COLORS['5000'],
+                '28GHz': FREQUENCY_COLORS['28000'],
+                '39GHz': FREQUENCY_COLORS['39000'],
+                'AWS3': FREQUENCY_COLORS['AWS3']
+              }).map(([label, color]) => (
+                <div key={label} className="flex items-center gap-2">
+                  <div 
+                    className="w-6 h-6 rounded border border-gray-300" 
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="text-sm">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Technology Colors */}
+          <div>
+            <h4 className="font-semibold text-gray-700 mb-2">Technology (3rd Band)</h4>
+            <div className="space-y-1">
+              {Object.entries({
+                'GSM (G)': TECHNOLOGY_COLORS['G'],
+                'UMTS (U)': TECHNOLOGY_COLORS['U'],
+                'LTE (L)': TECHNOLOGY_COLORS['L'],
+                '5G (N)': TECHNOLOGY_COLORS['N']
+              }).map(([label, color]) => (
+                <div key={label} className="flex items-center gap-2">
+                  <div 
+                    className="w-6 h-6 rounded border border-gray-300" 
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="text-sm">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <h4 className="font-semibold text-gray-700 mb-2">Black Spacing Guide</h4>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div 
+                className="w-6 h-2 rounded border border-gray-300" 
+                style={{ backgroundColor: SPACING_COLOR }}
+              />
+              <span className="text-sm">Small spacing: Between same-type colors (sector-to-sector, frequency-to-frequency, tech-to-tech)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div 
+                className="w-6 h-4 rounded border border-gray-300" 
+                style={{ backgroundColor: SPACING_COLOR }}
+              />
+              <span className="text-sm font-semibold">Wide spacing: Between different sections (sectors → frequencies → technologies)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const downloadVisualization = () => {
+    // Create a canvas to render the visualization
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Calculate total band groups
+    let totalBandGroups = 0;
+    extractedData.antennas.forEach(antenna => {
+      totalBandGroups += splitAntennaByBand(antenna).length;
+    });
+    
+    // Set canvas size based on number of band groups (4 cables per group) - reduced by 30%
+    const totalCables = totalBandGroups * 4;
+    canvas.width = Math.max(560, totalCables * 84 + 70);  // reduced from 800, 120, 100
+    canvas.height = 560;  // reduced from 800
+    
+    // Draw white background
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add title
+    ctx.fillStyle = 'black';
+    ctx.font = 'bold 14px Arial';  // reduced from 20px
+    ctx.fillText(`Sector ${extractedData.sector} Cable Visualization`, 14, 28);  // reduced from 20, 40
+    
+    // Draw cables - reduced dimensions by 30%
+    const cableWidth = 70;  // reduced from 100
+    const cableSpacing = 84;  // reduced from 120
+    const startX = 35;  // reduced from 50
+    const startY = 56;  // reduced from 80
+    const smallSpacingHeight = 4;  // reduced from 6
+    const wideSpacingHeight = 13;  // reduced from 18
+    
+    let cableIndex = 0;
+    extractedData.antennas.forEach((antenna) => {
+      const bandGroups = splitAntennaByBand(antenna);
+      
+      bandGroups.forEach((bandGroup) => {
+        // Draw 4 cables for each band group
+        for (let cableNum = 1; cableNum <= 4; cableNum++) {
+          const x = startX + (cableIndex * cableSpacing);
+          const colors = generateCableColors(extractedData.sector, bandGroup.technologies, cableNum);
+          
+          // Draw cable label - reduced font sizes
+          ctx.font = '10px Arial';  // reduced from 14px
+          ctx.fillText(`Cable ${cableNum}`, x + 18, startY - 21);  // adjusted positions
+          ctx.font = '8px Arial';  // reduced from 12px
+          ctx.fillText(`Ant ${bandGroup.displayNumber}`, x + 18, startY - 8);  // adjusted positions
+          if (bandGroup.bandType) {
+            ctx.font = '7px Arial';  // reduced from 10px
+            ctx.fillStyle = '#2563eb';
+            ctx.fillText(bandGroup.bandType, x + 7, startY - 1);  // adjusted positions
+            ctx.fillStyle = 'black';
+          }
+          
+          let currentY = startY;
+          colors.forEach(colorItem => {
+            ctx.fillStyle = colorItem.color;
+            let height = 42;  // reduced from 60
+            if (colorItem.isSpacing) {
+              height = colorItem.isWide ? wideSpacingHeight : (colorItem.isSmall ? smallSpacingHeight : smallSpacingHeight);
+            }
+            ctx.fillRect(x, currentY, cableWidth, height);
+            
+            // Draw border
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 1.4;  // reduced from 2
+            ctx.strokeRect(x, currentY, cableWidth, height);
+            
+            currentY += height;
+          });
+          
+          cableIndex++;
+        }
+      });
+    });
+    
+    // Download
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rfds-sector-${extractedData.sector}-cables.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  };
+
+  const downloadHTML = () => {
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFDS Sector ${extractedData.sector} - Cable Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .legend {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .legend h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        .legend-section h4 {
+            margin-bottom: 10px;
+            color: #555;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .spacing-guide {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #ddd;
+        }
+        .antenna-group {
+            margin-bottom: 40px;
+            page-break-inside: avoid;
+        }
+        .antenna-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .antenna-header h2 {
+            color: #333;
+            font-size: 24px;
+        }
+        .antenna-header .band-type {
+            color: #2563eb;
+            font-weight: bold;
+        }
+        .antenna-header .model {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .cables-row {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .cable {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 10px;
+            width: 98px;
+        }
+        .cable-title {
+            text-align: center;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 7px;
+            font-size: 11px;
+        }
+        .cable-visual {
+            border: 2px solid #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .cable-band {
+            border-bottom: 2px solid #000;
+        }
+        .cable-band:last-child {
+            border-bottom: none;
+        }
+        .cable-label {
+            text-align: center;
+            margin-top: 7px;
+            font-size: 10px;
+            color: #666;
+        }
+        .band-type-label {
+            color: #2563eb;
+            font-weight: bold;
+            font-size: 9px;
+        }
+        .details {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .details h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .detail-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+        .detail-antenna {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .detail-band {
+            margin-left: 20px;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .detail-band-title {
+            font-weight: bold;
+            color: #2563eb;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        .detail-techs {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .detail-cables {
+            color: #999;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        @media print {
+            body {
+                background: white;
+            }
+            .container {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RFDS Cable Color Visualization</h1>
+        <p class="subtitle">Sector ${extractedData.sector} - Radio Frequency Design Sheet</p>
+        
+        <!-- Color Legend -->
+        <div class="legend">
+            <h3>Color Code Legend</h3>
+            <div class="legend-grid">
+                <!-- Sector Colors -->
+                <div class="legend-section">
+                    <h4>Sector (1st Band)</h4>
+                    ${Object.entries({
+                      'Alpha (1)': SECTOR_COLORS['1'],
+                      'Beta (2)': SECTOR_COLORS['2'],
+                      'Gamma (3)': SECTOR_COLORS['3'],
+                      'Delta (4)': SECTOR_COLORS['4'],
+                      'Epsilon (5)': SECTOR_COLORS['5'],
+                      'Zeta (6)': SECTOR_COLORS['6']
+                    }).map(([label, color]) => `
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: ${color}; ${color === '#FFFFFF' ? 'border: 2px solid #333;' : ''}"></div>
+                            <span>${label}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <!-- Frequency Colors -->
+                <div class="legend-section">
+                    <h4>Frequency (2nd Band)</h4>
+                    ${Object.entries({
+                      '600 MHz': FREQUENCY_COLORS['600'],
+                      '700 MHz': FREQUENCY_COLORS['700'],
+                      '1900 MHz': FREQUENCY_COLORS['1900'],
+                      '2100 MHz': FREQUENCY_COLORS['2100'],
+                      '2500 MHz': FREQUENCY_COLORS['2500'],
+                      'LAA-5GHz': FREQUENCY_COLORS['5000'],
+                      '28GHz': FREQUENCY_COLORS['28000'],
+                      '39GHz': FREQUENCY_COLORS['39000'],
+                      'AWS3': FREQUENCY_COLORS['AWS3']
+                    }).map(([label, color]) => `
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: ${color}; ${color === '#FFFFFF' ? 'border: 2px solid #333;' : ''}"></div>
+                            <span>${label}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <!-- Technology Colors -->
+                <div class="legend-section">
+                    <h4>Technology (3rd Band)</h4>
+                    ${Object.entries({
+                      'GSM (G)': TECHNOLOGY_COLORS['G'],
+                      'UMTS (U)': TECHNOLOGY_COLORS['U'],
+                      'LTE (L)': TECHNOLOGY_COLORS['L'],
+                      '5G (N)': TECHNOLOGY_COLORS['N']
+                    }).map(([label, color]) => `
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: ${color}; ${color === '#FFFFFF' ? 'border: 2px solid #333;' : ''}"></div>
+                            <span>${label}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            
+            <div class="spacing-guide">
+                <h4>Black Spacing Guide</h4>
+                <div class="legend-item">
+                    <div style="width: 24px; height: 8px; background-color: #000; border-radius: 4px;"></div>
+                    <span>Small spacing: Between same-type colors</span>
+                </div>
+                <div class="legend-item">
+                    <div style="width: 24px; height: 16px; background-color: #000; border-radius: 4px;"></div>
+                    <span><strong>Wide spacing: Between different sections</strong></span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cable Visualizations -->
+        ${extractedData.antennas.map((antenna) => {
+          const bandGroups = splitAntennaByBand(antenna);
+          return bandGroups.map((bandGroup) => `
+            <div class="antenna-group">
+                <div class="antenna-header">
+                    <h2>
+                        Antenna ${bandGroup.displayNumber}
+                        ${bandGroup.bandType ? `<span class="band-type">(${bandGroup.bandType})</span>` : ''}
+                    </h2>
+                    <p class="model">${bandGroup.model}</p>
+                </div>
+                <div class="cables-row">
+                    ${[1, 2, 3, 4].map((cableNum) => {
+                      const colors = generateCableColors(extractedData.sector, bandGroup.technologies, cableNum);
+                      return `
+                        <div class="cable">
+                            <div class="cable-title">Cable ${cableNum}</div>
+                            <div class="cable-visual">
+                                ${colors.map((colorItem) => {
+                                  let height = 56;  // reduced from 80
+                                  if (colorItem.isSpacing) {
+                                    height = colorItem.isWide ? 13 : 4;  // reduced from 18 and 6
+                                  }
+                                  const borderStyle = colorItem.color === '#FFFFFF' ? 'border: 1px solid #ccc;' : '';
+                                  return `<div class="cable-band" style="background-color: ${colorItem.color}; height: ${height}px; ${borderStyle}" title="${colorItem.label}"></div>`;
+                                }).join('')}
+                            </div>
+                            <div class="cable-label">
+                                Ant ${bandGroup.displayNumber}
+                                ${bandGroup.bandType ? `<div class="band-type-label">${bandGroup.bandType}</div>` : ''}
+                            </div>
+                        </div>
+                      `;
+                    }).join('')}
+                </div>
+            </div>
+          `).join('');
+        }).join('')}
+        
+        <!-- Configuration Details -->
+        <div class="details">
+            <h3>Configuration Details</h3>
+            ${extractedData.antennas.map((antenna) => {
+              const bandGroups = splitAntennaByBand(antenna);
+              return `
+                <div class="detail-item">
+                    <div class="detail-antenna">Antenna ${antenna.number}: ${antenna.model}</div>
+                    ${bandGroups.map((group) => `
+                        <div class="detail-band">
+                            ${group.bandType ? `<div class="detail-band-title">${group.bandType} (Ant ${group.displayNumber})</div>` : ''}
+                            <div class="detail-techs">Technologies: ${group.technologies.join(', ')}</div>
+                            <div class="detail-cables">→ Generates 4 cables (Cable 1-4)</div>
+                        </div>
+                    `).join('')}
+                </div>
+              `;
+            }).join('')}
+        </div>
+    </div>
+</body>
+</html>`;
+
+    // Create and download HTML file
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rfds-sector-${extractedData.sector}-cables.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            RFDS Cable Color Visualizer
+          </h1>
+          <p className="text-gray-600">
+            Upload an RFDS screenshot to generate cable color coding
+          </p>
+        </div>
+
+        {/* Upload Section */}
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
+          <div className="flex flex-col items-center">
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <div className="flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors">
+                <Upload size={24} />
+                <span className="font-semibold">Upload RFDS Screenshot</span>
+              </div>
+            </label>
+            
+            <div className="mt-4 text-gray-600 text-sm">or</div>
+            
+            <div className="mt-4 p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 w-full max-w-md">
+              <div className="text-center">
+                <p className="text-gray-700 font-semibold mb-2">Paste Screenshot Here</p>
+                <p className="text-gray-500 text-sm">
+                  Press <kbd className="px-2 py-1 bg-gray-200 rounded text-xs">Ctrl+V</kbd> (or <kbd className="px-2 py-1 bg-gray-200 rounded text-xs">⌘+V</kbd> on Mac)
+                </p>
+              </div>
+            </div>
+            
+            {isProcessing && (
+              <div className="mt-4 text-blue-600 font-semibold animate-pulse">
+                Processing image...
+              </div>
+            )}
+            
+            {error && (
+              <div className="mt-4 text-red-600 bg-red-50 p-4 rounded-lg">
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Color Legend */}
+        <ColorLegend />
+
+        {/* Preview Section */}
+        {uploadedImage && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">Uploaded RFDS</h3>
+            <img 
+              src={uploadedImage} 
+              alt="Uploaded RFDS" 
+              className="max-w-full h-auto rounded-lg border-2 border-gray-200"
+            />
+          </div>
+        )}
+
+        {/* Visualization Section */}
+        {extractedData && (
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-800">
+                  Cable Visualization - Sector {extractedData.sector}
+                </h3>
+                <p className="text-gray-600 mt-1">
+                  {(() => {
+                    let totalBandGroups = 0;
+                    let totalCables = 0;
+                    extractedData.antennas.forEach(antenna => {
+                      const groups = splitAntennaByBand(antenna);
+                      totalBandGroups += groups.length;
+                      groups.forEach(group => {
+                        totalCables += getCableCount(group.model, group.bandType);
+                      });
+                    });
+                    return `${extractedData.antennas.length} antenna${extractedData.antennas.length !== 1 ? 's' : ''} → ${totalBandGroups} band group${totalBandGroups !== 1 ? 's' : ''} = ${totalCables} total cables`;
+                  })()}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={downloadVisualization}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Download size={20} />
+                  <span>PNG</span>
+                </button>
+                <button
+                  onClick={downloadHTML}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <Download size={20} />
+                  <span>HTML</span>
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-8 items-center">
+              {extractedData.antennas.map((antenna, idx) => {
+                // Split antenna into low and high band groups
+                const bandGroups = splitAntennaByBand(antenna);
+                
+                return (
+                  <div key={idx} className="w-full">
+                    {bandGroups.map((bandGroup, bandIdx) => {
+                      // Get the number of cables for this antenna type
+                      const cableCount = getCableCount(bandGroup.model, bandGroup.bandType);
+                      const cableNumbers = Array.from({ length: cableCount }, (_, i) => i + 1);
+                      
+                      return (
+                        <div key={`${idx}-${bandIdx}`} className="mb-6">
+                          {/* Header for each band group */}
+                          <div className="text-center mb-4">
+                            <h4 className="text-lg font-semibold text-gray-800">
+                              Antenna {bandGroup.displayNumber}
+                              {bandGroup.bandType && (
+                                <span className="ml-2 text-blue-600">({bandGroup.bandType})</span>
+                              )}
+                            </h4>
+                            <p className="text-sm text-gray-600">{bandGroup.model}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {getAntennaType(bandGroup.model)} Antenna - {cableCount} cables
+                            </p>
+                          </div>
+                          
+                          {/* Row of cables for this band group - NO SPACER HERE */}
+                          <div className="flex gap-6 justify-center flex-wrap">
+                            {cableNumbers.map((cableNum) => (
+                              <CableColumn
+                                key={`${idx}-${bandIdx}-${cableNum}`}
+                                cableNumber={cableNum}
+                                sector={extractedData.sector}
+                                technologies={bandGroup.technologies}
+                                antennaModel={bandGroup.model}
+                                antennaNumber={bandGroup.displayNumber}
+                                bandType={bandGroup.bandType}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Technology Details */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h4 className="font-semibold text-gray-700 mb-3">Configuration Details</h4>
+              {extractedData.antennas.map((antenna) => {
+                const bandGroups = splitAntennaByBand(antenna);
+                return (
+                  <div key={antenna.number} className="mb-4">
+                    <div className="font-medium text-gray-800 mb-2">
+                      Antenna {antenna.number}: {antenna.model}
+                    </div>
+                    {bandGroups.map((group, idx) => {
+                      const cableCount = getCableCount(group.model, group.bandType);
+                      return (
+                        <div key={idx} className="ml-4 mb-2 p-3 bg-gray-50 rounded">
+                          {group.bandType && (
+                            <div className="text-sm font-semibold text-blue-600 mb-1">
+                              {group.bandType} (Ant {group.displayNumber})
+                            </div>
+                          )}
+                          <div className="text-sm text-gray-600">
+                            Technologies: {group.technologies.join(', ')}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            → Generates {cableCount} cable{cableCount > 1 ? 's' : ''} (Cable {cableCount === 2 ? '1-2' : '1-4'})
+                            {getAntennaType(group.model) === 'AIR' && ' - AIR/Massive MIMO'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Antenna Connection Diagram */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h4 className="font-semibold text-gray-700 mb-4">Antenna Port Connection Diagram</h4>
+              <p className="text-sm text-gray-600 mb-6">
+                Shows how cables physically connect to antenna ports
+              </p>
+              
+              <div className="flex flex-col gap-8">
+                {extractedData.antennas.map((antenna) => {
+                  const bandGroups = splitAntennaByBand(antenna);
+                  
+                  // Check if this antenna has been split into low and high bands
+                  const hasLowBand = bandGroups.some(g => g.bandType === 'Low Band');
+                  const hasHighBand = bandGroups.some(g => g.bandType === 'High Band');
+                  const lowBandGroup = bandGroups.find(g => g.bandType === 'Low Band');
+                  const highBandGroup = bandGroups.find(g => g.bandType === 'High Band');
+                  const antennaType = getAntennaType(antenna.model);
+                  
+                  // If antenna has both bands, show them together in one diagram
+                  if (hasLowBand && hasHighBand) {
+                    // Check if it's a Hex antenna (6 cables total: LB1, HB1-4, LB2)
+                    const isHexAntenna = antennaType === 'HEX';
+                    
+                    return (
+                      <div key={antenna.number} className="bg-gray-50 p-6 rounded-lg">
+                        <h5 className="font-semibold text-gray-800 mb-4 text-center">
+                          Antenna {antenna.number} - {isHexAntenna ? 'Complete Hex Configuration' : 'Complete Octo Configuration'}
+                        </h5>
+                        
+                        {/* Connection Diagram */}
+                        <div className="flex flex-col items-center">
+                          {/* Antenna Box */}
+                          <div className="border-4 border-black bg-white p-8 rounded-lg w-full max-w-5xl">
+                            <div className="text-center text-gray-800 font-bold mb-6 text-lg">
+                              {antenna.model}
+                            </div>
+                          </div>
+                          
+                          {isHexAntenna ? (
+                            /* Hex Antenna: LB1, HB1-4, LB2 */
+                            <div className="flex gap-2 mt-0">
+                              {/* Low Band cable 1 (LEFT) */}
+                              <SmallCableColumn
+                                key="low-1"
+                                cableNumber={1}
+                                sector={extractedData.sector}
+                                technologies={lowBandGroup.technologies}
+                                antennaModel={lowBandGroup.model}
+                                antennaNumber={`${antenna.number}L`}
+                                bandType="LB"
+                              />
+                              
+                              {/* Spacer */}
+                              <div className="w-4"></div>
+                              
+                              {/* High Band cables 1-4 (CENTER) */}
+                              {[1, 2, 3, 4].map((cableNum) => (
+                                <SmallCableColumn
+                                  key={`high-${cableNum}`}
+                                  cableNumber={cableNum}
+                                  sector={extractedData.sector}
+                                  technologies={highBandGroup.technologies}
+                                  antennaModel={highBandGroup.model}
+                                  antennaNumber={`${antenna.number}H`}
+                                  bandType="HB"
+                                />
+                              ))}
+                              
+                              {/* Spacer */}
+                              <div className="w-4"></div>
+                              
+                              {/* Low Band cable 2 (RIGHT) */}
+                              <SmallCableColumn
+                                key="low-2"
+                                cableNumber={2}
+                                sector={extractedData.sector}
+                                technologies={lowBandGroup.technologies}
+                                antennaModel={lowBandGroup.model}
+                                antennaNumber={`${antenna.number}L`}
+                                bandType="LB"
+                              />
+                            </div>
+                          ) : (
+                            /* Octo Antenna: LB1-2, HB1-4, LB3-4 */
+                            <div className="flex gap-2 mt-0">
+                              {/* Low Band cables 1-2 (LEFT) */}
+                              {[1, 2].map((cableNum) => (
+                                <SmallCableColumn
+                                  key={`low-${cableNum}`}
+                                  cableNumber={cableNum}
+                                  sector={extractedData.sector}
+                                  technologies={lowBandGroup.technologies}
+                                  antennaModel={lowBandGroup.model}
+                                  antennaNumber={`${antenna.number}L`}
+                                  bandType="LB"
+                                />
+                              ))}
+                              
+                              {/* Spacer */}
+                              <div className="w-4"></div>
+                              
+                              {/* High Band cables 1-4 (CENTER) */}
+                              {[1, 2, 3, 4].map((cableNum) => (
+                                <SmallCableColumn
+                                  key={`high-${cableNum}`}
+                                  cableNumber={cableNum}
+                                  sector={extractedData.sector}
+                                  technologies={highBandGroup.technologies}
+                                  antennaModel={highBandGroup.model}
+                                  antennaNumber={`${antenna.number}H`}
+                                  bandType="HB"
+                                />
+                              ))}
+                              
+                              {/* Spacer */}
+                              <div className="w-4"></div>
+                              
+                              {/* Low Band cables 3-4 (RIGHT) */}
+                              {[3, 4].map((cableNum) => (
+                                <SmallCableColumn
+                                  key={`low-${cableNum}`}
+                                  cableNumber={cableNum}
+                                  sector={extractedData.sector}
+                                  technologies={lowBandGroup.technologies}
+                                  antennaModel={lowBandGroup.model}
+                                  antennaNumber={`${antenna.number}L`}
+                                  bandType="LB"
+                                />
+                              ))}
+                            </div>
+                          )}
+                          
+                          <div className="mt-4 text-xs text-gray-600 text-center max-w-3xl">
+                            <strong>{isHexAntenna ? 'Hex' : 'Octo'} Antenna Port Order:</strong> {isHexAntenna ? 'Low Band #1 (left) → High Band #1-4 (center) → Low Band #2 (right)' : 'Low Band #1-2 (left) → High Band #1-4 (center) → Low Band #3-4 (right)'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // Single band or other antenna types - show individual diagrams
+                    return bandGroups.map((bandGroup, bandIdx) => {
+                      const cableCount = getCableCount(bandGroup.model, bandGroup.bandType);
+                      const cableNumbers = Array.from({ length: cableCount }, (_, i) => i + 1);
+                      
+                      return (
+                        <div key={`${antenna.number}-${bandIdx}`} className="bg-gray-50 p-6 rounded-lg">
+                          <h5 className="font-semibold text-gray-800 mb-4 text-center">
+                            Antenna {bandGroup.displayNumber}
+                            {bandGroup.bandType && ` - ${bandGroup.bandType}`}
+                          </h5>
+                          
+                          {/* Connection Diagram */}
+                          <div className="flex flex-col items-center">
+                            {/* Antenna Box */}
+                            <div className="border-4 border-black bg-white p-8 rounded-lg w-full max-w-3xl">
+                              <div className="text-center text-gray-800 font-bold mb-6 text-lg">
+                                {bandGroup.model}
+                              </div>
+                            </div>
+                            
+                            {/* Cables below antenna - equal spacing for all */}
+                            <div className="flex gap-3 mt-0 justify-center">
+                              {cableNumbers.map((cableNum) => (
+                                <CableColumn
+                                  key={cableNum}
+                                  cableNumber={cableNum}
+                                  sector={extractedData.sector}
+                                  technologies={bandGroup.technologies}
+                                  antennaModel={bandGroup.model}
+                                  antennaNumber={bandGroup.displayNumber}
+                                  bandType=""
+                                />
+                              ))}
+                            </div>
+                            
+                            <div className="mt-4 text-xs text-gray-600 text-center max-w-2xl">
+                              <strong>Port Configuration:</strong> {cableCount} cable{cableCount > 1 ? 's' : ''} connected to antenna ports
+                              {getAntennaType(bandGroup.model) === 'AIR' && ' (AIR/Massive MIMO antenna)'}
+                              {getAntennaType(bandGroup.model) === 'QUAD' && ' - Quad antenna'}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  }
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Instructions */}
+        {!extractedData && !isProcessing && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">How to Use</h3>
+            <ol className="list-decimal list-inside space-y-2 text-gray-700">
+              <li>Upload an RFDS screenshot or paste it directly (Ctrl+V / ⌘+V)</li>
+              <li>The system will analyze the image and extract sector and antenna information</li>
+              <li>Antennas with both low band (600, 700) and high band (1900+) will be split:
+                <ul className="list-disc list-inside ml-6 mt-1">
+                  <li>Low Band group → 4 cables labeled with "L" (e.g., Ant 1L)</li>
+                  <li>High Band group → 4 cables labeled with "H" (e.g., Ant 1H)</li>
+                </ul>
+              </li>
+              <li>4 cables generated per band group with sector color progression:
+                <ul className="list-disc list-inside ml-6 mt-1">
+                  <li>Cable 1: 1 sector color band</li>
+                  <li>Cable 2: 2 sector color bands</li>
+                  <li>Cable 3: 3 sector color bands</li>
+                  <li>Cable 4: 4 sector color bands</li>
+                </ul>
+              </li>
+              <li>Each cable shows unique frequencies and technologies (no repeats)</li>
+              <li>Download as PNG image or HTML file for documentation</li>
+            </ol>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(<RFDSCableVisualizer />);
+</script>
+</body>
+</html>

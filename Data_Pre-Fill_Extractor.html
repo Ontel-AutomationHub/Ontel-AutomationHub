@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Pre-Fill Extractor</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+
+// ============ CLAUDE: FILL THIS DATA SECTION ONLY ============
+const SITE = {
+  siteName: "", siteId: "", siteAddress: "", cdAddress: "",
+  landlord: "", project: "", structureType: "", market: "",
+  marketPoc: "", gcName: "", decom: "NO", vendor: "",
+  towerHeight: "", buNumber: "", region: "", sectorCount: 3,
+};
+const DISCREPANCIES = [];
+const MOUNT = { action: "Retain", qty: "", mountType: "", model: "", details: "" };
+const TOWERTOP = [];
+const GROUND = [];
+const COP_STRUCTURE = { overallHeight: "", structureHeight: "" };
+const TECH_ORDER = ["L700","L600","N600","G1900","L1900","U1900","N1900","LAWS3","L2100","U2100","L2500","N2500"];
+const SECTORS = [
+  TECH_ORDER.map(t => ({ tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false })),
+  TECH_ORDER.map(t => ({ tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false })),
+  TECH_ORDER.map(t => ({ tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false })),
+  TECH_ORDER.map(t => ({ tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false })),
+  TECH_ORDER.map(t => ({ tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false })),
+  TECH_ORDER.map(t => ({ tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false })),
+];
+// ============ END DATA SECTION ============
+
+const SN = ["ALPHA","BETA","GAMMA","DELTA","EPSILON","ZETA"];
+const SC = ["#E20074","#00A99D","#5B4FFF","#FF6B35","#00C4B3","#9333EA"];
+
+function EC({ value, onChange, className = "" }) {
+  const [e, setE] = useState(false);
+  const [t, setT] = useState(value);
+  if (e) return <input className={`w-full px-2 py-1 text-sm border-2 border-pink-400 rounded-lg outline-none focus:border-pink-600 ${className}`} value={t} onChange={ev => setT(ev.target.value)} onBlur={() => { onChange(t); setE(false); }} onKeyDown={ev => { if (ev.key === "Enter") { onChange(t); setE(false); } if (ev.key === "Escape") { setT(value); setE(false); }}} autoFocus />;
+  return <span className={`cursor-pointer hover:bg-gradient-to-r hover:from-pink-50 hover:to-purple-50 px-2 py-1 rounded-lg text-sm block min-h-[24px] transition-all ${className}`} onClick={() => { setT(value); setE(true); }} title="Click to edit">{value || "\u2212"}</span>;
+}
+
+// CSV-safe: wrap in quotes if value contains comma, quote, or newline
+function esc(v) {
+  const s = String(v ?? "");
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+// Returns CSV string from current state - called both for download and for preview
+function buildCSV(si, mt, tt, gr, cs, sectors, sc) {
+  let c = "[EMAIL_DATA_ENTRY]\nField,Value\n";
+  Object.entries(si).forEach(([k, v]) => { c += `${esc(k)},${esc(v)}\n`; });
+  c += "\n[SOW_MOUNT]\nAction,Qty,Mount Type,Model,Details\n";
+  c += `${esc(mt.action)},${esc(mt.qty)},${esc(mt.mountType)},${esc(mt.model)},${esc(mt.details)}\n`;
+  c += "\n[SOW_TOWERTOP]\nAction,Equipment,Alpha,Beta,Gamma,Delta,Epsilon,Zeta\n";
+  tt.forEach(r => { 
+    const total = Number(r.alpha||0)+Number(r.beta||0)+Number(r.gamma||0)+Number(r.delta||0)+Number(r.epsilon||0)+Number(r.zeta||0);
+    if (total > 0) c += `${esc(r.action)},${esc(r.equipment)},${esc(r.alpha)},${esc(r.beta)},${esc(r.gamma)},${esc(r.delta)},${esc(r.epsilon)},${esc(r.zeta)}\n`; 
+  });
+  c += "\n[SOW_GROUND]\nAction,Qty,Equipment\n";
+  gr.forEach(r => { c += `${esc(r.action)},${esc(r.qty)},${esc(r.equipment)}\n`; });
+  c += `\n[COP_STRUCTURE]\nOverall Height,${esc(cs.overallHeight)}\nStructure Height,${esc(cs.structureHeight)}\n`;
+  for (let i = 0; i < sc; i++) {
+    c += `\n[COP_${SN[i]}]\nTech,Manufacturer,Model,Status,Position,RadCenter,Azimuth,MDT,Roll,RET,RRH\n`;
+    sectors[i].forEach(r => { if (r.active) c += `${esc(r.tech)},${esc(r.manufacturer)},${esc(r.model)},${esc(r.status)},${esc(r.position)},${esc(r.radCenter)},${esc(r.azimuth)},${esc(r.mdt)},${esc(r.roll)},${esc(r.ret)},${esc(r.rrh)}\n`; });
+  }
+  return c;
+}
+
+// Simple icon components to avoid emoji encoding issues
+const Icon = ({ type, size = 16 }) => {
+  const s = { width: size, height: size, display: "inline-block", verticalAlign: "middle" };
+  const icons = {
+    upload: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>,
+    clipboard: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>,
+    alert: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    wrench: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>,
+    signal: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V4"/></svg>,
+    download: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>,
+    rocket: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>,
+    file: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+    blueprint: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
+    check: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>,
+    bulb: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.74V17h8v-2.26A7 7 0 0012 2z"/></svg>,
+    zap: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+    tower: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L8 6h8l-4-4zM8 6v4l-3 12h14L16 10V6M10 10h4"/></svg>,
+    target: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+    copy: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
+    eraser: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 20H7L3 16c-.8-.8-.8-2 0-2.8L14.6 1.6c.8-.8 2-.8 2.8 0l4 4c.8.8.8 2 0 2.8L12 18"/><path d="M6 11l7 7"/></svg>,
+    undo: <svg style={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>,
+  };
+  return icons[type] || null;
+};
+
+function App() {
+  const [si, setSi] = useState(SITE);
+  const [cop, setCop] = useState(SECTORS.map(s => s.map(r => ({...r}))));
+  const [tab, setTab] = useState(0);
+  const [sec, setSec] = useState("upload");
+  const [mt, setMt] = useState(MOUNT);
+  const [tt, setTt] = useState(TOWERTOP);
+  const [gr, setGr] = useState(GROUND);
+  const [cs, setCs] = useState(COP_STRUCTURE);
+  const [disc, setDisc] = useState(DISCREPANCIES);
+  const [processing, setProcessing] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [rfdsFile, setRfdsFile] = useState(null);
+  const [cdsFile, setCdsFile] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [rawResponse, setRawResponse] = useState("");
+  const [csvReady, setCsvReady] = useState(false);
+  const [csvContent, setCsvContent] = useState("");
+  const [rowBackup, setRowBackup] = useState({});
+  
+  const uSi = (f, v) => setSi(p => ({...p, [f]: v}));
+  const uCop = (s, r, f, v) => setCop(p => { const n = p.map(x => x.map(y => ({...y}))); n[s][r][f] = v; return n; });
+  const clearRow = (s, r) => {
+    const key = `${s}-${r}`;
+    const current = cop[s][r];
+    if (current.active) {
+      setRowBackup(p => ({...p, [key]: {...current}}));
+      setCop(p => { const n = p.map(x => x.map(y => ({...y}))); const t = n[s][r].tech; n[s][r] = { tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false }; return n; });
+    } else if (rowBackup[key]) {
+      setCop(p => { const n = p.map(x => x.map(y => ({...y}))); n[s][r] = {...rowBackup[key]}; return n; });
+      setRowBackup(p => { const n = {...p}; delete n[key]; return n; });
+    }
+  };
+  const vis = cop.slice(0, si.sectorCount);
+
+  // Normalize a sector array from API to exactly 12 techs in TECH_ORDER
+  const normalizeSector = (rawSector) => {
+    if (!Array.isArray(rawSector)) return TECH_ORDER.map(t => ({ tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false }));
+    const techMap = {};
+    rawSector.forEach(row => { if (row && row.tech) techMap[row.tech] = row; });
+    return TECH_ORDER.map(t => {
+      const row = techMap[t];
+      if (!row) return { tech: t, manufacturer: "", model: "", status: "", position: "", radCenter: "", azimuth: "", mdt: "", roll: "", ret: "", rrh: "", active: false };
+      return {
+        tech: t,
+        manufacturer: String(row.manufacturer || ""),
+        model: String(row.model || ""),
+        status: String(row.status || ""),
+        position: String(row.position || ""),
+        radCenter: String(row.radCenter || ""),
+        azimuth: String(row.azimuth || ""),
+        mdt: String(row.mdt || ""),
+        roll: String(row.roll || ""),
+        ret: String(row.ret || ""),
+        rrh: String(row.rrh || ""),
+        active: row.active === true || row.active === "true" || !!(row.manufacturer || row.model),
+      };
+    });
+  };
+
+  const processFiles = async () => {
+    if (!rfdsFile) {
+      alert("Please upload RFDS file first!");
+      return;
+    }
+    
+    setProcessing(true);
+    setStatusMsg("Reading files...");
+    setErrorMsg("");
+    setRawResponse("");
+    setSec("upload");
+    
+    try {
+      setStatusMsg("Converting files to base64...");
+      const rfdsData = await fileToBase64(rfdsFile);
+      const cdsData = cdsFile ? await fileToBase64(cdsFile) : null;
+      
+      setStatusMsg("Sending to Claude API for extraction...");
+      
+      const messages = [{
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: rfdsFile.type || "application/pdf",
+              data: rfdsData.split(',')[1]
+            }
+          },
+          cdsData ? {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: cdsFile.type || "application/pdf",
+              data: cdsData.split(',')[1]
+            }
+          } : null,
+          {
+            type: "text",
+            text: `You are extracting T-Mobile cell site data from RFDS and Construction Drawings. Return ONLY valid JSON (no markdown fences, no preamble, no explanation).
+
+=== CRITICAL RULES — READ FIRST ===
+
+MOUNT RULES:
+- Mount = the MAIN STRUCTURE that holds antennas on the tower (Sector Mount, Platform Mount, Pipe Mount, Collar Mount)
+- Mount is shown in CDs PROPOSED ANTENNA PLAN on ELEVATION or TOP VIEW drawings, labeled as "PROPOSED T-MOBILE SECTOR MOUNT" or "PROPOSED T-MOBILE COLLAR MOUNT" etc.
+- Mount model examples: VFA12-HD, RMQP-4096-HK, MSFAA, SMP-series, VMP-series
+- WRONG mount models — these are ANTENNAS not mounts: APMA0-5E, APM4C-E10T, FFVV-65C-R3-V1, HBXX-3319DS-A2M, AIR6419
+- WRONG mount models — these are BRACKETS/HARDWARE not mounts: WATY-HD, WAY2-HD, SBNHD, pipe clamps, U-bolts, tilt brackets. Mounting brackets shown in detail drawings that hold individual antennas to the mount are NOT the mount itself — ignore all bracket part numbers.
+- Only use the model from the MAIN mount callout (e.g., "PROPOSED T-MOBILE SECTOR MOUNT (SITE PRO P/N: VFA12-HD)")
+- If CDs show "PROPOSED T-MOBILE SECTOR MOUNT" or similar → action is "New Mount" or "Mount Swap", NEVER "Retain"
+
+TOWERTOP vs GROUND — DO NOT MIX:
+- TOWERTOP equipment (physically mounted on the tower structure): antennas, RRH (Radio 4480, Radio 4460, Radio 4415), TMA, diplexer, combiner
+- GROUND equipment (on the ground, in cabinets, or infrastructure): RUS01, RUS02, BB6630, RP6651, BBU, PSU, rectifier, battery, surge suppressor, hybrid cables, hybrid trunk, fiber cables, coax jumpers, GPS antenna, CSR/router, generator
+- EVERYTHING listed under "Existing RAN Equipment" and "Proposed RAN Equipment" tables in RFDS = GROUND equipment
+- Hybrid cables / Hybrid Trunk cables are GROUND infrastructure, NEVER towertop
+- RUS is GROUND equipment, NEVER count as towertop RRH
+- When counting RRH per sector: count physical radio UNITS on the tower (Radio 4480=1, Radio 4460=1, AIR6419=1), NOT tech bands, NOT ground equipment
+- If existing radios (Radio 4480, Radio 4460) appear in BOTH Existing AND Proposed → they are RETAINED, not removed
+
+ANTENNA STATUS:
+- "NEW" = antenna in Proposed but NOT in Existing. NEVER use "PROPOSED" as status
+- "EXISTING" = antenna in both Existing and Proposed, same position
+- "RELOCATE" = antenna changes position between Existing and Proposed
+
+IMPORTANT: Every sector MUST have EXACTLY 12 tech objects in this exact order: ["L700","L600","N600","G1900","L1900","U1900","N1900","LAWS3","L2100","U2100","L2500","N2500"]. Set "active": true for populated techs, "active": false for unused ones. ALL values must be strings except "active" (boolean) and "sectorCount" (number). The towertop sector counts (alpha, beta, etc.) should be numbers.
+
+Return this exact JSON structure:
+
+{
+  "site": {
+    "siteName": "",
+    "siteId": "",
+    "siteAddress": "",
+    "cdAddress": "",
+    "landlord": "",
+    "project": "",
+    "structureType": "",
+    "market": "",
+    "marketPoc": "",
+    "gcName": "",
+    "decom": "NO",
+    "vendor": "",
+    "towerHeight": "",
+    "buNumber": "",
+    "region": "",
+    "sectorCount": 3
+  },
+  "discrepancies": [
+    {"id": 1, "type": "warning", "field": "Field Name", "rfds": "RFDS value", "cds": "CDs value", "note": "Explanation"}
+  ],
+  "mount": {
+    "action": "",
+    "qty": "",
+    "mountType": "",
+    "model": "",
+    "details": ""
+  },
+  "towertop": [
+    {"action": "Install", "equipment": "antenna", "alpha": 1, "beta": 1, "gamma": 1, "delta": 0, "epsilon": 0, "zeta": 0}
+  ],
+  "ground": [
+    {"action": "Install", "qty": 1, "equipment": "RP 6651"}
+  ],
+  "cop_structure": {
+    "overallHeight": "",
+    "structureHeight": ""
+  },
+  "sectors": [
+    [
+      {"tech": "L700", "manufacturer": "CommScope", "model": "FFVV-65C-R3-V1", "status": "EXISTING", "position": "1", "radCenter": "145", "azimuth": "30", "mdt": "0", "roll": "0", "ret": "1", "rrh": "Radio 4480 B71+B85", "active": true},
+      {"tech": "L600", "manufacturer": "CommScope", "model": "FFVV-65C-R3-V1", "status": "EXISTING", "position": "1", "radCenter": "145", "azimuth": "30", "mdt": "0", "roll": "0", "ret": "1", "rrh": "", "active": true},
+      {"tech": "N600", "manufacturer": "CommScope", "model": "FFVV-65C-R3-V1", "status": "EXISTING", "position": "1", "radCenter": "145", "azimuth": "30", "mdt": "0", "roll": "0", "ret": "1", "rrh": "", "active": true},
+      {"tech": "G1900", "manufacturer": "CommScope", "model": "HBXX-3319DS-A2M", "status": "EXISTING", "position": "2", "radCenter": "143", "azimuth": "30", "mdt": "0", "roll": "0", "ret": "2", "rrh": "Radio 4460 B25+B66", "active": true},
+      {"tech": "L1900", "manufacturer": "CommScope", "model": "HBXX-3319DS-A2M", "status": "EXISTING", "position": "2", "radCenter": "143", "azimuth": "30", "mdt": "0", "roll": "0", "ret": "2", "rrh": "", "active": true},
+      {"tech": "U1900", "manufacturer": "", "model": "", "status": "", "position": "", "radCenter": "", "azimuth": "", "mdt": "", "roll": "", "ret": "", "rrh": "", "active": false},
+      {"tech": "N1900", "manufacturer": "CommScope", "model": "HBXX-3319DS-A2M", "status": "EXISTING", "position": "2", "radCenter": "143", "azimuth": "30", "mdt": "0", "roll": "0", "ret": "2", "rrh": "", "active": true},
+      {"tech": "LAWS3", "manufacturer": "CommScope", "model": "HBXX-3319DS-A2M", "status": "NEW", "position": "2", "radCenter": "143", "azimuth": "30", "mdt": "0", "roll": "0", "ret": "2", "rrh": "", "active": true},
+      {"tech": "L2100", "manufacturer": "CommScope", "model": "HBXX-3319DS-A2M", "status": "NEW", "position": "2", "radCenter": "143", "azimuth": "30", "mdt": "0", "roll": "0", "ret": "2", "rrh": "", "active": true},
+      {"tech": "U2100", "manufacturer": "", "model": "", "status": "", "position": "", "radCenter": "", "azimuth": "", "mdt": "", "roll": "", "ret": "", "rrh": "", "active": false},
+      {"tech": "L2500", "manufacturer": "", "model": "", "status": "", "position": "", "radCenter": "", "azimuth": "", "mdt": "", "roll": "", "ret": "", "rrh": "", "active": false},
+      {"tech": "N2500", "manufacturer": "", "model": "", "status": "", "position": "", "radCenter": "", "azimuth": "", "mdt": "", "roll": "", "ret": "", "rrh": "", "active": false}
+    ]
+  ]
+}
+
+EXTRACTION RULES:
+
+## SITE INFO (from RFDS Section 1):
+- siteName: Extract from "Site Name" field
+- siteId: Extract from "Site ID" field  
+- siteAddress: From RFDS "Address" + "City, State" fields combined
+- cdAddress: From Construction Drawings title sheet address (if different from RFDS)
+- landlord: Crown Castle, SBA, American Tower, Phoenix Tower International (PTI), etc.
+- project: Determine from Existing vs Proposed tech comparison
+- structureType: Monopole, Self Support Tower, Monopine, Rooftop, etc.
+- market: Extract from "Market" field and NORMALIZE using the market mapping below
+- marketPoc: Map normalized market to POC (see mapping below)
+- gcName: ALWAYS leave as empty string "" — cannot be read from RFDS or CDs
+- decom: "YES" if equipment removal mentioned, else "NO"
+- vendor: Ericsson, Nokia, Samsung, etc.
+- towerHeight: From Construction Drawings — use "Overall Height of Existing Structure" or "Top of Existing Tower" notation
+- buNumber: Extract BU number if present
+- region: SOUTH, NORTHEAST, WEST, etc.
+- sectorCount: Count physical sectors (typically 3 or 6)
+
+## MARKET NORMALIZATION — CRITICAL:
+The RFDS may use various names for the same market. Always normalize to the standard short code:
+- "UPSTATE NY", "Upstate New York", "UPNY", "New York" → market: "UPSTATE NY" (short: UPNY)
+- "MIAMI", "South Florida", "SFL", "FL-Miami" → market: "MIAMI FL" (short: SFL)
+- "ORLANDO", "Central Florida", "CFL", "FL-Orlando" → market: "ORLANDO FL" (short: CFL-Orlando)
+- "TAMPA", "CFL Tampa", "FL-Tampa" → market: "TAMPA FL" (short: CFL-Tampa)
+- "JACKSONVILLE", "North Florida", "NFL", "FL-Jacksonville" → market: "JACKSONVILLE FL" (short: NFL)
+- "BAWA", "Baltimore", "Washington", "Baltimore-Washington" → market: "BAWA"
+- "CAROLINAS", "North Carolina", "South Carolina", "CAR" → market: "CAROLINAS"
+- "GEORGIA", "GA", "Atlanta" → market: "GEORGIA"
+- "VIRGINIA", "VA", "Richmond" → market: "VIRGINIA"
+- "SOVA", "Southern Virginia" → market: "SOVA"
+- "WEST VIRGINIA", "WV" → market: "WEST VIRGINIA"
+- "PENNSYLVANIA", "PA", "Philadelphia" → market: "PENNSYLVANIA"
+- "NORTHEAST", "NE", "New England" → market: "NORTHEAST"
+- "ALABAMA", "LA-AL" → market: "ALABAMA"
+
+## PROJECT TYPE DETERMINATION:
+You MUST compare Existing Config vs Proposed Config tech-by-tech to find what is truly NEW:
+- A tech is "new" ONLY if it has NO entry in the Existing Config but HAS an entry in Proposed Config
+- A tech that exists in BOTH Existing and Proposed is NOT new, even if the antenna model changes
+- Check EACH tech: L700, L600, N600, G1900, L1900, U1900, N1900, LAWS3, L2100, U2100, L2500, N2500
+- Example: If Existing has L700, L600, N600, G1900, L1900, N1900 and Proposed ADDS L2100, LAWS3, N2500 → new techs are L2100, LAWS3, N2500. L600 is NOT new because it already existed.
+
+Project naming:
+- If N2500 is the ONLY new tech → "Anchor"
+- If N2500 + other new techs → "Anchor / [new tech]" e.g., "Anchor / L2100"
+- L2100 added (without N2500) → "L2100"
+- L1900 added (without N2500) → "L1900"
+- L600 added (without N2500) → "L600"
+- Multiple new techs without N2500 → combine: "L2100 / L1900"
+- New sectors added → "Sector Add"
+- Brand new site → "NSB"
+- Complete replacement → "Market Swap"
+- Same antennas, radio changes → "Radio Upgrade"
+- Hardware upgrades no new spectrum → "Equipment Upgrade"
+- Additional capacity on existing techs → "Capacity Add"
+
+## MARKET POC MAPPING:
+- MIAMI FL, ORLANDO FL, TAMPA FL: Delmis Rosario Jr.
+- JACKSONVILLE FL: Alan Alsheimer
+- GEORGIA: Cared Loredo
+- CAROLINAS: Chris Poppell
+- VIRGINIA: Justin Bennett
+- PENNSYLVANIA: David Westcoat
+- NORTHEAST: Chris Poppell
+- UPSTATE NY: Bill Fish
+- WEST VIRGINIA: Michael Beaver
+- BAWA, ALABAMA: Nathan McNeal
+- SOVA: Mason Gannon
+
+## MOUNT:
+See CRITICAL RULES above. Extract from CDs PROPOSED ANTENNA PLAN (elevation/top view), NOT from antenna mounting details.
+- mountType: Sector Mount, Pipe Mount, Platform Mount, Collar Mount, etc.
+- model: The P/N after "SITE PRO P/N:" in CDs (e.g., "VFA12-HD")
+- qty: Total count (e.g., "1/SECTOR-3 TOTAL" → qty: "3")
+- details: Summary including quantities and components
+
+## TOWERTOP:
+See CRITICAL RULES above for towertop vs ground distinction.
+- Actions: Install, Remove, Retain, Relocate
+- Equipment types: antenna, RRH, TMA, diplexer, combiner
+- COMBINE by equipment type — do NOT list individual models. Count ALL antennas together: if a sector gets 1 new FFVV + 1 new AIR6419, that's "Install antenna = 2 per sector". If a sector retains 2 existing antennas, that's "Retain antenna = 2 per sector". Same for RRH — count all radios together.
+- Skip rows where ALL sector counts are 0
+- Equipment in BOTH Existing AND Proposed = "Retain", NOT "Remove"
+
+## GROUND — CRITICAL RULES:
+List ALL ground equipment changes with Action + Qty + Equipment name.
+
+**PRIMARY SOURCE: RFDS** — Use RFDS Existing RAN vs Proposed RAN tables as the main source for ground equipment. Everything listed under "Existing RAN Equipment" and "Proposed RAN Equipment" tables in RFDS is ground equipment.
+
+**Counting rules:**
+- Combine same equipment TYPE regardless of sub-model. Example: 2x RP 6651 (even if different variants) = qty 2 as "RP 6651"
+- Do NOT over-specify model variants — use the base equipment name (BB 6630, RP 6651, RUS01, CSR 7705 SAR M, etc.)
+
+**Action determination by comparing RFDS Existing vs Proposed:**
+- In Proposed but NOT in Existing → "Install"
+- In Existing but NOT in Proposed → "Remove"
+- In BOTH but marked as relocated or position changes → "Relocate" (NOT "Retain")
+- In BOTH with no changes → "Retain"
+- If equipment like BB 6630 or CSR 7705 SAR M shows relocation notes → action is "Relocate"
+
+**CDs cross-reference:**
+- If CDs show ground items NOT in RFDS (e.g., Generator, Hybrid Trunk), add them to ground list AND flag as discrepancy: "Generator shown in CDs but not in RFDS"
+- RFDS is the authority for ground equipment; CDs supplements it
+
+**Ground equipment includes:** BB (Baseband), RP (Radio Processor), RUS, RRU, PSU, rectifier, battery cabinet, surge suppressor, fiber panel, GPS, Hybrid Trunk cables, CSR/router, power cables, generator
+
+## COP_STRUCTURE — CRITICAL:
+- overallHeight: The OVERALL height of existing structure INCLUDING appurtenances (lightning rod, antenna extensions). In CDs look for "OVERALL HEIGHT OF EXISTING STRUCTURE", "HEIGHT OF GREATEST APPURTENANCE", or the tallest measurement shown. This is typically the LARGER number (e.g., 170').
+- structureHeight: The bare structure/tower height ONLY, WITHOUT appurtenances. In CDs look for "TOP OF EXISTING TOWER", "TOP OF STRUCTURE", "STRUCTURE HEIGHT". This is typically the SMALLER number (e.g., 152').
+- These two values are usually DIFFERENT — overallHeight >= structureHeight. If you only find one measurement, use it for both but flag as a discrepancy.
+- Do NOT use the proposed antenna rad center height (e.g., 148') as either value — those are mounting positions, not structure heights.
+- If RFDS shows a different height than CDs, prefer CDs values for structure measurements.
+
+## ANTENNA STATUS:
+See CRITICAL RULES above. NEVER use "PROPOSED" — only "NEW", "EXISTING", or "RELOCATE".
+
+## SECTORS - CRITICAL RULES:
+1. Each sector array MUST have EXACTLY 12 objects, one for each tech in order
+2. Technologies sharing the same antenna get identical properties (manufacturer, model, position, radCenter, azimuth, mdt, roll, ret)
+3. Only the FIRST tech in each antenna group gets the RRH value
+4. Manufacturer mapping: FFVV/HBXX/APXV = "CommScope", AIR models = "Ericsson"
+5. Set active: true for all populated techs, active: false for unused
+
+## DISCREPANCIES:
+Flag real differences between RFDS and CDs (different landlords, equipment configs, addresses, scope).
+Do NOT flag version numbers, BU# differences, or minor formatting.
+
+CRITICAL: Return ONLY the JSON. No markdown. No text before or after.`
+          }
+        ].filter(Boolean)
+      }];
+      
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8000,
+          messages
+        })
+      });
+      
+      setStatusMsg("Received response, parsing...");
+      
+      const data = await response.json();
+      
+      // Check for API-level errors
+      if (data.error) {
+        throw new Error(`API Error: ${data.error.type} - ${data.error.message}`);
+      }
+      
+      if (!data.content || !Array.isArray(data.content)) {
+        setRawResponse(JSON.stringify(data, null, 2));
+        throw new Error("Unexpected API response structure. Check debug panel below.");
+      }
+      
+      const textBlock = data.content.find(c => c.type === "text");
+      if (!textBlock || !textBlock.text) {
+        setRawResponse(JSON.stringify(data, null, 2));
+        throw new Error("No text content in API response.");
+      }
+      
+      const text = textBlock.text;
+      setRawResponse(text.substring(0, 500) + (text.length > 500 ? "..." : ""));
+      
+      // Robust JSON extraction: try direct parse, then find JSON object in text
+      let extracted;
+      const cleanText = text.replace(/```json\n?/g, "").replace(/\n?```/g, "").trim();
+      
+      try {
+        extracted = JSON.parse(cleanText);
+      } catch (e1) {
+        // Try to find JSON object boundaries
+        const firstBrace = cleanText.indexOf('{');
+        const lastBrace = cleanText.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          try {
+            extracted = JSON.parse(cleanText.substring(firstBrace, lastBrace + 1));
+          } catch (e2) {
+            throw new Error(`JSON parse failed. First 200 chars: ${cleanText.substring(0, 200)}`);
+          }
+        } else {
+          throw new Error(`No JSON found in response. First 200 chars: ${cleanText.substring(0, 200)}`);
+        }
+      }
+      
+      setStatusMsg("Populating site info...");
+      
+      // Populate site info with fallbacks
+      if (extracted.site) {
+        const s = extracted.site;
+        setSi({
+          siteName: String(s.siteName || ""),
+          siteId: String(s.siteId || ""),
+          siteAddress: String(s.siteAddress || ""),
+          cdAddress: String(s.cdAddress || ""),
+          landlord: String(s.landlord || ""),
+          project: String(s.project || ""),
+          structureType: String(s.structureType || ""),
+          market: String(s.market || ""),
+          marketPoc: String(s.marketPoc || ""),
+          gcName: String(s.gcName || ""),
+          decom: String(s.decom || "NO"),
+          vendor: String(s.vendor || ""),
+          towerHeight: String(s.towerHeight || ""),
+          buNumber: String(s.buNumber || ""),
+          region: String(s.region || ""),
+          sectorCount: Number(s.sectorCount) || 3,
+        });
+      }
+      
+      setDisc(Array.isArray(extracted.discrepancies) ? extracted.discrepancies : []);
+      
+      if (extracted.mount) {
+        setMt({
+          action: String(extracted.mount.action || "Retain"),
+          qty: String(extracted.mount.qty || ""),
+          mountType: String(extracted.mount.mountType || ""),
+          model: String(extracted.mount.model || ""),
+          details: String(extracted.mount.details || ""),
+        });
+      }
+      
+      setTt(Array.isArray(extracted.towertop) ? extracted.towertop : []);
+      setGr(Array.isArray(extracted.ground) ? extracted.ground : []);
+      
+      if (extracted.cop_structure) {
+        setCs({
+          overallHeight: String(extracted.cop_structure.overallHeight || ""),
+          structureHeight: String(extracted.cop_structure.structureHeight || ""),
+        });
+      }
+      
+      setStatusMsg("Normalizing sector data...");
+      
+      // Normalize sectors: ensure each has exactly 12 techs in TECH_ORDER
+      const rawSectors = Array.isArray(extracted.sectors) ? extracted.sectors : [];
+      const newSectors = Array(6).fill(0).map((_, i) => 
+        i < rawSectors.length ? normalizeSector(rawSectors[i]) : normalizeSector(null)
+      );
+      setCop(newSectors);
+      
+      setStatusMsg("Extraction complete!");
+      setSec("site");
+    } catch (err) {
+      const msg = err.message || "Unknown error";
+      setErrorMsg(msg);
+      setStatusMsg("");
+      console.error("Extraction error:", err);
+    } finally {
+      setProcessing(false);
+    }
+  };
+  
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const tabItems = [
+    ["upload", "Upload", "upload"],
+    ["site", "Site Info", "clipboard"],
+    ["disc", "Discrepancies", "alert"],
+    ["sow", "SOW Entry", "wrench"],
+    ["cop", "COP Data", "signal"],
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-pink-50" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div className="bg-gradient-to-r from-gray-900 via-purple-900 to-pink-900 text-white px-6 py-5 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-2 h-12 rounded-full bg-gradient-to-b from-pink-400 to-purple-600 shadow-lg shadow-pink-500/50" />
+            <div>
+              <div className="text-xs text-purple-200 tracking-widest uppercase font-semibold">RFDS & CDs Data Extractor</div>
+              <div className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">{si.siteId || "Ready to Extract"} {si.siteName && <span>{"\u2014"} {si.siteName}</span>}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {si.project && <span className="px-4 py-2 rounded-full text-xs font-bold text-white bg-gradient-to-r from-pink-500 to-purple-600 shadow-lg">{si.project}</span>}
+            {si.sectorCount > 0 && <span className="px-4 py-2 rounded-full text-xs font-semibold bg-white/20 backdrop-blur-sm border border-white/30">{si.sectorCount} Sectors</span>}
+            <button onClick={() => {
+              const csv = buildCSV(si, mt, tt, gr, cs, cop, si.sectorCount);
+              setCsvContent(csv);
+              setCsvReady(true);
+              // Try data URI download
+              try {
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${si.siteId || "Site"} - Extracted Data.csv`;
+                a.style.display = "none";
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+              } catch(e) { /* fallback to copy panel below */ }
+            }} className="px-5 py-2 rounded-full text-sm font-bold bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center gap-2">
+              <Icon type="download" size={16} /> Export CSV
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-5">
+          {tabItems.map(([k, l, icon]) => (
+            <button key={k} onClick={() => setSec(k)} className={`px-5 py-2.5 text-sm font-semibold rounded-t-xl transition-all transform hover:scale-105 flex items-center gap-2 ${sec===k?"bg-gradient-to-br from-white to-purple-50 text-gray-900 shadow-lg":"text-purple-200 hover:text-white hover:bg-white/10 backdrop-blur-sm"}`}>
+              <Icon type={icon} size={14} /> {l}{k==="disc"&&disc.length>0&&<span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold shadow-md">{disc.length}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      <div className="px-6 py-6 max-w-full">
+        {sec==="upload"&&(
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl shadow-xl border border-purple-100 overflow-hidden">
+              <div className="px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-500">
+                <h2 className="font-bold text-white text-lg flex items-center gap-2">
+                  <Icon type="rocket" size={22} /> Auto-Extract from Documents
+                </h2>
+                <p className="text-sm text-purple-100 mt-1">Upload your RFDS (required) and Construction Drawings (optional) to automatically extract all site data</p>
+              </div>
+              <div className="p-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className={`relative border-3 border-dashed rounded-2xl p-8 transition-all ${rfdsFile ? 'border-green-400 bg-green-50' : 'border-purple-300 bg-purple-50/50 hover:border-purple-400 hover:bg-purple-100/50'}`}>
+                    <input type="file" accept=".pdf" onChange={e => setRfdsFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                    <div className="text-center pointer-events-none">
+                      <div className="mb-3 flex justify-center">{rfdsFile ? <Icon type="check" size={48} /> : <Icon type="file" size={48} />}</div>
+                      <div className="font-bold text-gray-800 text-lg mb-1">{rfdsFile ? rfdsFile.name : "RFDS (Required)"}</div>
+                      <div className="text-sm text-gray-600">{rfdsFile ? "Ready to process" : "Click or drag PDF here"}</div>
+                    </div>
+                  </div>
+                  
+                  <div className={`relative border-3 border-dashed rounded-2xl p-8 transition-all ${cdsFile ? 'border-green-400 bg-green-50' : 'border-pink-300 bg-pink-50/50 hover:border-pink-400 hover:bg-pink-100/50'}`}>
+                    <input type="file" accept=".pdf" onChange={e => setCdsFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                    <div className="text-center pointer-events-none">
+                      <div className="mb-3 flex justify-center">{cdsFile ? <Icon type="check" size={48} /> : <Icon type="blueprint" size={48} />}</div>
+                      <div className="font-bold text-gray-800 text-lg mb-1">{cdsFile ? cdsFile.name : "Construction Drawings (Optional)"}</div>
+                      <div className="text-sm text-gray-600">{cdsFile ? "Ready to process" : "Click or drag PDF here"}</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-8 text-center">
+                  <button 
+                    onClick={processFiles} 
+                    disabled={!rfdsFile || processing}
+                    className={`px-8 py-4 rounded-xl text-lg font-bold shadow-xl transform transition-all ${processing || !rfdsFile ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 hover:scale-105 hover:shadow-2xl'}`}
+                  >
+                    {processing ? (
+                      <span className="flex items-center gap-3">
+                        <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                        Processing Documents...
+                      </span>
+                    ) : <span className="flex items-center gap-2"><Icon type="rocket" size={20} /> Extract & Auto-Fill Data</span>}
+                  </button>
+                </div>
+                
+                {(processing || statusMsg || errorMsg) && (
+                  <div className="mt-6 space-y-3">
+                    {processing && (
+                      <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl border-2 border-purple-200">
+                        <div className="text-center text-purple-800 font-medium flex items-center justify-center gap-2">
+                          <Icon type="zap" size={18} /> {statusMsg || "Processing..."}
+                        </div>
+                      </div>
+                    )}
+                    {!processing && statusMsg && !errorMsg && (
+                      <div className="p-4 bg-gradient-to-r from-green-100 to-emerald-100 rounded-xl border-2 border-green-300">
+                        <div className="text-center text-green-800 font-medium flex items-center justify-center gap-2">
+                          <Icon type="check" size={18} /> {statusMsg}
+                        </div>
+                      </div>
+                    )}
+                    {errorMsg && (
+                      <div className="p-4 bg-gradient-to-r from-red-100 to-orange-100 rounded-xl border-2 border-red-300">
+                        <div className="text-red-800 font-medium flex items-start gap-2">
+                          <Icon type="alert" size={18} />
+                          <div>
+                            <div className="font-bold">Extraction Error</div>
+                            <div className="text-sm mt-1 font-mono break-all">{errorMsg}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {rawResponse && (
+                      <details className="p-3 bg-gray-100 rounded-xl border border-gray-300">
+                        <summary className="text-sm font-semibold text-gray-600 cursor-pointer">Debug: Raw API Response</summary>
+                        <pre className="mt-2 text-xs font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">{rawResponse}</pre>
+                      </details>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl shadow-lg border border-blue-200 p-6">
+              <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2 text-lg">
+                <Icon type="bulb" size={22} /> How It Works
+              </h3>
+              <div className="space-y-2 text-sm text-blue-800">
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-blue-600">1.</span>
+                  <span>Upload your RFDS PDF (required) and optionally Construction Drawings</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-blue-600">2.</span>
+                  <span>Click "Extract & Auto-Fill Data" to process with AI</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-blue-600">3.</span>
+                  <span>Review and edit the extracted data in the other tabs</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-blue-600">4.</span>
+                  <span>Export to CSV to import into your DEF template</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {sec==="site"&&(
+          <div className="bg-white rounded-2xl shadow-xl border border-purple-100">
+            <div className="px-6 py-4 border-b bg-gradient-to-r from-purple-50 to-pink-50 rounded-t-2xl">
+              <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icon type="clipboard" size={20} /> EMAIL DATA ENTRY</h2>
+              <p className="text-sm text-gray-600 mt-1">Click any value to edit</p>
+            </div>
+            <div className="grid grid-cols-2 gap-x-10 gap-y-2 p-6">
+              {[["Site Name","siteName"],["Site ID","siteId"],["Site Address (RFDS)","siteAddress"],["Site Address (CDs)","cdAddress"],["Landlord","landlord"],["Project","project"],["Structure Type","structureType"],["Market","market"],["Market POC","marketPoc"],["GC Name","gcName"],["Decom Equipment?","decom"],["Vendor","vendor"],["Tower Height","towerHeight"],["BU #","buNumber"],["Region","region"],["Sector Count","sectorCount"]].map(([l,f]) => (
+                <div key={f} className="flex items-center gap-3 py-2 border-b border-gray-100">
+                  <span className="text-sm font-semibold text-gray-600 w-44 shrink-0">{l}</span>
+                  <div className="flex-1 bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-lg px-2 hover:border-amber-300 transition-colors">
+                    <EC value={String(si[f]??"")} onChange={v => uSi(f,v)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {sec==="disc"&&(
+          <div className="bg-white rounded-2xl shadow-xl border border-purple-100">
+            <div className="px-6 py-4 border-b bg-gradient-to-r from-amber-50 to-orange-50 rounded-t-2xl flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icon type="alert" size={20} /> DISCREPANCY NOTES</h2>
+                <p className="text-sm text-gray-600 mt-1">Copy and paste into DEF</p>
+              </div>
+              <button onClick={() => { const t = disc.map(d => `\u2022 ${d.field} \u2014 RFDS: "${d.rfds}" | CDs: "${d.cds}" \u2192 ${d.note}`).join("\n"); navigator.clipboard.writeText(t); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="px-5 py-2 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 shadow-lg transition-all transform hover:scale-105 flex items-center gap-2">
+                {copied ? <><Icon type="check" size={16} /> Copied!</> : <><Icon type="copy" size={16} /> Copy All</>}
+              </button>
+            </div>
+            <div className="p-6">
+              {disc.length>0?<textarea className="w-full font-mono text-sm p-5 border-2 border-amber-200 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 focus:outline-none focus:border-amber-400 resize-y shadow-inner" rows={Math.max(4,disc.length*2+1)} value={"DISCREPANCY NOTES:\n"+disc.map(d=>`\u2022 ${d.field} \u2014 RFDS: "${d.rfds}" | CDs: "${d.cds}" \u2192 ${d.note}`).join("\n")} readOnly onFocus={e=>e.target.select()}/>:<div className="text-center py-12 text-gray-400"><div className="mb-3 flex justify-center"><Icon type="check" size={56}/></div><div className="text-lg font-medium">No discrepancies found</div><div className="text-sm mt-1">All data matches between RFDS and CDs</div></div>}
+            </div>
+          </div>
+        )}
+        
+        {sec==="sow"&&(
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl shadow-xl border border-purple-100">
+              <div className="px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-cyan-50 rounded-t-2xl"><h2 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icon type="tower" size={20} /> I. MOUNT</h2></div>
+              <div className="p-6 grid grid-cols-2 gap-5">
+                {[["Action",<select className="w-full text-sm bg-transparent outline-none cursor-pointer border-2 border-blue-200 rounded-lg px-2 py-1 hover:border-blue-400" value={mt.action} onChange={e=>setMt(p=>({...p,action:e.target.value}))}><option>Retain</option><option>Mount Swap</option><option>Mount Mod</option><option>New Mount</option></select>],["Qty",<EC value={mt.qty} onChange={v=>setMt(p=>({...p,qty:v}))}/>],["Mount Type",<EC value={mt.mountType} onChange={v=>setMt(p=>({...p,mountType:v}))}/>],["Model",<EC value={mt.model} onChange={v=>setMt(p=>({...p,model:v}))}/>],["Details",<EC value={mt.details} onChange={v=>setMt(p=>({...p,details:v}))}/>]].map(([l,c],i)=>(
+                  <div key={i} className="flex items-center gap-3"><span className="text-sm font-semibold text-gray-600 w-28 shrink-0">{l}:</span><div className="flex-1 bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-200 rounded-lg px-2 py-1 hover:border-blue-300">{c}</div></div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-xl border border-purple-100">
+              <div className="px-6 py-4 border-b bg-gradient-to-r from-green-50 to-emerald-50 rounded-t-2xl flex items-center justify-between">
+                <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icon type="signal" size={20} /> II. TOWERTOP</h2>
+                <button onClick={() => setTt(p => [...p, {action:"Install",equipment:"antenna",alpha:0,beta:0,gamma:0,delta:0,epsilon:0,zeta:0}])} className="px-4 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow transition-all">+ Add Row</button>
+              </div>
+              <div className="p-5 overflow-x-auto">
+                <table className="w-full text-sm border-collapse"><thead><tr className="bg-gradient-to-r from-green-100 to-emerald-100"><th className="text-left p-3 font-bold">Action</th><th className="text-left p-3 font-bold">Equipment</th>{SN.slice(0,si.sectorCount).map((s,i)=><th key={s} className="text-center p-3 font-bold" style={{color:SC[i]}}>{s.charAt(0)}</th>)}<th className="p-3 w-10"></th></tr></thead>
+                <tbody>{tt.map((r,ri)=><tr key={ri} className="border-b hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 transition-colors"><td className="p-3"><select className="w-full text-sm bg-transparent outline-none cursor-pointer border-2 border-green-200 rounded-lg px-2 py-1 hover:border-green-400 font-semibold" value={r.action} onChange={e=>{const n=[...tt];n[ri]={...n[ri],action:e.target.value};setTt(n);}} style={{color:r.action==="Install"?"#16A34A":r.action==="Remove"?"#DC2626":r.action==="Relocate"?"#D97706":"#6B7280"}}><option>Install</option><option>Remove</option><option>Retain</option><option>Relocate</option></select></td><td className="p-3"><EC value={r.equipment} onChange={v=>{const n=[...tt];n[ri]={...n[ri],equipment:v};setTt(n);}}/></td>{["alpha","beta","gamma","delta","epsilon","zeta"].slice(0,si.sectorCount).map(s=><td key={s} className="text-center p-3"><input type="number" min="0" className="w-14 text-center font-mono font-semibold border-2 border-green-200 rounded-lg py-1 hover:border-green-400 focus:outline-none focus:border-green-500" value={r[s]||0} onChange={e=>{const n=[...tt];n[ri]={...n[ri],[s]:Number(e.target.value)||0};setTt(n);}}/></td>)}<td className="p-3 text-center"><button onClick={()=>{const n=[...tt];n.splice(ri,1);setTt(n);}} className="text-red-400 hover:text-red-600 font-bold text-lg" title="Remove row">{"\u00D7"}</button></td></tr>)}</tbody></table>
+                {tt.length===0&&<div className="text-center py-6 text-gray-400 text-sm">No towertop entries. Click "+ Add Row" to add.</div>}
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-xl border border-purple-100">
+              <div className="px-6 py-4 border-b bg-gradient-to-r from-orange-50 to-amber-50 rounded-t-2xl flex items-center justify-between">
+                <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icon type="zap" size={20} /> III. GROUND</h2>
+                <button onClick={() => setGr(p => [...p, {action:"Install",qty:1,equipment:""}])} className="px-4 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow transition-all">+ Add Row</button>
+              </div>
+              <div className="p-5"><table className="w-full text-sm border-collapse"><thead><tr className="bg-gradient-to-r from-orange-100 to-amber-100"><th className="text-left p-3 font-bold">Action</th><th className="text-left p-3 font-bold">Qty</th><th className="text-left p-3 font-bold">Equipment</th><th className="p-3 w-10"></th></tr></thead>
+              <tbody>{gr.map((r,i)=><tr key={i} className="border-b hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 transition-colors"><td className="p-3"><select className="w-full text-sm bg-transparent outline-none cursor-pointer border-2 border-orange-200 rounded-lg px-2 py-1 hover:border-orange-400 font-semibold" value={r.action} onChange={e=>{const n=[...gr];n[i]={...n[i],action:e.target.value};setGr(n);}} style={{color:r.action==="Install"?"#16A34A":r.action==="Remove"?"#DC2626":"#6B7280"}}><option>Install</option><option>Remove</option><option>Retain</option><option>Relocate</option></select></td><td className="p-3"><EC value={String(r.qty)} onChange={v=>{const n=[...gr];n[i]={...n[i],qty:v};setGr(n);}}/></td><td className="p-3"><EC value={r.equipment} onChange={v=>{const n=[...gr];n[i]={...n[i],equipment:v};setGr(n);}}/></td><td className="p-3 text-center"><button onClick={()=>{const n=[...gr];n.splice(i,1);setGr(n);}} className="text-red-400 hover:text-red-600 font-bold text-lg" title="Remove row">{"\u00D7"}</button></td></tr>)}</tbody></table>
+              {gr.length===0&&<div className="text-center py-6 text-gray-400 text-sm">No ground equipment. Click "+ Add Row" to add.</div>}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {sec==="cop"&&(
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl shadow-xl border border-purple-100">
+              <div className="px-6 py-4 border-b bg-gradient-to-r from-indigo-50 to-purple-50"><h2 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icon type="tower" size={20} /> Structure Info</h2></div>
+              <div className="grid grid-cols-3 gap-5 p-6">
+                <div className="flex items-center gap-3"><span className="text-sm font-semibold text-gray-600 w-40 shrink-0">Overall Height:</span><div className="flex-1 bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg px-2"><EC value={cs.overallHeight} onChange={v=>setCs(p=>({...p,overallHeight:v}))}/></div></div>
+                <div className="flex items-center gap-3"><span className="text-sm font-semibold text-gray-600 w-40 shrink-0">Structure Height:</span><div className="flex-1 bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg px-2"><EC value={cs.structureHeight} onChange={v=>setCs(p=>({...p,structureHeight:v}))}/></div></div>
+                <div className="flex items-center gap-3"><span className="text-sm font-semibold text-gray-600 w-40 shrink-0">Tape Drop:</span><div className="flex-1 bg-gray-100 border-2 border-gray-300 rounded-lg px-2"><span className="text-sm text-gray-500 px-2 py-1 block">Post-Fill</span></div></div>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-xl border border-purple-100">
+              <div className="px-6 py-4 border-b bg-gradient-to-r from-purple-50 to-pink-50"><h2 className="font-bold text-gray-800 text-lg flex items-center gap-2"><Icon type="signal" size={20} /> COP DATA ENTRY</h2><p className="text-sm text-gray-600 mt-1">All fields editable {"\u2022"} Active techs highlighted</p></div>
+              <div className="flex border-b px-3 pt-3 bg-gradient-to-r from-purple-50/30 to-pink-50/30">{vis.map((_,i)=><button key={i} onClick={()=>setTab(i)} className={`px-5 py-2.5 text-sm font-bold rounded-t-xl border-b-4 transition-all transform hover:scale-105 ${tab===i?"bg-white shadow-lg":"text-gray-500 border-transparent hover:text-gray-700 hover:bg-white/50"}`} style={tab===i?{color:SC[i],borderColor:SC[i]}:{}}>{SN[i]}<span className="ml-2 text-gray-400 font-normal text-xs">(S{i+1})</span></button>)}</div>
+              <div className="overflow-x-auto p-3">
+                <table className="w-full text-sm border-collapse">
+                  <thead><tr className="bg-gradient-to-r from-gray-800 to-gray-900 text-white"><th className="p-2 text-left w-20">Tech</th><th className="p-2 text-left">Manufacturer</th><th className="p-2 text-left">Model</th><th className="p-2 text-center w-24">Status</th><th className="p-2 text-center w-16">Pos</th><th className="p-2 text-center w-20">Rad Ctr</th><th className="p-2 text-center w-20">Azimuth</th><th className="p-2 text-center w-16">MDT</th><th className="p-2 text-center w-16">Roll</th><th className="p-2 text-center w-16">RET</th><th className="p-2 text-left">RRH</th><th className="p-2 text-center w-10"></th></tr></thead>
+                  <tbody>{vis[tab]?.map((r,ri)=>{const prev=ri>0?vis[tab][ri-1]:null;const ng=prev&&r.active&&prev.active&&r.model!==prev.model;return(
+                    <tr key={ri} className={`${r.active?"bg-gradient-to-r from-yellow-50 to-amber-50":"bg-gray-50"} ${ng?"border-t-4 border-pink-400":"border-b border-gray-200"} hover:from-yellow-100 hover:to-amber-100 transition-all`}>
+                      <td className="p-2 font-bold text-base" style={{color:r.active?SC[tab]:"#D1D5DB"}}>{r.tech}</td>
+                      <td className="p-2"><EC value={r.manufacturer} onChange={v=>uCop(tab,ri,"manufacturer",v)}/></td>
+                      <td className="p-2"><EC value={r.model} onChange={v=>uCop(tab,ri,"model",v)}/></td>
+                      <td className="p-2 text-center"><EC value={r.status} onChange={v=>uCop(tab,ri,"status",v)} className={`text-center font-bold ${r.status==="NEW"?"text-green-600":r.status==="EXISTING"?"text-blue-600":r.status==="RELOCATE"?"text-orange-600":""}`}/></td>
+                      <td className="p-2 text-center"><EC value={String(r.position)} onChange={v=>uCop(tab,ri,"position",v)}/></td>
+                      <td className="p-2 text-center"><EC value={String(r.radCenter)} onChange={v=>uCop(tab,ri,"radCenter",v)}/></td>
+                      <td className="p-2 text-center"><EC value={String(r.azimuth)} onChange={v=>uCop(tab,ri,"azimuth",v)}/></td>
+                      <td className="p-2 text-center"><EC value={String(r.mdt)} onChange={v=>uCop(tab,ri,"mdt",v)}/></td>
+                      <td className="p-2 text-center"><EC value={String(r.roll)} onChange={v=>uCop(tab,ri,"roll",v)}/></td>
+                      <td className="p-2 text-center"><EC value={String(r.ret)} onChange={v=>uCop(tab,ri,"ret",v)}/></td>
+                      <td className="p-2"><EC value={r.rrh} onChange={v=>uCop(tab,ri,"rrh",v)}/></td>
+                      <td className="p-2 text-center">{r.active ? <button onClick={()=>clearRow(tab,ri)} className="text-red-300 hover:text-red-500 transition-colors" title="Clear row"><Icon type="eraser" size={14}/></button> : rowBackup[`${tab}-${ri}`] ? <button onClick={()=>clearRow(tab,ri)} className="text-blue-400 hover:text-blue-600 transition-colors" title="Restore row"><Icon type="undo" size={14}/></button> : null}</td>
+                    </tr>);})}</tbody>
+                </table>
+              </div>
+              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-purple-50 rounded-b-2xl border-t text-sm text-gray-600 flex gap-6 flex-wrap">
+                <span className="flex items-center gap-2"><span className="inline-block w-4 h-4 bg-gradient-to-r from-yellow-100 to-amber-100 border-2 border-yellow-300 rounded"/> Active tech</span>
+                <span className="flex items-center gap-2"><span className="inline-block w-4 h-4 bg-gray-100 border-2 border-gray-300 rounded"/> Inactive</span>
+                <span className="flex items-center gap-2"><span className="inline-block w-4 h-2 bg-pink-400 rounded"/> Antenna group separator</span>
+                <span className="flex items-center gap-2"><span className="text-red-400"><Icon type="eraser" size={14}/></span> Clear row</span>
+                <span className="flex items-center gap-2"><span className="text-blue-400"><Icon type="undo" size={14}/></span> Restore cleared row</span>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {csvReady && (
+          <div className="mt-6 bg-white rounded-2xl shadow-xl border-2 border-green-300 overflow-hidden">
+            <div className="px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-between">
+              <h2 className="font-bold text-white text-lg flex items-center gap-2">
+                <Icon type="check" size={20} /> CSV Ready {si.siteId ? `- ${si.siteId}` : ""}
+              </h2>
+              <div className="flex items-center gap-2">
+                <button onClick={() => {
+                  navigator.clipboard.writeText(csvContent);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }} className="px-4 py-2 text-sm font-bold rounded-lg bg-white text-green-700 hover:bg-green-50 shadow transition-all flex items-center gap-2">
+                  {copied ? <><Icon type="check" size={14} /> Copied!</> : <><Icon type="copy" size={14} /> Copy CSV</>}
+                </button>
+                <button onClick={() => {
+                  try {
+                    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `${si.siteId || "Site"} - Extracted Data.csv`;
+                    a.style.display = "none";
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                    }, 100);
+                  } catch(e) {
+                    navigator.clipboard.writeText(csvContent);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }
+                }} className="px-4 py-2 text-sm font-bold rounded-lg bg-white text-green-700 hover:bg-green-50 shadow transition-all flex items-center gap-2">
+                  <Icon type="download" size={14} /> Download
+                </button>
+                <button onClick={() => setCsvReady(false)} className="px-3 py-2 text-sm font-bold rounded-lg bg-white/30 text-white hover:bg-white/50 transition-all">X</button>
+              </div>
+            </div>
+            <div className="p-4">
+              <textarea
+                className="w-full font-mono text-xs p-4 border-2 border-green-200 rounded-xl bg-green-50 focus:outline-none focus:border-green-400 resize-y shadow-inner"
+                rows={12}
+                value={csvContent}
+                readOnly
+                onFocus={e => e.target.select()}
+              />
+              <p className="text-sm text-gray-500 mt-2">If the download didn't start automatically, click <strong>Copy CSV</strong> then paste into a new .csv file, or click <strong>Download</strong> to retry.</p>
+            </div>
+          </div>
+        )}
+        
+        <div className="mt-8 p-6 bg-gradient-to-r from-blue-100 via-purple-100 to-pink-100 rounded-2xl border-2 border-purple-200 shadow-lg text-sm text-gray-700">
+          <div className="flex items-center gap-3">
+            <Icon type="target" size={28} />
+            <div>
+              <strong className="text-base">Export Instructions:</strong> Click the green <strong>Export CSV</strong> button in the header, then import into your DEF using the Control Panel import button.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

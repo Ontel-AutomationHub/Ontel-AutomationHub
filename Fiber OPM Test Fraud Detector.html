@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Fiber Optic Fraud Detection System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --magenta:     #E20074;
+  --magenta-dk:  #b5005c;
+  --magenta-lt:  #ff4da6;
+  --magenta-pale:#fce4f0;
+  --magenta-bg:  #fff0f7;
+  --gray-bg:     #f7f7f7;
+  --border:      #e8e8e8;
+  --text:        #1a1a1a;
+  --text-soft:   #666;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; font-size: 14px; background: var(--gray-bg); color: var(--text); }
+
+.topbar {
+  background: var(--magenta);
+  color: #fff; padding: 16px 28px;
+  border-bottom: 4px solid var(--magenta-dk);
+}
+.topbar h1 { font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+.topbar p  { font-size: 12px; color: rgba(255,255,255,.75); margin-top: 4px; }
+
+.wrap { max-width: 980px; margin: 0 auto; padding: 24px 18px 60px; }
+
+.card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 20px 22px; margin-bottom: 16px; }
+.card-title {
+  font-size: 12px; font-weight: 700; color: var(--magenta);
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 14px;
+  padding-bottom: 8px; border-bottom: 2px solid var(--magenta-pale);
+}
+
+.two-col { display: flex; gap: 14px; }
+.two-col .card { flex: 1; }
+
+/* Drop zones */
+.drop-zone {
+  border: 2px dashed #ddd; border-radius: 5px; padding: 24px 14px;
+  text-align: center; cursor: pointer; color: var(--text-soft); transition: all .2s;
+  user-select: none;
+}
+.drop-zone:hover { border-color: var(--magenta); color: var(--magenta); background: var(--magenta-bg); }
+.drop-zone.has-file { border-color: var(--magenta); background: var(--magenta-bg); color: var(--magenta-dk); }
+.drop-zone.drag-over { border-color: var(--magenta); background: var(--magenta-pale); }
+.drop-zone input { display: none; }
+.drop-sub { font-size: 11px; color: #aaa; margin-top: 5px; }
+.file-chip {
+  display: inline-block; margin-top: 8px;
+  background: var(--magenta); color: #fff;
+  padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;
+}
+
+/* Progress */
+.progress { display: none; margin-top: 12px; }
+.progress.show { display: block; }
+.prog-label { font-size: 12px; color: var(--text-soft); margin-bottom: 5px; }
+.prog-track { height: 5px; background: #e8e8e8; border-radius: 3px; }
+.prog-bar   { height: 5px; background: var(--magenta); border-radius: 3px; width: 0; transition: width .3s; }
+
+/* DB tabs */
+.db-tabs { display:flex; margin-bottom:12px; border:1px solid #e0e0e0; border-radius:5px; overflow:hidden; }
+.db-tab { flex:1; padding:8px 12px; font-size:12px; font-weight:600; background:#f7f7f7; border:none; cursor:pointer; font-family:Arial,sans-serif; color:#777; transition:all .15s; }
+.db-tab:first-child { border-right:1px solid #e0e0e0; }
+.db-tab.active { background:var(--magenta); color:#fff; }
+.db-tab:hover:not(.active) { background:var(--magenta-pale); color:var(--magenta-dk); }
+
+/* DB status */
+.db-stat { margin-top: 10px; font-size: 12px; }
+.db-stat.loaded { color: var(--magenta-dk); font-weight: 600; }
+.db-stat.empty  { color: #aaa; }
+
+/* Settings row */
+.settings-row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+.ctrl { flex: none; }
+.ctrl label { display: block; font-size: 12px; color: var(--text-soft); margin-bottom: 5px; }
+.ctrl-inner { display: flex; align-items: center; gap: 10px; }
+input[type=range] { width: 140px; accent-color: var(--magenta); }
+.slider-val { font-size: 14px; font-weight: 700; color: var(--magenta); min-width: 38px; }
+
+.clear-btn {
+  margin-left: auto; padding: 8px 18px;
+  border: 1px solid #ccc; background: #fff;
+  border-radius: 5px; font-size: 13px; cursor: pointer; color: var(--text);
+}
+.clear-btn:hover { background: var(--gray-bg); border-color: #bbb; }
+.dl-btn {
+  padding: 8px 18px;
+  border: none; background: var(--magenta); color: #fff;
+  border-radius: 5px; font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: Arial, sans-serif;
+}
+.dl-btn:hover { background: var(--magenta-dk); }
+
+/* Stats row */
+.stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.stat-box {
+  flex: 1; min-width: 110px; border: 1px solid var(--border);
+  border-radius: 5px; padding: 10px 14px; background: #fff;
+}
+.stat-box .s-label { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: .3px; }
+.stat-box .s-value { font-size: 22px; font-weight: 700; margin-top: 2px; color: var(--text); }
+.stat-box.danger .s-value { color: var(--magenta); }
+.stat-box.safe   .s-value { color: var(--magenta-dk); }
+
+/* Fraud banner */
+.fraud-banner {
+  background: var(--magenta-pale); border: 1px solid var(--magenta-lt);
+  border-radius: 5px; padding: 10px 14px; font-size: 13px;
+  color: var(--magenta-dk); margin-bottom: 12px; font-weight: 600;
+}
+
+/* Clean banner */
+.clean-banner {
+  background: var(--magenta-bg); border: 1px solid var(--magenta-pale);
+  border-radius: 6px; padding: 18px 20px; margin-bottom: 4px;
+}
+.clean-banner h3 { font-size: 15px; color: var(--magenta-dk); margin-bottom: 6px; }
+.clean-banner p  { font-size: 13px; color: var(--magenta); margin-bottom: 14px; }
+.add-form { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.add-form .field label { display: block; font-size: 12px; font-weight: 600; color: #444; margin-bottom: 4px; }
+.add-form .field input {
+  padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px;
+  font-size: 13px; font-family: Arial, sans-serif; width: 100%;
+}
+.add-form .field.site  { width: 160px; }
+.add-form .field.run   { width: 240px; }
+.btn-add {
+  padding: 8px 20px; background: var(--magenta); color: #fff;
+  border: none; border-radius: 5px; font-size: 13px; font-weight: 700;
+  cursor: pointer; font-family: Arial, sans-serif;
+}
+.btn-add:hover { background: var(--magenta-dk); }
+.btn-add:disabled { background: #ccc; cursor: not-allowed; }
+.add-success { margin-top: 10px; font-size: 12px; color: var(--magenta-dk); font-weight: 600; display: none; }
+
+/* Match cards */
+.match-card { border: 1px solid var(--border); border-radius: 5px; margin-bottom: 12px; overflow: hidden; background: #fff; }
+.match-head {
+  background: var(--magenta-pale); padding: 10px 14px; border-bottom: 1px solid #f5c6de;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+}
+.match-site { font-weight: 700; font-size: 14px; color: var(--magenta-dk); }
+.match-run  { font-size: 12px; color: var(--magenta); margin-top: 2px; }
+.match-score { font-size: 13px; font-weight: 700; color: var(--magenta-dk); }
+.match-range { padding: 7px 14px; font-size: 12px; color: var(--text-soft); border-bottom: 1px solid #f5f5f5; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { padding: 7px 10px; background: var(--magenta); color: #fff; border-bottom: 2px solid var(--magenta-dk); font-size: 11px; text-align: center; }
+th.r { text-align: center; } th.c { text-align: center; }
+td { padding: 5px 10px; border-bottom: 1px solid #f5f5f5; text-align: center; }
+td.r { text-align: center; } td.c { text-align: center; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--magenta-bg); }
+
+.verdict { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+.v-exact { background: var(--magenta);     color: #fff; }
+.v-near  { background: var(--magenta-pale); color: var(--magenta-dk); }
+.v-close { background: #f0f0f0;            color: #555; }
+
+/* Empty / error */
+.empty { padding: 48px; text-align: center; color: #bbb; font-size: 15px; }
+.error-box { background: var(--magenta-pale); border: 1px solid var(--magenta-lt); border-radius: 5px; padding: 12px 16px; color: var(--magenta-dk); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Fiber Optic Fraud Detection System</h1>
+  <p>Upload the Excel database, then drop an OPM test PDF — duplicates are flagged automatically. Clean tests are added to the database.</p>
+</div>
+
+<div class="wrap">
+
+  <!-- Row 1: DB + PDF upload side by side -->
+  <div class="two-col">
+
+    <!-- Database -->
+    <div class="card">
+      <div class="card-title">1. Load Database</div>
+
+      <div class="db-tabs">
+        <button class="db-tab active" id="tabLocal" onclick="switchTab('local')">💻 Local File</button>
+        <button class="db-tab" id="tabSheets" onclick="switchTab('sheets')">📊 Google Sheets</button>
+      </div>
+
+      <!-- Local -->
+      <div id="panelLocal">
+        <div class="drop-zone" id="dbZone">
+          <input type="file" id="dbFile" accept=".xlsx"/>
+          📊 Drop <strong>FiberOPM_Database.xlsx</strong> here<br>
+          <span style="color:#E20074;text-decoration:underline;cursor:pointer" onclick="$('dbFile').click()">or click to browse</span>
+          <div class="drop-sub">The Excel file downloaded from this tool</div>
+        </div>
+        <div style="margin-top:10px;text-align:center;">
+          <a href="https://drive.google.com/drive/folders/1k452lLQB4ODRhjZ1SoaC9rLuxnXmFGk5?usp=sharing"
+             target="_blank"
+             style="display:inline-block;padding:8px 18px;background:#fff;border:1px solid var(--magenta);color:var(--magenta);border-radius:4px;font-size:12px;font-weight:600;text-decoration:none;font-family:Arial,sans-serif;">
+            📁 Open Database Folder on Google Drive
+          </a>
+        </div>
+      </div>
+
+      <!-- Google Sheets -->
+      <div id="panelSheets" style="display:none">
+
+        <!-- Sub-tabs: Sharing Link vs Apps Script -->
+        <div style="display:flex;gap:0;margin-bottom:12px;border:1px solid #eee;border-radius:4px;overflow:hidden;font-size:11px;">
+          <button class="gs-tab active" id="gsTabLink"   onclick="switchGsTab('link')"  style="flex:1;padding:6px;border:none;cursor:pointer;font-family:Arial,sans-serif;font-weight:600;background:var(--magenta);color:#fff;">Sharing Link</button>
+          <button class="gs-tab"        id="gsTabScript" onclick="switchGsTab('script')" style="flex:1;padding:6px;border:none;cursor:pointer;font-family:Arial,sans-serif;font-weight:600;background:#f7f7f7;color:#777;border-left:1px solid #eee;">Apps Script URL</button>
+        </div>
+
+        <!-- Sharing Link panel -->
+        <div id="gsPanelLink">
+          <div style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.6;">
+            Paste your <strong>Google Sheets sharing link</strong>.<br>
+            Sheet must be shared as <em>"Anyone with the link can view"</em>.
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="sheetsUrl"
+              placeholder="https://docs.google.com/spreadsheets/d/…"
+              value="https://docs.google.com/spreadsheets/d/1wM6dmeRUzF-ACTbtdLUMd_c-7916KpWC1z3LArVEFqY/edit?usp=sharing"
+              style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:Arial,sans-serif;color:#333;"/>
+            <button onclick="loadFromSheets()"
+              style="padding:8px 18px;background:var(--magenta);color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;font-family:Arial,sans-serif;white-space:nowrap;">
+              Load
+            </button>
+          </div>
+        </div>
+
+        <!-- Apps Script URL panel -->
+        <div id="gsPanelScript" style="display:none">
+          <div style="font-size:12px;color:#666;margin-bottom:8px;line-height:1.6;">
+            Paste your <strong>Apps Script Web App URL</strong> from your Google Sheet.<br>
+            <span style="color:var(--magenta-dk);font-weight:600;">See setup instructions below ↓</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="scriptUrl"
+              placeholder="https://script.google.com/macros/s/…/exec"
+              style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:Arial,sans-serif;color:#333;"/>
+            <button onclick="loadFromScript()"
+              style="padding:8px 18px;background:var(--magenta);color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;font-family:Arial,sans-serif;white-space:nowrap;">
+              Load
+            </button>
+          </div>
+          <!-- Setup instructions -->
+          <div style="margin-top:12px;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:12px;font-size:11px;color:#555;line-height:1.8;">
+            <strong style="color:var(--magenta-dk);font-size:12px;">One-time Setup in Google Sheets:</strong><br>
+            1. Open your Google Sheet → <strong>Extensions</strong> → <strong>Apps Script</strong><br>
+            2. Delete any existing code and paste the script from <strong>FiberOPM_AppScript.gs</strong><br>
+            3. Click <strong>Deploy</strong> → <strong>New deployment</strong> → Type: <em>Web app</em><br>
+            4. Set <em>Execute as</em>: <strong>Me</strong> &nbsp;|&nbsp; <em>Who has access</em>: <strong>Anyone</strong><br>
+            5. Click <strong>Deploy</strong> → copy the <em>Web app URL</em> → paste above
+          </div>
+        </div>
+
+        <div id="sheetsStatus" style="margin-top:8px;font-size:12px;color:#999;min-height:16px;"></div>
+      </div>
+
+      <div class="db-stat empty" id="dbStat">No database loaded — using built-in 480-record baseline</div>
+    </div>
+
+    <!-- PDF -->
+    <div class="card">
+      <div class="card-title">2. Upload OPM Test PDF</div>
+      <div class="drop-zone" id="pdfZone">
+        <input type="file" id="pdfFile" accept=".pdf"/>
+        📄 Drop PDF here, or
+        <span style="color:#E20074;text-decoration:underline;cursor:pointer" onclick="$('pdfFile').click()">or click to browse</span>
+        <div class="drop-sub">OpTest Report · OPM Report · Inspec OPM Report</div>
+        <div class="file-chip" id="pdfChip" style="display:none"></div>
+      </div>
+      <div class="progress" id="progress">
+        <div class="prog-label" id="progLabel">Loading…</div>
+        <div class="prog-track"><div class="prog-bar" id="progBar"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Settings -->
+  <div class="card">
+    <div class="card-title">3. Detection Settings</div>
+    <div class="settings-row">
+      <div class="ctrl">
+        <label>Min consecutive matches — shortest streak to flag as duplicate</label>
+        <div class="ctrl-inner">
+          <input type="range" id="minSlider" min="2" max="12" step="1" value="3"/>
+          <span class="slider-val" id="minVal">3</span>
+        </div>
+      </div>
+      <button class="clear-btn" id="clearBtn">Clear</button>
+      <button class="dl-btn" onclick="downloadExcel()">⬇ Download Excel Database</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="card">
+    <div class="card-title" id="resultsTitle">4. Results</div>
+    <div id="results"><div class="empty">Upload a suspect PDF to begin.</div></div>
+  </div>
+
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ─── BUILT-IN BASELINE DATABASE ───────────────────────────────────────────────
+// 480 records from the 4 original sample uploads
+const BASELINE = (function(){
+  const S = {
+    "1BU6264E": [
+      ["Run 1 – 11/19/2025 11:35",[0.61,0.55,0.38,0.52,0.53,0.70,0.64,0.68,0.45,0.55,0.66,0.48,0.73,0.66,0.61,0.72,0.32,0.59,0.43,0.51,0.44,0.48,0.72,0.66,0.47,0.49,0.65,0.58,0.79,0.60,0.66,0.63,0.42,0.74,0.56,0.56,0.58,0.68,0.56,0.51,0.78,0.53,0.58,0.42,0.50,0.38,0.68,0.77],
+       ["RED A","RED B","GREEN A","GREEN B","BLUE A","BLUE B","YELLOW A","YELLOW B","WHITE A","WHITE B","BLACK A","BLACK B","RED WH A","RED WH B","GREEN WH A","GREEN WH B","BLUE WH A","BLUE WH B","YELLOW WH A","YELLOW WH B","WHITE WH A","WHITE WH B","BLACK WH A","BLACK WH B","RED GR A","RED GR B","GREEN GR A","GREEN GR B","BLUE GR A","BLUE GR B","YELLOW GR A","YELLOW GR B","WHITE GR A","WHITE GR B","BLACK GR A","BLACK GR B","RED BL A","RED BL B","GREEN BL A","GREEN BL B","BLUE BL A","BLUE BL B","YELLOW BL A","YELLOW BL B","WHITE BL A","WHITE BL B","BLACK BL A","BLACK BL B"]],
+      ["Run 2 – 11/19/2025 1:59",[0.44,0.43,0.51,0.40,0.47,0.79,0.64,0.60,0.35,0.75,0.38,0.32,0.48,0.57,0.49,0.78,0.41,0.60,0.66,0.77,0.45,0.34,0.55,0.57,0.39,0.36,0.64,0.52,0.50,0.38,0.59,0.46,0.60,0.41,0.37,0.75,0.37,0.70,0.55,0.47,0.34,0.60,0.53,0.76,0.55,0.68,0.36,0.68],
+       ["RED A","RED B","GREEN A","GREEN B","BLUE A","BLUE B","YELLOW A","YELLOW B","WHITE A","WHITE B","BLACK A","BLACK B","RED WH A","RED WH B","GREEN WH A","GREEN WH B","BLUE WH A","BLUE WH B","YELLOW WH A","YELLOW WH B","WHITE WH A","WHITE WH B","BLACK WH A","BLACK WH B","RED GR A","RED GR B","GREEN GR A","GREEN GR B","BLUE GR A","BLUE GR B","YELLOW GR A","YELLOW GR B","WHITE GR A","WHITE GR B","BLACK GR A","BLACK GR B","RED BL A","RED BL B","GREEN BL A","GREEN BL B","BLUE BL A","BLUE BL B","YELLOW BL A","YELLOW BL B","WHITE BL A","WHITE BL B","BLACK BL A","BLACK BL B"]],
+      ["Run 3 – 11/19/2025 4:43",[0.53,0.49,0.62,0.43,0.58,0.34,0.58,0.80,0.61,0.53,0.40,0.49,0.31,0.56,0.34,0.79,0.35,0.59,0.59,0.41,0.53,0.30,0.47,0.65,0.45,0.71,0.62,0.69,0.35,0.79,0.40,0.42,0.55,0.79,0.54,0.69,0.63,0.63,0.65,0.37,0.57,0.77,0.74,0.72,0.37,0.69,0.72,0.72],
+       ["RED A","RED B","GREEN A","GREEN B","BLUE A","BLUE B","YELLOW A","YELLOW B","WHITE A","WHITE B","BLACK A","BLACK B","RED WH A","RED WH B","GREEN WH A","GREEN WH B","BLUE WH A","BLUE WH B","YELLOW WH A","YELLOW WH B","WHITE WH A","WHITE WH B","BLACK WH A","BLACK WH B","RED GR A","RED GR B","GREEN GR A","GREEN GR B","BLUE GR A","BLUE GR B","YELLOW GR A","YELLOW GR B","WHITE GR A","WHITE GR B","BLACK GR A","BLACK GR B","RED BL A","RED BL B","GREEN BL A","GREEN BL B","BLUE BL A","BLUE BL B","YELLOW BL A","YELLOW BL B","WHITE BL A","WHITE BL B","BLACK BL A","BLACK BL B"]],
+    ],
+    "1BU8152C": [
+      ["Hybrid 1 – 6/27/2025 4:05 PM",[0.24,0.02,0.36,0.30,0.13,0.01,0.01,0.31,0.11,0.09,0.24,0.10,1.38,0.85,0.46,0.26,0.70,0.48,0.32,0.24,0.17,0.49,1.26,0.69],
+       ["redA","redB","greA","greB","bluA","bluB","yelA","yelB","whiA","whiB","blaA","blaB","rewA","rewB","grwA","grwB","buwA","buwB","yewA","yewB","whwA","whwB","bawA","bawB"]],
+      ["Hybrid 2 – 6/27/2025 4:06 PM",[0.19,0.06,0.37,0.14,0.69,0.82,0.28,0.35,0.04,0.01,0.16,0.08,1.47,1.00,1.71,0.05,0.10,0.81,1.18,0.23,0.17,0.52,0.73,0.01],
+       ["redA","redB","greA","greB","bluA","bluB","yelA","yelB","whiA","whiB","blaA","blaB","reA2","reB2","grA2","grB2","buA2","buB2","yeA2","yeB2","whA2","whB2","blA2","blB2"]],
+      ["Hybrid 3 – 6/27/2025 4:07 PM",[0.45,0.51,0.53,0.54,0.54,0.53,0.23,0.36,0.15,0.40,0.28,0.33,0.28,0.61,0.94,0.25,0.16,0.29,0.59,0.73,0.65,0.65,0.60,0.70],
+       ["RedA","RedB","greA","greB","bluA","bluB","yelA","yelB","whiA","whiB","blaA","blaB","reA2","reB2","grA2","grB2","buA2","buB2","yeA2","yeB2","whA2","whB2","blA2","blB2"]],
+    ],
+    "2CT4246A": [
+      ["Run 1 – 10/11/2025 (Hybrid Only)",[0.29,0.42,0.59,0.16,0.39,0.58,0.42,0.29,0.63,0.58,0.42,0.15,0.29,0.38,0.55,0.27,0.39,0.63,0.52,0.48,0.28,0.16,0.57,0.82,0.34,0.58,0.29,0.35,0.42,0.63,0.58,0.17,0.29,0.68,0.53,0.28,0.47,0.69,0.58,0.14,0.28,0.69,0.43,0.33,0.29,0.58,0.43,0.61,0.28,0.43,0.28,0.69,0.44,0.51,0.29,0.39,0.52,0.64,0.85,0.29,0.67,0.12,0.34,0.71,0.28,0.69,0.53,0.29,0.41,0.59,0.26,0.53,0.48,0.29,0.61,0.33,0.54,0.28,0.75,0.29,0.39,0.58,0.42,0.69,0.53,0.28,0.18,0.64,0.38,0.29,0.65,0.22,0.42,0.59,0.68,0.17],
+       ["ALPHA 4460 B25/B66 D1","ALPHA 4460 B25/B66 D2","ALPHA 4460 B25/B66 D3","ALPHA 4460 B25/B66 D4","ALPHA 4449 B71/B85 D1","ALPHA 4449 B71/B85 D2","ALPHA 6419 B41 D1","ALPHA 6419 B41 D2","ALPHA SPARE 1","ALPHA SPARE 2","ALPHA SPARE 3","ALPHA SPARE 4","ALPHA SPARE 5","ALPHA SPARE 6","ALPHA SPARE 7","ALPHA SPARE 8","ALPHA SPARE 9","ALPHA SPARE 10","ALPHA SPARE 11","ALPHA SPARE 12","ALPHA SPARE 13","ALPHA SPARE 14","ALPHA SPARE 15","ALPHA SPARE 16","BETA 4460 B25/B66 D1","BETA 4460 B25/B66 D2","BETA 4460 B25/B66 D3","BETA 4460 B25/B66 D4","BETA 4449 B71/B85 D1","BETA 4449 B71/B85 D2","BETA 6419 B41 D1","BETA 6419 B41 D2","BETA SPARE 1","BETA SPARE 2","BETA SPARE 3","BETA SPARE 4","BETA SPARE 5","BETA SPARE 6","BETA SPARE 7","BETA SPARE 8","BETA SPARE 9","BETA SPARE 10","BETA SPARE 11","BETA SPARE 12","BETA SPARE 13","BETA SPARE 14","BETA SPARE 15","BETA SPARE 16","GAMMA 4460 B25/B66 D1","GAMMA 4460 B25/B66 D2","GAMMA 4460 B25/B66 D3","GAMMA 4460 B25/B66 D4","GAMMA 4449 B71/B85 D1","GAMMA 4449 B71/B85 D2","GAMMA 6419 B41 D1","GAMMA 6419 B41 D2","GAMMA SPARE 1","GAMMA SPARE 2","GAMMA SPARE 3","GAMMA SPARE 4","GAMMA SPARE 5","GAMMA SPARE 6","GAMMA SPARE 7","GAMMA SPARE 8","GAMMA SPARE 9","GAMMA SPARE 10","GAMMA SPARE 11","GAMMA SPARE 12","GAMMA SPARE 13","GAMMA SPARE 14","GAMMA SPARE 15","GAMMA SPARE 16","DELTA 4460 B25/B66 D1","DELTA 4460 B25/B66 D2","DELTA 4460 B25/B66 D3","DELTA 4460 B25/B66 D4","DELTA 4449 B71/B85 D1","DELTA 4449 B71/B85 D2","DELTA 6419 B41 D1","DELTA 6419 B41 D2","DELTA SPARE 1","DELTA SPARE 2","DELTA SPARE 3","DELTA SPARE 4","DELTA SPARE 5","DELTA SPARE 6","DELTA SPARE 7","DELTA SPARE 8","DELTA SPARE 9","DELTA SPARE 10","DELTA SPARE 11","DELTA SPARE 12","DELTA SPARE 13","DELTA SPARE 14","DELTA SPARE 15","DELTA SPARE 16"]],
+      ["Run 2 – 10/14/2025 (Cabinet to RRH)",[0.84,0.31,0.96,0.45,0.29,0.35,0.87,0.55,0.63,0.28,0.15,0.24,0.76,0.98,0.65,0.33,0.29,0.84,0.67,0.44,0.81,0.26,0.43,0.96,0.85,0.26,0.96,0.34,0.87,0.26,0.38,0.81,0.95,0.62,0.35,0.47,0.29,0.39,0.53,0.15,0.28,0.39,0.43,0.26,0.59,0.86,0.33,0.45,0.87,0.21,0.59,0.36,0.53,0.29,0.68,0.42,0.59,0.36,0.52,0.44,0.26,0.58,0.29,0.35,0.15,0.23,0.45,0.68,0.42,0.35,0.29,0.86,0.77,0.26,0.59,0.35,0.26,0.38,0.14,0.96,0.53,0.29,0.54,0.81,0.65,0.99,0.26,0.35,0.38,0.29,0.42,0.57,0.61,0.44,0.29,0.38],
+       ["ALPHA 4460 B25/B66 D1","ALPHA 4460 B25/B66 D2","ALPHA 4460 B25/B66 D3","ALPHA 4460 B25/B66 D4","ALPHA 4449 B71/B85 D1","ALPHA 4449 B71/B85 D2","ALPHA 6419 B41 D1","ALPHA 6419 B41 D2","ALPHA SPARE 1","ALPHA SPARE 2","ALPHA SPARE 3","ALPHA SPARE 4","ALPHA SPARE 5","ALPHA SPARE 6","ALPHA SPARE 7","ALPHA SPARE 8","ALPHA SPARE 9","ALPHA SPARE 10","ALPHA SPARE 11","ALPHA SPARE 12","ALPHA SPARE 13","ALPHA SPARE 14","ALPHA SPARE 15","ALPHA SPARE 16","BETA 4460 B25/B66 D1","BETA 4460 B25/B66 D2","BETA 4460 B25/B66 D3","BETA 4460 B25/B66 D4","BETA 4449 B71/B85 D1","BETA 4449 B71/B85 D2","BETA 6419 B41 D1","BETA 6419 B41 D2","BETA SPARE 1","BETA SPARE 2","BETA SPARE 3","BETA SPARE 4","BETA SPARE 5","BETA SPARE 6","BETA SPARE 7","BETA SPARE 8","BETA SPARE 9","BETA SPARE 10","BETA SPARE 11","BETA SPARE 12","BETA SPARE 13","BETA SPARE 14","BETA SPARE 15","BETA SPARE 16","GAMMA 4460 B25/B66 D1","GAMMA 4460 B25/B66 D2","GAMMA 4460 B25/B66 D3","GAMMA 4460 B25/B66 D4","GAMMA 4449 B71/B85 D1","GAMMA 4449 B71/B85 D2","GAMMA 6419 B41 D1","GAMMA 6419 B41 D2","GAMMA SPARE 1","GAMMA SPARE 2","GAMMA SPARE 3","GAMMA SPARE 4","GAMMA SPARE 5","GAMMA SPARE 6","GAMMA SPARE 7","GAMMA SPARE 8","GAMMA SPARE 9","GAMMA SPARE 10","GAMMA SPARE 11","GAMMA SPARE 12","GAMMA SPARE 13","GAMMA SPARE 14","GAMMA SPARE 15","GAMMA SPARE 16","DELTA 4460 B25/B66 D1","DELTA 4460 B25/B66 D2","DELTA 4460 B25/B66 D3","DELTA 4460 B25/B66 D4","DELTA 4449 B71/B85 D1","DELTA 4449 B71/B85 D2","DELTA 6419 B41 D1","DELTA 6419 B41 D2","DELTA SPARE 1","DELTA SPARE 2","DELTA SPARE 3","DELTA SPARE 4","DELTA SPARE 5","DELTA SPARE 6","DELTA SPARE 7","DELTA SPARE 8","DELTA SPARE 9","DELTA SPARE 10","DELTA SPARE 11","DELTA SPARE 12","DELTA SPARE 13","DELTA SPARE 14","DELTA SPARE 15","DELTA SPARE 16"]],
+    ],
+    "VA72397A": [
+      ["Run 1 – 11/25/2025",[-0.02,0.26,0.01,-0.11,-0.04,-0.21,-0.38,0.28,-0.05,-0.02,0.42,0.03,0.32,0.20,-0.13,0.22,0.23,0.48,0.02,0.30,-0.03,-0.02,0.29,0.07,0.12,0.00,0.95,0.46,0.10,1.41,0.47,0.26,0.47,0.07,0.46,0.00,0.11,-0.10,0.26,-0.15,1.07,-0.08,1.05,0.29,0.15,-0.13,-0.04,-0.06,0.41,0.11,0.32,-0.15,0.29,0.27,-0.14,-0.03,0.11,-0.04,0.31,0.63,0.00,0.00,0.01,0.00,0.24,-0.03,0.28,-0.02,0.03,0.34,-0.02,-0.01],
+       ["24A","19B","7G","19G","3B","15A","21A","11G","23G","3A","11B","20A","9B","15G","19A","1A","23B","15B","23A","17B","18A","16A","21G","22A","7A","9G","5A","1B","5B","21B","13G","7B","13B","17G","17A","5G","3G","13A","12G","6B","12A","8B","24B","22B","20G","11A","6A","24G","16G","4G","16B","8G","20B","12B","9A","14G","10B","4B","10G","18B","2B","22G","2A","6G","4A","10A","18G","8A","14A","14B","2G","1G"]],
+    ],
+  };
+  // Flatten to rows: {siteId, runLabel, fiberNum, fiberId, value, source}
+  const rows = [];
+  for (const [sid, runs] of Object.entries(S)) {
+    for (const [label, vals, ids] of runs) {
+      for (let i = 0; i < vals.length; i++) {
+        rows.push({ siteId: sid, runLabel: label, fiberNum: i+1, fiberId: ids[i], value: vals[i], source: 'Original' });
+      }
+    }
+  }
+  return rows;
+})();
+
+// ─── STATE ────────────────────────────────────────────────────
+let dbRecords  = BASELINE.map(r => ({...r})); // working copy
+let loadedWb   = null;   // SheetJS workbook from user-uploaded Excel
+let pdfVals    = [];     // extracted values from suspect PDF
+let currentFile = null;  // suspect PDF file object
+
+// ─── HELPERS ─────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const today = () => new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+
+function setProg(pct, msg) {
+  $('progBar').style.width = pct + '%';
+  $('progLabel').textContent = msg;
+}
+
+function updateTitle() {
+  const sites = new Set(dbRecords.map(r => r.siteId)).size;
+  const runs  = new Set(dbRecords.map(r => r.siteId+'|'+r.runLabel)).size;
+  $('resultsTitle').textContent = `4. Results   [DB: ${dbRecords.length} records · ${sites} sites · ${runs} runs]`;
+}
+
+// ─── LOAD EXCEL DATABASE ──────────────────────────────────────
+function loadExcel(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const ws = wb.Sheets['Database'];
+      if (!ws) { alert('No "Database" sheet found. Please use the Excel file downloaded from this tool.'); return; }
+      const rows = XLSX.utils.sheet_to_json(ws); // uses header row
+      dbRecords = rows.map(r => ({
+        siteId:   String(r['Site ID']   || ''),
+        runLabel: String(r['Run Label'] || ''),
+        fiberNum: Number(r['Fiber #']   || 0),
+        fiberId:  String(r['Fiber ID']  || ''),
+        value:    Number(r['Value (dB)']|| 0),
+        source:   String(r['Source']    || 'Imported'),
+      })).filter(r => r.siteId && !isNaN(r.value));
+      loadedWb = wb;
+      $('dbStat').className = 'db-stat loaded';
+      $('dbStat').textContent = `✓ Loaded: ${file.name}  (${dbRecords.length} records)`;
+      $('dbZone').classList.add('has-file');
+      updateTitle();
+      if (pdfVals.length) runAnalysis();
+    } catch(err) {
+      alert('Error reading Excel file: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ─── PDF EXTRACTION ───────────────────────────────────────────
+async function extractPDF(file, onProg) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    onProg(Math.round(i / pdf.numPages * 65), `Reading page ${i} of ${pdf.numPages}…`);
+    text += (await (await pdf.getPage(i)).getTextContent()).items.map(x => x.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+function parseValues(text) {
+  // Remove lines containing Min/Max — these are Pass/Fail config thresholds, not fiber readings
+  const stripped = text
+    .split('\n')
+    .filter(line => !/min\/max/i.test(line))
+    .join('\n');
+
+  // Normalise spacing errors: "0.\n5" or "0. 5" or "-0.\n61" → "0.5" / "-0.61"
+  const normalised = stripped
+    .replace(/(-?\d+\.)\s+(\d+)/g, '$1$2');
+
+  // Strategy 1: OpTest / RP-460 style — extract decimal after PASS or FAIL on each row
+  // e.g. "1 DELTA 4480 DATA 1 PASS 0.17"  →  0.17
+  const passFailVals = [];
+  const pfRe = /\b(?:PASS|FAIL)\s+(-?\d+\.\d+)/gi;
+  let pfm;
+  while ((pfm = pfRe.exec(normalised)) !== null) {
+    const v = parseFloat(pfm[1]);
+    if (!isNaN(v) && v >= -5 && v <= 5) passFailVals.push(v);
+  }
+  if (passFailVals.length >= 3) return passFailVals;
+
+  // Strategy 2: explicit "X.XX dB" anywhere in text
+  const vals = [];
+  const re = /(-?\d+\.\d+)\s*dB/gi;
+  let m;
+  while ((m = re.exec(normalised)) !== null) {
+    const v = parseFloat(m[1]);
+    if (!isNaN(v) && v >= -5 && v <= 5) vals.push(v);
+  }
+  if (vals.length >= 3) return vals;
+
+  // Strategy 3: any decimal in OPM range (broadest fallback)
+  for (const line of normalised.split('\n'))
+    for (const n of (line.match(/-?\d+\.\d+/g) || []))
+      { const v = parseFloat(n); if (!isNaN(v) && v >= -5 && v <= 5) vals.push(v); }
+  return vals;
+}
+
+// ─── MATCHING ENGINE ──────────────────────────────────────────
+function buildStructured() {
+  const map = {};
+  for (const r of dbRecords) {
+    if (!map[r.siteId]) map[r.siteId] = {};
+    if (!map[r.siteId][r.runLabel]) map[r.siteId][r.runLabel] = [];
+    map[r.siteId][r.runLabel].push({ fiberId: r.fiberId, v: r.value });
+  }
+  return map;
+}
+
+function findMatches(input, tol, minRun) {
+  const struct = buildStructured();
+  const res = [];
+  for (const [siteId, runs] of Object.entries(struct)) {
+    for (const [runLabel, fibers] of Object.entries(runs)) {
+      const dv = fibers.map(f => f.v);
+      const di = fibers.map(f => f.fiberId);
+      for (let s = 0; s < dv.length; s++) {
+        let streak = [];
+        for (let i = 0; i < input.length && s+i < dv.length; i++) {
+          const d = Math.abs(input[i] - dv[s+i]);
+          if (d <= tol) {
+            streak.push({ idx: s+i, fiberId: di[s+i], dbVal: dv[s+i], inputVal: input[i], diff: d });
+          } else {
+            if (streak.length >= minRun) saveMatch(res, siteId, runLabel, streak, di);
+            streak = [];
+          }
+        }
+        if (streak.length >= minRun) saveMatch(res, siteId, runLabel, streak, di);
+      }
+    }
+  }
+  const seen = new Set();
+  return res
+    .filter(r => {
+      const k = `${r.siteId}|${r.runLabel}|${r.matches[0].idx}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .sort((a, b) => b.matches.length - a.matches.length);
+}
+
+function saveMatch(res, siteId, runLabel, streak, di) {
+  res.push({
+    siteId, runLabel,
+    matches: [...streak],
+    startFiber: di[streak[0].idx],
+    endFiber: di[streak[streak.length-1].idx],
+  });
+}
+
+// ─── ADD TO DATABASE (in-memory) ─────────────────────────────
+function addToDb(siteId, runLabel, vals) {
+  const dateStr = today();
+  vals.forEach((v, i) => {
+    dbRecords.push({
+      siteId, runLabel,
+      fiberNum: i + 1,
+      fiberId: `Fiber ${i+1}`,
+      value: v,
+      source: 'New Upload',
+    });
+  });
+  updateTitle();
+  rebuildWorkbook(dateStr);
+}
+
+// ─── REBUILD WORKBOOK (kept in memory for download) ───────────
+function rebuildWorkbook(dateStr) {
+  const wb = loadedWb ? loadedWb : XLSX.utils.book_new();
+  const headers = ['Site ID','Run Label','Fiber #','Fiber ID','Value (dB)','Date Added','Source'];
+  const sheetRows = [headers];
+  for (const r of dbRecords) {
+    sheetRows.push([r.siteId, r.runLabel, r.fiberNum, r.fiberId, r.value,
+      r.source === 'New Upload' ? (dateStr || today()) : 'Original', r.source]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+  ws['!cols'] = [{wch:14},{wch:36},{wch:9},{wch:30},{wch:14},{wch:16},{wch:18}];
+  if (wb.SheetNames.includes('Database')) {
+    wb.Sheets['Database'] = ws;
+  } else {
+    XLSX.utils.book_append_sheet(wb, ws, 'Database');
+    const sumWs = XLSX.utils.aoa_to_sheet([['Fiber OPM Fraud Detection Database'],['Generated by Fiber Optic Fraud Detection System']]);
+    XLSX.utils.book_append_sheet(wb, sumWs, 'Summary');
+  }
+  loadedWb = wb;
+}
+
+// ─── DOWNLOAD EXCEL ───────────────────────────────────────────
+function downloadExcel() {
+  if (!loadedWb) rebuildWorkbook(today());
+  XLSX.writeFile(loadedWb, 'FiberOPM_Database.xlsx');
+}
+
+// ─── ANALYSIS ─────────────────────────────────────────────────
+function runAnalysis() {
+  const tol    = 0;
+  const minRun = parseInt($('minSlider').value);
+  const hits   = findMatches(pdfVals, tol, minRun);
+  renderResults(hits);
+}
+
+// ─── RENDER ───────────────────────────────────────────────────
+function renderResults(hits) {
+  const n = pdfVals.length;
+  const fname = (currentFile ? currentFile.name.replace(/\.pdf$/i,'') : 'Uploaded Test');
+
+  if (!hits.length) {
+    // CLEAN — auto-add to database immediately
+    const siteId   = fname;
+    const runLabel = 'Run 1 – ' + today();
+    addToDb(siteId, runLabel, pdfVals);
+    $('results').innerHTML = `
+      <div class="clean-banner">
+        <h3>✅ No Duplicate Detected</h3>
+        <p>${pdfVals.length} readings from <strong>${fname}</strong> have been automatically added to the database as:</p>
+        <div style="background:#fff;border:1px solid #ff4da6;border-radius:4px;padding:10px 14px;margin-bottom:14px;font-size:13px;">
+          <strong>Site ID:</strong> ${siteId} &nbsp;·&nbsp; <strong>Run:</strong> ${runLabel} &nbsp;·&nbsp; <strong>Records:</strong> ${pdfVals.length}
+        </div>
+        <p style="font-size:12px;color:#b5005c;margin-bottom:0;">Database now contains <strong>${dbRecords.length} records</strong>. Download the updated Excel to save your changes.</p>
+      </div>`;
+    return;
+  }
+
+  // SAME SITE CHECK — if top match is ~100% and site ID matches the filename, it's the same file
+  const topScore = Math.round(hits[0].matches.length / n * 100);
+  const topSiteId = hits[0].siteId;
+  const fnameUpper = fname.toUpperCase();
+  const siteUpper  = topSiteId.toUpperCase();
+  const isSameSite = topScore >= 90 && (fnameUpper.includes(siteUpper) || siteUpper.includes(fnameUpper));
+
+  if (isSameSite) {
+    $('results').innerHTML = `
+      <div style="padding:20px 22px;background:#fce4f0;border:1px solid #ff4da6;border-radius:5px;">
+        <h3 style="margin:0 0 8px;font-size:15px;color:#b5005c;">⚠ Same Site Already in Database</h3>
+        <p style="margin:0;font-size:13px;color:#b5005c;">
+          The file <strong>${fname}</strong> matches Site <strong>${topSiteId}</strong> already in the database
+          with a <strong>${topScore}% match</strong>. This appears to be the same site record — no changes were made.
+        </p>
+      </div>`;
+    return;
+  }
+
+  // FRAUD
+  let html = `
+    <div class="stat-row">
+      <div class="stat-box danger"><div class="s-label">Matches Found</div><div class="s-value">${hits.length}</div></div>
+      <div class="stat-box"><div class="s-label">Values Scanned</div><div class="s-value">${n}</div></div>
+      <div class="stat-box danger"><div class="s-label">Top Match Score</div><div class="s-value">${topScore}%</div></div>
+    </div>
+    <div class="fraud-banner">
+      ⚠ <strong>Duplicate sequences detected.</strong> This report matches existing database entries — it will NOT be added to the database.
+    </div>`;
+
+  for (const r of hits) {
+    const sc   = Math.round(r.matches.length / n * 100);
+    const avgD = (r.matches.reduce((a, m) => a + m.diff, 0) / r.matches.length).toFixed(3);
+    html += `
+    <div class="match-card">
+      <div class="match-head">
+        <div>
+          <div class="match-site">Site: ${r.siteId}</div>
+          <div class="match-run">${r.runLabel}</div>
+        </div>
+        <div class="match-score">${sc}% match &nbsp;·&nbsp; ${r.matches.length} consecutive fibers &nbsp;·&nbsp; Avg Δ ${avgD} dB</div>
+      </div>
+      <div class="match-range">
+        Duplicate range: Fiber #${r.matches[0].idx+1} <strong>(${r.startFiber})</strong>
+        &nbsp;→&nbsp; Fiber #${r.matches[r.matches.length-1].idx+1} <strong>(${r.endFiber})</strong>
+      </div>
+      <div style="padding:0 14px 14px">
+        <table>
+          <thead><tr>
+            <th>#</th><th>Fiber ID</th>
+            <th class="r">${r.siteId} – DB (dB)</th><th class="r">${fname} – Input (dB)</th>
+            <th class="r">Difference</th><th class="c">Verdict</th>
+          </tr></thead>
+          <tbody>
+            ${r.matches.map(m => {
+              const exact = m.diff < 0.01, near = m.diff < 0.03;
+              return `<tr>
+                <td style="color:#aaa">${m.idx+1}</td>
+                <td><strong>${m.fiberId}</strong></td>
+                <td class="r">${m.dbVal.toFixed(2)}</td>
+                <td class="r">${m.inputVal.toFixed(2)}</td>
+                <td class="r" style="color:${exact?'#c00':'#555'}">${m.diff.toFixed(3)}</td>
+                <td class="c"><span class="verdict ${exact?'v-exact':near?'v-near':'v-close'}">${exact?'Exact Copy':near?'Near Copy':'Close Match'}</span></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  $('results').innerHTML = html;
+}
+
+// ─── EVENTS ───────────────────────────────────────────────────
+$('minSlider').oninput = () => {
+  $('minVal').textContent = $('minSlider').value;
+  if (pdfVals.length) runAnalysis();
+};
+
+// DB drop zone
+// ─── TAB SWITCHER ─────────────────────────────────────────────
+function switchTab(tab) {
+  $('panelLocal').style.display  = tab === 'local'  ? '' : 'none';
+  $('panelSheets').style.display = tab === 'sheets' ? '' : 'none';
+  $('tabLocal').classList.toggle('active',  tab === 'local');
+  $('tabSheets').classList.toggle('active', tab === 'sheets');
+}
+
+// ─── GOOGLE SHEETS SUB-TAB SWITCHER ──────────────────────────
+function switchGsTab(tab) {
+  $('gsPanelLink').style.display   = tab === 'link'   ? '' : 'none';
+  $('gsPanelScript').style.display = tab === 'script' ? '' : 'none';
+  $('gsTabLink').style.background   = tab === 'link'   ? 'var(--magenta)' : '#f7f7f7';
+  $('gsTabLink').style.color        = tab === 'link'   ? '#fff' : '#777';
+  $('gsTabScript').style.background = tab === 'script' ? 'var(--magenta)' : '#f7f7f7';
+  $('gsTabScript').style.color      = tab === 'script' ? '#fff' : '#777';
+}
+
+// ─── LOAD FROM APPS SCRIPT URL ────────────────────────────────
+async function loadFromScript() {
+  const url = ($('scriptUrl').value || '').trim();
+  const st  = $('sheetsStatus');
+  if (!url) { st.style.color='#c00'; st.textContent = 'Please paste your Apps Script Web App URL.'; return; }
+  st.style.color = '#999';
+  st.textContent = 'Fetching from Apps Script…';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json.records || !Array.isArray(json.records)) throw new Error('Unexpected response format from Apps Script.');
+    dbRecords = json.records.map(r => ({
+      siteId:   String(r['Site ID']    || ''),
+      runLabel: String(r['Run Label']  || ''),
+      fiberNum: Number(r['Fiber #']    || 0),
+      fiberId:  String(r['Fiber ID']   || ''),
+      value:    Number(r['Value (dB)'] || 0),
+      source:   String(r['Source']     || 'Imported'),
+    })).filter(r => r.siteId && !isNaN(r.value));
+    loadedWb = null; // no workbook — download will rebuild from memory
+    st.style.color = 'var(--magenta-dk)';
+    st.textContent = `✓ Loaded via Apps Script — ${dbRecords.length} records`;
+    $('dbStat').className = 'db-stat loaded';
+    $('dbStat').textContent = `✓ Loaded from Google Sheets via Apps Script (${dbRecords.length} records)`;
+    updateTitle();
+    if (pdfVals.length) runAnalysis();
+  } catch(err) {
+    st.style.color = '#c00';
+    st.textContent = `Error: ${err.message}`;
+  }
+}
+
+// ─── LOAD FROM GOOGLE SHEETS ──────────────────────────────────
+function extractSheetId(url) {
+  const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+async function loadFromSheets() {
+  const url = ($('sheetsUrl').value || '').trim();
+  const st  = $('sheetsStatus');
+  if (!url) { st.textContent = 'Please paste a Google Sheets link.'; return; }
+
+  const id = extractSheetId(url);
+  if (!id) {
+    st.style.color = '#c00';
+    st.textContent = 'Could not find a spreadsheet ID in that URL.';
+    return;
+  }
+
+  st.style.color = '#999';
+  st.textContent = 'Fetching from Google Sheets…';
+
+  // Use a CORS proxy to bypass browser cross-origin restrictions on Google's export endpoint
+  const directUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`;
+  const proxyUrl  = `https://corsproxy.io/?url=${encodeURIComponent(directUrl)}`;
+
+  try {
+    let res = await fetch(proxyUrl);
+    // Fallback to a second proxy if first fails
+    if (!res.ok) {
+      const proxy2 = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
+      res = await fetch(proxy2);
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status} — make sure sharing is set to "Anyone with the link can view".`);
+    const buf = await res.arrayBuffer();
+    const wb  = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    const ws  = wb.Sheets['Database'];
+    if (!ws) throw new Error('No "Database" sheet found. Make sure the sheet tab is named exactly "Database".');
+    const rows = XLSX.utils.sheet_to_json(ws);
+    dbRecords = rows.map(r => ({
+      siteId:   String(r['Site ID']    || ''),
+      runLabel: String(r['Run Label']  || ''),
+      fiberNum: Number(r['Fiber #']    || 0),
+      fiberId:  String(r['Fiber ID']   || ''),
+      value:    Number(r['Value (dB)'] || 0),
+      source:   String(r['Source']     || 'Imported'),
+    })).filter(r => r.siteId && !isNaN(r.value));
+    loadedWb = wb;
+    st.style.color = 'var(--magenta-dk)';
+    st.textContent = `✓ Loaded — ${dbRecords.length} records`;
+    $('dbStat').className = 'db-stat loaded';
+    $('dbStat').textContent = `✓ Loaded from Google Sheets (${dbRecords.length} records)`;
+    updateTitle();
+    if (pdfVals.length) runAnalysis();
+  } catch(err) {
+    st.style.color = '#c00';
+    st.textContent = `Error: ${err.message}`;
+  }
+}
+
+setupDrop($('dbZone'), $('dbFile'), f => loadExcel(f));
+
+// PDF drop zone
+setupDrop($('pdfZone'), $('pdfFile'), f => {
+  if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) loadPDF(f);
+});
+
+function setupDrop(zone, input, handler) {
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]);
+  });
+  zone.addEventListener('click', e => { if (e.target.tagName !== 'SPAN') input.click(); });
+  input.onchange = () => { if (input.files[0]) handler(input.files[0]); };
+}
+
+$('clearBtn').onclick = () => {
+  pdfVals = []; currentFile = null;
+  $('pdfFile').value = '';
+  $('pdfChip').style.display = 'none';
+  $('pdfZone').classList.remove('has-file');
+  $('progress').className = 'progress';
+  $('results').innerHTML = '<div class="empty">Upload a suspect PDF to begin.</div>';
+  updateTitle();
+};
+
+async function loadPDF(file) {
+  pdfVals = []; currentFile = file;
+  $('pdfChip').textContent = file.name;
+  $('pdfChip').style.display = 'inline-block';
+  $('pdfZone').classList.add('has-file');
+  $('results').innerHTML = '';
+  $('progress').className = 'progress show';
+  setProg(5, 'Loading PDF…');
+  try {
+    const text = await extractPDF(file, setProg);
+    setProg(70, 'Extracting OPM values…');
+    const vals = parseValues(text);
+    if (!vals.length) {
+      setProg(100, 'No OPM values found.');
+      $('results').innerHTML = '<div class="error-box">Could not extract OPM readings. Make sure this is a valid OPM test report PDF.</div>';
+      return;
+    }
+    pdfVals = vals;
+    setProg(90, `${vals.length} values found — checking database…`);
+    runAnalysis();
+    setProg(100, `Done — ${vals.length} values extracted.`);
+    setTimeout(() => $('progress').className = 'progress', 1800);
+  } catch (err) {
+    setProg(100, 'Error reading PDF.');
+    $('results').innerHTML = `<div class="error-box">Error: ${err.message}</div>`;
+  }
+}
+
+// Init
+updateTitle();
+</script>
+</body>
+</html>

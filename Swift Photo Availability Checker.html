@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Site/Crew Photos — Status Pie Chart</title>
+<style>
+  :root{
+    --approved:#2e7d32;
+    --pending:#e67e22;
+    --cancelled:#7f8c8d;
+    --rejected:#c0392b;
+    --submitted:#f1c40f;
+    --inprogress:#3498db;
+    --bg:#1b1e24;
+    --card:#252932;
+    --ink:#e6e8eb;
+    --border:#3a3f4a;
+    --muted:#9aa1ac;
+    --surface:#2f343e;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Segoe UI",Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding:24px;
+  }
+  h1{
+    font-size:20px;
+    margin:0 0 4px 0;
+  }
+  .sub{
+    color:var(--muted);
+    font-size:13px;
+    margin-bottom:20px;
+  }
+  .layout{
+    display:flex;
+    gap:24px;
+    flex-wrap:wrap;
+    align-items:flex-start;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:18px;
+  }
+  .inputs{
+    flex:1 1 320px;
+    min-width:300px;
+  }
+  .chartCard{
+    flex:1 1 380px;
+    min-width:340px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    margin:12px 0 4px;
+  }
+  .row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:8px;
+  }
+  .row input[type=checkbox]{
+    width:15px;
+    height:15px;
+    cursor:pointer;
+    flex:0 0 auto;
+  }
+  .swatch{
+    width:14px;
+    height:14px;
+    border-radius:3px;
+    flex:0 0 auto;
+  }
+  .row input[type=number]{
+    width:90px;
+    padding:6px 8px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-size:14px;
+    background:var(--surface);
+    color:var(--ink);
+  }
+  .row span.name{
+    flex:1;
+    font-size:14px;
+  }
+  textarea{
+    width:100%;
+    height:110px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:8px;
+    font-family:Consolas,monospace;
+    font-size:12.5px;
+    resize:vertical;
+  }
+  select, input[type=file]{
+    width:100%;
+    padding:7px 8px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-size:13px;
+    background:var(--surface);
+    color:var(--ink);
+  }
+  select:disabled{
+    background:#23262d;
+    color:#666;
+  }
+  .dropzone{
+    border:2px dashed var(--border);
+    border-radius:8px;
+    padding:24px 14px;
+    text-align:center;
+    cursor:pointer;
+    background:var(--surface);
+    transition:background 0.15s, border-color 0.15s;
+  }
+  .dropzone.dragover{
+    background:#33404f;
+    border-color:#5b8def;
+  }
+  .dropzone .dzTitle{
+    font-size:13.5px;
+    font-weight:600;
+    color:var(--ink);
+  }
+  .dropzone .dzSub{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:4px;
+  }
+  .dropzone input[type=file]{
+    display:none;
+  }
+  .btnRow{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+  }
+  button{
+    background:#2c3e50;
+    color:#fff;
+    border:none;
+    padding:8px 14px;
+    border-radius:6px;
+    font-size:13px;
+    cursor:pointer;
+  }
+  button.secondary{
+    background:var(--surface);
+    color:var(--ink);
+    border:1px solid var(--border);
+  }
+  button:hover{opacity:0.9;}
+  .hint{
+    font-size:11.5px;
+    color:var(--muted);
+    margin-top:6px;
+    line-height:1.4;
+  }
+  svg{
+    max-width:100%;
+  }
+  .legend{
+    margin-top:14px;
+    width:100%;
+  }
+  .legend .row{margin-bottom:6px;}
+  .total{
+    font-size:13px;
+    color:var(--muted);
+    margin-top:10px;
+  }
+  .pctLabel{
+    font-size:11px;
+    fill:#fff;
+    font-weight:600;
+    text-anchor:middle;
+    pointer-events:none;
+  }
+  svg path{
+    cursor:pointer;
+  }
+  .legend .row{
+    cursor:pointer;
+    padding:4px 6px;
+    border-radius:6px;
+    transition:background 0.12s;
+  }
+  .legend .row:hover{
+    background:var(--surface);
+  }
+  .tabBar{
+    display:flex;
+    gap:4px;
+    margin-bottom:18px;
+    border-bottom:2px solid var(--border);
+    flex-wrap:wrap;
+  }
+  .tabBtn{
+    background:none;
+    border:none;
+    padding:9px 16px;
+    font-size:13.5px;
+    font-weight:600;
+    color:var(--muted);
+    cursor:pointer;
+    border-bottom:3px solid transparent;
+    margin-bottom:-2px;
+  }
+  .tabBtn:hover{
+    color:var(--ink);
+  }
+  .tabBtn.active{
+    color:#8ab4f8;
+    border-bottom-color:#8ab4f8;
+  }
+  .tabPanel{
+    display:none;
+  }
+  .tabPanel.active{
+    display:block;
+  }
+  .tableWrap{
+    overflow:auto;
+    max-height:600px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    background:var(--card);
+  }
+  .listTable{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12.5px;
+  }
+  .listTable th, .listTable td{
+    border-bottom:1px solid var(--border);
+    padding:7px 10px;
+    text-align:left;
+    white-space:nowrap;
+  }
+  .listTable th{
+    background:var(--surface);
+    position:sticky;
+    top:0;
+    z-index:1;
+  }
+  .listTable tr:hover td{
+    background:var(--surface);
+  }
+  .emptyMsg{
+    color:var(--muted);
+    font-size:13px;
+    padding:28px;
+    text-align:center;
+  }
+  .panelTitle{
+    font-size:15px;
+    font-weight:700;
+    margin-bottom:12px;
+  }
+  .panelTitle .count{
+    font-weight:400;
+    color:var(--muted);
+    font-size:13px;
+  }
+  .checkCol{
+    width:34px;
+    text-align:center !important;
+  }
+  .checkCol input[type=checkbox]{
+    width:15px;
+    height:15px;
+    cursor:pointer;
+  }
+  .popBtn{
+    border:none;
+    padding:9px 20px;
+    border-radius:999px;
+    font-size:13.5px;
+    font-weight:700;
+    letter-spacing:0.2px;
+    cursor:pointer;
+    color:#fff;
+    box-shadow:0 3px 10px rgba(0,0,0,0.35);
+    transition:transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  }
+  .popBtn:hover{
+    transform:translateY(-2px);
+    box-shadow:0 6px 16px rgba(0,0,0,0.45);
+    filter:brightness(1.08);
+  }
+  .popBtn:active{
+    transform:translateY(0);
+    box-shadow:0 2px 6px rgba(0,0,0,0.35);
+  }
+  .popBtn-all{
+    background:linear-gradient(135deg, #4f8ef7, #2c5fd6);
+  }
+  .popBtn-civil{
+    background:linear-gradient(135deg, #f5a623, #d9720a);
+  }
+  .popBtn-tower{
+    background:linear-gradient(135deg, #6c5ce7, #4834b0);
+  }
+  .popBtn.active{
+    outline:3px solid #ffffff;
+    outline-offset:2px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Site/Crew Photos — Status Breakdown</h1>
+<div class="sub">Upload the Excel or CSV file — rows where column A is "2./3. Crew COP Photos", "2. Site Photos", or "2. Mini-COP Requirements" get tallied by their status in column O. Click a slice or legend item to see the list.</div>
+
+<div class="tabBar" id="tabBar">
+  <button class="tabBtn active" data-tab="chart" onclick="switchTab('chart')">Chart</button>
+  <button class="tabBtn" data-tab="Approved" onclick="switchTab('Approved')">Approved</button>
+  <button class="tabBtn" data-tab="Submitted" onclick="switchTab('Submitted')">Submitted</button>
+  <button class="tabBtn" data-tab="InProgress" onclick="switchTab('InProgress')">In Progress</button>
+  <button class="tabBtn" data-tab="Pending" onclick="switchTab('Pending')">Pending</button>
+  <button class="tabBtn" data-tab="Rejected" onclick="switchTab('Rejected')">Rejected</button>
+  <button class="tabBtn" data-tab="Cancelled" onclick="switchTab('Cancelled')">Cancelled</button>
+</div>
+
+<div class="tabPanel active" id="tab-chart">
+<div class="layout">
+
+  <div class="card inputs">
+    <label>Upload Excel or CSV file (.xlsx / .xlsm / .xls / .csv)</label>
+    <div class="dropzone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="dzTitle">Drag &amp; drop your file here</div>
+      <div class="dzSub">or click to browse</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls,.csv" onchange="handleFile(event.target.files[0])">
+    </div>
+    <div class="hint" id="fileHint">No file loaded yet.</div>
+
+    <label>Counts (auto-filled from the file — you can still adjust manually)</label>
+    <div class="row"><input type="checkbox" id="chkApproved" checked onchange="renderChart()"><span class="swatch" style="background:var(--approved)"></span><span class="name">Approved</span><input type="number" id="cApproved" min="0" value="0" onchange="renderChart()"></div>
+    <div class="row"><input type="checkbox" id="chkSubmitted" checked onchange="renderChart()"><span class="swatch" style="background:var(--submitted)"></span><span class="name">Submitted</span><input type="number" id="cSubmitted" min="0" value="0" onchange="renderChart()"></div>
+    <div class="row"><input type="checkbox" id="chkInProgress" checked onchange="renderChart()"><span class="swatch" style="background:var(--inprogress)"></span><span class="name">In Progress</span><input type="number" id="cInProgress" min="0" value="0" onchange="renderChart()"></div>
+    <div class="row"><input type="checkbox" id="chkPending" checked onchange="renderChart()"><span class="swatch" style="background:var(--pending)"></span><span class="name">Pending</span><input type="number" id="cPending" min="0" value="0" onchange="renderChart()"></div>
+    <div class="row"><input type="checkbox" id="chkRejected" checked onchange="renderChart()"><span class="swatch" style="background:var(--rejected)"></span><span class="name">Rejected</span><input type="number" id="cRejected" min="0" value="0" onchange="renderChart()"></div>
+    <div class="row"><input type="checkbox" id="chkCancelled" checked onchange="renderChart()"><span class="swatch" style="background:var(--cancelled)"></span><span class="name">Cancelled</span><input type="number" id="cCancelled" min="0" value="0" onchange="renderChart()"></div>
+
+    <div class="btnRow">
+      <button onclick="renderChart()">Redraw Chart</button>
+      <button class="secondary" onclick="resetAll()">Reset</button>
+    </div>
+    <div class="btnRow">
+      <button onclick="downloadSelectedLists()">Download Selected Lists</button>
+    </div>
+    <div class="hint">Downloads an Excel file with one sheet per checked category above.</div>
+  </div>
+
+  <div class="card chartCard">
+    <svg id="pieSvg" viewBox="0 0 320 320" width="320" height="320"></svg>
+    <div class="legend" id="legendBox"></div>
+    <div class="total" id="totalBox"></div>
+  </div>
+
+</div>
+
+<div class="card" style="margin-top:20px;">
+  <div class="panelTitle">Task Name (Column C) <span class="count" id="count-All"></span></div>
+  <div class="btnRow" style="margin-bottom:10px;">
+    <button class="popBtn popBtn-all" onclick="selectAllTasks(this)">✓ All</button>
+    <button class="popBtn popBtn-civil" onclick="selectCivilTasks(this)">🏗 Civil</button>
+    <button class="popBtn popBtn-tower" onclick="selectTowerTasks(this)">📡 Tower</button>
+  </div>
+  <div class="tableWrap" id="table-All"></div>
+</div>
+
+</div>
+
+<div class="tabPanel" id="tab-Approved">
+  <div class="card">
+    <div class="panelTitle">Approved <span class="count" id="count-Approved"></span></div>
+    <div class="tableWrap" id="table-Approved"></div>
+  </div>
+</div>
+<div class="tabPanel" id="tab-Submitted">
+  <div class="card">
+    <div class="panelTitle">Submitted <span class="count" id="count-Submitted"></span></div>
+    <div class="tableWrap" id="table-Submitted"></div>
+  </div>
+</div>
+<div class="tabPanel" id="tab-InProgress">
+  <div class="card">
+    <div class="panelTitle">In Progress <span class="count" id="count-InProgress"></span></div>
+    <div class="tableWrap" id="table-InProgress"></div>
+  </div>
+</div>
+<div class="tabPanel" id="tab-Pending">
+  <div class="card">
+    <div class="panelTitle">Pending <span class="count" id="count-Pending"></span></div>
+    <div class="tableWrap" id="table-Pending"></div>
+  </div>
+</div>
+<div class="tabPanel" id="tab-Rejected">
+  <div class="card">
+    <div class="panelTitle">Rejected <span class="count" id="count-Rejected"></span></div>
+    <div class="tableWrap" id="table-Rejected"></div>
+  </div>
+</div>
+<div class="tabPanel" id="tab-Cancelled">
+  <div class="card">
+    <div class="panelTitle">Cancelled <span class="count" id="count-Cancelled"></span></div>
+    <div class="tableWrap" id="table-Cancelled"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let workbook = null;
+let currentRows = [];   // array of arrays for the selected sheet
+let headerRowIdx = 0;
+let headerRow = [];
+let categorizedRows = { Approved:[], Submitted:[], InProgress:[], Pending:[], Rejected:[], Cancelled:[] };
+let excludedTasks = new Set();
+
+const COLORS = {
+  Approved: getComputedStyleColor('--approved'),
+  Pending: getComputedStyleColor('--pending'),
+  Cancelled: getComputedStyleColor('--cancelled'),
+  Rejected: getComputedStyleColor('--rejected'),
+  Submitted: getComputedStyleColor('--submitted'),
+  InProgress: getComputedStyleColor('--inprogress')
+};
+
+function getComputedStyleColor(varName){
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+}
+
+function handleFile(file){
+  if (!file) return;
+
+  const fileHint = document.getElementById('fileHint');
+  fileHint.textContent = "Reading " + file.name + "...";
+
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      const data = new Uint8Array(e.target.result);
+      workbook = XLSX.read(data, { type: "array" });
+
+      // Prefer a sheet literally named like "Site/Crew Photos" if present, else first sheet
+      const preferred = workbook.SheetNames.find(n => /site.{0,3}crew.{0,3}photo|crew.{0,3}photo|site.{0,3}photo/i.test(n));
+      const sheetName = preferred || workbook.SheetNames[0];
+
+      loadSheet(sheetName);
+
+      fileHint.textContent = "Loaded " + file.name + " — using sheet \"" + sheetName + "\"";
+    } catch (err){
+      fileHint.textContent = "Could not read that file: " + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function loadSheet(sheetName){
+  const ws = workbook.Sheets[sheetName];
+  currentRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+  // find the first non-empty row to treat as header
+  headerRowIdx = currentRows.findIndex(r => r.some(c => String(c).trim() !== ""));
+  if (headerRowIdx < 0) headerRowIdx = 0;
+  headerRow = currentRows[headerRowIdx] || [];
+
+  tallyColumn();
+}
+
+function tallyColumn(){
+  if (!currentRows.length) return;
+
+  const COL_A = 0;   // Column A: photo type filter ("Site Photos")
+  const COL_O = 14;  // Column O: status
+
+  categorizedRows = { Approved:[], Submitted:[], InProgress:[], Pending:[], Rejected:[], Cancelled:[] };
+  excludedTasks = new Set();
+
+  for (let i = headerRowIdx + 1; i < currentRows.length; i++){
+    const row = currentRows[i];
+    const typeCell = String(row[0] || "").trim().toLowerCase();
+    if (!/crew\s*cop\s*photos|site\s*photos|mini[\s-]*cop\s*requirements/i.test(typeCell)) continue;
+
+    const statusCell = String(row[COL_O] || "").trim().toLowerCase();
+    if (!statusCell) continue;
+
+    let key = null;
+    if (/rejected/.test(statusCell)) key = "Rejected";
+    else if (/cancel+ed/.test(statusCell)) key = "Cancelled";
+    else if (/submitted/.test(statusCell)) key = "Submitted";
+    else if (/in[\s_-]*progress/.test(statusCell)) key = "InProgress";
+    else if (/pending/.test(statusCell)) key = "Pending";
+    else if (/approved/.test(statusCell)) key = "Approved";
+
+    if (key){
+      categorizedRows[key].push(row);
+    }
+  }
+
+  // Default: all tasks unchecked on initial load
+  excludedTasks = new Set(getAllItems());
+  document.querySelectorAll('.popBtn').forEach(btn => btn.classList.remove('active'));
+
+  updateCountsFromTaskFilter();
+  renderAllCategoryTables();
+}
+
+function updateCountsFromTaskFilter(){
+  const COL_C = 2;
+  const categories = ["Approved","Submitted","InProgress","Pending","Rejected","Cancelled"];
+  const idMap = {
+    Approved:'cApproved', Submitted:'cSubmitted', InProgress:'cInProgress', Pending:'cPending',
+    Rejected:'cRejected', Cancelled:'cCancelled'
+  };
+
+  categories.forEach(cat => {
+    const rows = categorizedRows[cat] || [];
+    const count = rows.filter(row => {
+      const taskName = String(row[COL_C] === undefined ? '' : row[COL_C]).trim();
+      return !excludedTasks.has(taskName);
+    }).length;
+    document.getElementById(idMap[cat]).value = count;
+  });
+
+  renderChart();
+}
+
+const dropZone = document.getElementById('dropZone');
+['dragenter','dragover'].forEach(evt => {
+  dropZone.addEventListener(evt, e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.add('dragover');
+  });
+});
+['dragleave','drop'].forEach(evt => {
+  dropZone.addEventListener(evt, e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('dragover');
+  });
+});
+dropZone.addEventListener('drop', e => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+function resetAll(){
+  document.getElementById('cApproved').value = 0;
+  document.getElementById('cPending').value = 0;
+  document.getElementById('cCancelled').value = 0;
+  document.getElementById('cRejected').value = 0;
+  document.getElementById('cSubmitted').value = 0;
+  document.getElementById('cInProgress').value = 0;
+  document.getElementById('chkApproved').checked = true;
+  document.getElementById('chkPending').checked = true;
+  document.getElementById('chkCancelled').checked = true;
+  document.getElementById('chkRejected').checked = true;
+  document.getElementById('chkSubmitted').checked = true;
+  document.getElementById('chkInProgress').checked = true;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('fileHint').textContent = 'No file loaded yet.';
+  workbook = null;
+  currentRows = [];
+  headerRow = [];
+  categorizedRows = { Approved:[], Submitted:[], InProgress:[], Pending:[], Rejected:[], Cancelled:[] };
+  excludedTasks = new Set();
+  document.querySelectorAll('.popBtn').forEach(btn => btn.classList.remove('active'));
+  renderChart();
+  renderAllCategoryTables();
+  switchTab('chart');
+}
+
+
+function switchTab(tabName){
+  document.querySelectorAll('.tabBtn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tabPanel').forEach(panel => {
+    panel.classList.toggle('active', panel.id === 'tab-' + tabName);
+  });
+}
+
+function escapeHtml(str){
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getColLHeader(){
+  const COL_L = 11;
+  return (headerRow[COL_L] !== undefined && String(headerRow[COL_L]).trim())
+    ? String(headerRow[COL_L]).trim()
+    : 'Column L';
+}
+
+function getCategoryItems(key){
+  const COL_C = 2;  // Column C: Task Name
+  const COL_L = 11; // Column L
+  const rows = categorizedRows[key] || [];
+
+  const items = rows
+    .map((row, idx) => ({
+      taskName: String(row[COL_C] === undefined ? '' : row[COL_C]).trim(),
+      colL: String(row[COL_L] === undefined ? '' : row[COL_L]).trim(),
+      origIdx: idx
+    }))
+    .filter(item => item.taskName.length > 0);
+
+  // Sort in chronological/sequence order using the leading number in the task name
+  // (e.g. "1. Alpha Overview - Photos" before "2. Beta Overview - Photos");
+  // items without a leading number keep their original file order at the end.
+  items.forEach(item => {
+    const m = item.taskName.match(/^(\d+)\.\s*/);
+    item.seq = m ? parseInt(m[1], 10) : Infinity;
+  });
+
+  items.sort((a, b) => {
+    if (a.seq !== b.seq) return a.seq - b.seq;
+    return a.origIdx - b.origIdx;
+  });
+
+  return items;
+}
+
+function renderCategoryTable(key){
+  const wrap = document.getElementById('table-' + key);
+  const countLabel = document.getElementById('count-' + key);
+  const rows = categorizedRows[key] || [];
+
+  countLabel.textContent = '(' + rows.length + ')';
+
+  if (rows.length === 0){
+    wrap.innerHTML = '<div class="emptyMsg">No ' + key.toLowerCase() + ' entries yet — upload a file to see the list.</div>';
+    return;
+  }
+
+  const colLHeader = getColLHeader();
+  const items = getCategoryItems(key);
+
+  let html = '<table class="listTable"><thead><tr><th>Task Name</th><th>' + escapeHtml(colLHeader) + '</th></tr></thead><tbody>';
+  items.forEach(item => {
+    html += '<tr><td>' + escapeHtml(item.taskName) + '</td><td>' + escapeHtml(item.colL) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function getAllItems(){
+  const COL_C = 2;
+  const categories = ["Approved","Submitted","InProgress","Pending","Rejected","Cancelled"];
+  const seen = new Set();
+  const names = [];
+
+  categories.forEach(cat => {
+    (categorizedRows[cat] || []).forEach(row => {
+      const taskName = String(row[COL_C] === undefined ? '' : row[COL_C]).trim();
+      if (taskName && !seen.has(taskName)){
+        seen.add(taskName);
+        names.push(taskName);
+      }
+    });
+  });
+
+  names.sort((a, b) => {
+    const ma = a.match(/^(\d+)\.\s*/);
+    const mb = b.match(/^(\d+)\.\s*/);
+    const seqA = ma ? parseInt(ma[1], 10) : Infinity;
+    const seqB = mb ? parseInt(mb[1], 10) : Infinity;
+    if (seqA !== seqB) return seqA - seqB;
+    return a.localeCompare(b, undefined, { sensitivity: 'base' });
+  });
+
+  return names;
+}
+
+function renderAllItemsTable(){
+  const wrap = document.getElementById('table-All');
+  const countLabel = document.getElementById('count-All');
+  const names = getAllItems();
+
+  countLabel.textContent = '(' + names.length + ')';
+
+  if (names.length === 0){
+    wrap.innerHTML = '<div class="emptyMsg">No entries yet — upload a file to see the list.</div>';
+    return;
+  }
+
+  let html = '<table class="listTable"><thead><tr><th class="checkCol"></th><th>Task Name</th></tr></thead><tbody>';
+  names.forEach(name => {
+    const checked = excludedTasks.has(name) ? '' : 'checked';
+    const safeName = name.replace(/'/g, "\\'");
+    html += '<tr><td class="checkCol"><input type="checkbox" ' + checked + ' onchange="toggleTaskInclusion(\'' + safeName + '\', this.checked)"></td><td>' + escapeHtml(name) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function toggleTaskInclusion(taskName, isChecked){
+  if (isChecked) excludedTasks.delete(taskName);
+  else excludedTasks.add(taskName);
+  updateCountsFromTaskFilter();
+}
+
+function getTaskSeq(name){
+  const m = name.match(/^(\d+)\.\s*/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function isSharedTask(n){
+  return /houston|pre-construction/i.test(n) || /^6\.\s*other\b/i.test(n);
+}
+
+function isCivilCoreTask(n){
+  const seq = getTaskSeq(n);
+  const isExcluded = /microwave|hybrid/i.test(n);
+  return (seq !== null && seq >= 5) && !isExcluded && !isSharedTask(n);
+}
+
+function isTowerCoreTask(n){
+  return !isCivilCoreTask(n) && !isSharedTask(n);
+}
+
+function selectAllTasks(btn){
+  const isActive = btn.classList.toggle('active');
+  const names = getAllItems();
+
+  if (isActive){
+    names.forEach(n => excludedTasks.delete(n));
+  } else {
+    names.forEach(n => excludedTasks.add(n));
+  }
+
+  updateCountsFromTaskFilter();
+  renderAllItemsTable();
+}
+
+function selectCivilTasks(btn){
+  const isActive = btn.classList.toggle('active');
+  const names = getAllItems();
+
+  names.forEach(n => {
+    if (isCivilCoreTask(n) || isSharedTask(n)){
+      if (isActive) excludedTasks.delete(n);
+      else excludedTasks.add(n);
+    }
+  });
+
+  updateCountsFromTaskFilter();
+  renderAllItemsTable();
+}
+
+function selectTowerTasks(btn){
+  const isActive = btn.classList.toggle('active');
+  const names = getAllItems();
+
+  names.forEach(n => {
+    if (isTowerCoreTask(n) || isSharedTask(n)){
+      if (isActive) excludedTasks.delete(n);
+      else excludedTasks.add(n);
+    }
+  });
+
+  updateCountsFromTaskFilter();
+  renderAllItemsTable();
+}
+
+function renderAllCategoryTables(){
+  ["Approved","Submitted","InProgress","Pending","Rejected","Cancelled"].forEach(renderCategoryTable);
+  renderAllItemsTable();
+}
+
+function downloadSelectedLists(){
+  const categories = ["Approved","Submitted","Pending","Rejected","Cancelled"];
+  const selected = categories.filter(cat => document.getElementById('chk' + cat).checked);
+
+  if (selected.length === 0){
+    alert("Check at least one category first.");
+    return;
+  }
+
+  const colLHeader = getColLHeader();
+  const wb = XLSX.utils.book_new();
+
+  selected.forEach(cat => {
+    const items = getCategoryItems(cat);
+    const aoa = [["Task Name", colLHeader]];
+    items.forEach(item => aoa.push([item.taskName, item.colL]));
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.book_append_sheet(wb, ws, cat.substring(0, 31));
+  });
+
+  XLSX.writeFile(wb, "site_crew_photos_status_lists.xlsx");
+}
+
+function getCounts(){
+  const isChecked = id => document.getElementById(id).checked;
+  return {
+    Approved: isChecked('chkApproved') ? (parseInt(document.getElementById('cApproved').value) || 0) : 0,
+    Pending: isChecked('chkPending') ? (parseInt(document.getElementById('cPending').value) || 0) : 0,
+    Cancelled: isChecked('chkCancelled') ? (parseInt(document.getElementById('cCancelled').value) || 0) : 0,
+    Rejected: isChecked('chkRejected') ? (parseInt(document.getElementById('cRejected').value) || 0) : 0,
+    Submitted: isChecked('chkSubmitted') ? (parseInt(document.getElementById('cSubmitted').value) || 0) : 0,
+    InProgress: isChecked('chkInProgress') ? (parseInt(document.getElementById('cInProgress').value) || 0) : 0
+  };
+}
+
+function polarToCartesian(cx, cy, r, angleDeg){
+  const rad = (angleDeg - 90) * Math.PI / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function describeArc(cx, cy, r, startAngle, endAngle){
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = (endAngle - startAngle) <= 180 ? "0" : "1";
+  return [
+    "M", cx, cy,
+    "L", start.x, start.y,
+    "A", r, r, 0, largeArcFlag, 0, end.x, end.y,
+    "Z"
+  ].join(" ");
+}
+
+function renderChart(){
+  const counts = getCounts();
+  const total = counts.Approved + counts.Pending + counts.Cancelled + counts.Rejected + counts.Submitted + counts.InProgress;
+
+  const svg = document.getElementById('pieSvg');
+  svg.innerHTML = '';
+  const legendBox = document.getElementById('legendBox');
+  legendBox.innerHTML = '';
+  const totalBox = document.getElementById('totalBox');
+
+  const cx = 160, cy = 160, r = 130;
+
+  if (total === 0){
+    const text = document.createElementNS("http://www.w3.org/2000/svg","text");
+    text.setAttribute("x", cx);
+    text.setAttribute("y", cy);
+    text.setAttribute("text-anchor","middle");
+    text.setAttribute("fill","#999");
+    text.setAttribute("font-size","14");
+    text.textContent = "No data";
+    svg.appendChild(text);
+    totalBox.textContent = "Total: 0";
+    return;
+  }
+
+  const order = ["Approved","Submitted","InProgress","Pending","Rejected","Cancelled"];
+  let angle = 0;
+
+  order.forEach(key => {
+    const value = counts[key];
+    if (value <= 0) return;
+    const sliceAngle = (value / total) * 360;
+    const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+    path.setAttribute("d", describeArc(cx, cy, r, angle, angle + sliceAngle));
+    path.setAttribute("fill", COLORS[key]);
+    path.setAttribute("stroke", "#fff");
+    path.setAttribute("stroke-width", "2");
+    path.addEventListener('click', () => switchTab(key));
+    svg.appendChild(path);
+
+    // percentage label
+    const midAngle = angle + sliceAngle / 2;
+    const labelPos = polarToCartesian(cx, cy, r * 0.62, midAngle);
+    const pct = Math.round((value / total) * 100);
+    if (pct > 0){
+      const label = document.createElementNS("http://www.w3.org/2000/svg","text");
+      label.setAttribute("x", labelPos.x);
+      label.setAttribute("y", labelPos.y);
+      label.setAttribute("class","pctLabel");
+      label.textContent = pct + "%";
+      svg.appendChild(label);
+    }
+
+    angle += sliceAngle;
+
+    // legend row
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<span class="swatch" style="background:${COLORS[key]}"></span>
+      <span class="name">${key}</span>
+      <span style="font-weight:600;">${value}</span>`;
+    row.addEventListener('click', () => switchTab(key));
+    legendBox.appendChild(row);
+  });
+
+  totalBox.textContent = "Total: " + total;
+}
+
+renderChart();
+renderAllCategoryTables();
+</script>
+
+</body>
+</html>
