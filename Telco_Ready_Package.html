@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TMO FL TRP Automation — Telco Ready Package Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{--ink:#1A1A1A;--teal:#0C6E84;--teal-soft:#E3F1F5;--bg:#F6F7F9;--card:#fff;--border:#E2E5EA;--muted:#6B7280;--ok:#0F8A4F;--ok-bg:#E8F6EE;--warn:#C46A00;--warn-bg:#FFF3E0;--err:#B42318;--err-bg:#FCEDEC;}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+header{background:linear-gradient(135deg,#1a2332 0%,#2c3e50 100%);color:#fff;padding:28px 40px;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+header h1{margin:0;font-size:24px;font-weight:600}
+header .sub{margin-top:4px;font-size:14px;opacity:.85}
+.layout{max-width:1180px;margin:24px auto;padding:0 24px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px}
+.card h2{margin:0 0 16px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px}
+.full{grid-column:1/-1}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.row.single{grid-template-columns:1fr}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
+.req{color:#e53935;margin-left:2px}
+input[type=text],input[type=date]{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;color:var(--ink);background:#fff;transition:border-color .15s}
+input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(12,110,132,.1)}
+.drop{border:2px dashed var(--border);border-radius:8px;padding:20px 16px;text-align:center;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
+.drop:hover,.drop.over{border-color:var(--teal);background:var(--teal-soft)}
+.drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop .ico{font-size:26px;margin-bottom:4px}
+.drop .title{font-size:14px;font-weight:500}
+.drop .hint{font-size:12px;color:var(--muted);margin-top:2px}
+.drop .loaded{font-size:12px;color:var(--ok);margin-top:6px;font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.stat{background:var(--teal-soft);border-radius:8px;padding:12px;text-align:center}
+.stat .num{font-size:26px;font-weight:700;color:var(--teal)}
+.stat .lbl{font-size:11px;color:var(--muted);margin-top:2px}
+.sec-block{margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.sec-hdr{padding:10px 14px;background:#f8f9fb;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+.sec-hdr .sname{font-weight:600;font-size:14px;flex:1}
+.badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}.badge.warn{background:var(--warn-bg);color:var(--warn)}.badge.err{background:var(--err-bg);color:var(--err)}
+.photo-grid{padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.photo-tile{position:relative;border:1px solid var(--border);border-radius:6px;overflow:hidden;aspect-ratio:4/3;background:#f4f5f7}
+.photo-tile img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-tile .cap{position:absolute;bottom:0;left:0;right:0;font-size:9px;padding:3px 5px;background:rgba(0,0,0,.7);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.photo-tile .remove-btn{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(180,35,24,.85);color:#fff;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0;display:none;z-index:10;font-weight:700;}
+.photo-tile:hover .remove-btn{display:block;}
+.photo-tile.removed{opacity:.35;pointer-events:none;}
+.miss-list{padding:6px 14px 10px}
+.miss-row{display:flex;align-items:center;gap:8px;font-size:13px;padding:2px 0}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}.dot.err{background:var(--err)}
+.miss-row .mlabel{color:var(--err);font-style:italic}
+.unmatched-box{margin-top:12px;padding:12px 14px;background:var(--warn-bg);border-radius:8px;font-size:13px;color:var(--warn)}
+.unmatched-box ul{margin:6px 0 0;padding-left:20px}
+.actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.btn{padding:10px 22px;border-radius:7px;border:none;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;transition:all .15s}
+.btn.primary{background:var(--teal);color:#fff}.btn.primary:hover:not(:disabled){background:#0a5566}.btn.primary:disabled{opacity:.45;cursor:not-allowed}
+.btn.secondary{background:#fff;border:1px solid var(--border);color:var(--ink)}.btn.secondary:hover{background:#f4f5f7}
+.empty{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+.help{background:var(--teal-soft);border-radius:8px;padding:16px;font-size:13px;border:1px solid #C5DDE4;color:#0a5566}
+.help b{color:var(--teal)}.help ol{margin:8px 0 0;padding-left:20px}.help li{margin-bottom:4px}
+.pill{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:var(--teal);color:#fff;margin-left:8px;vertical-align:middle}
+@media(max-width:760px){.layout{grid-template-columns:1fr}.row{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
+.tabs{display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.tab{flex:1;padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;background:#f8f9fb;color:var(--muted);border:none;transition:all .15s;font-family:inherit}
+.tab.active{background:var(--teal);color:#fff}
+.tab-content{display:none}.tab-content.active{display:block}
+.cat-drop{border:2px dashed var(--border);border-radius:6px;padding:10px;text-align:center;cursor:pointer;transition:all .15s;position:relative;margin-top:8px;font-size:12px;color:var(--muted)}
+.cat-drop:hover,.cat-drop.over{border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
+.cat-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.manual-sec{margin-bottom:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.manual-sec-hdr{padding:8px 12px;background:#f8f9fb;font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px}
+.manual-sec-hdr .cnt{font-size:11px;color:var(--muted);font-weight:400}
+.manual-drop-zone{padding:8px 10px 10px;border-top:1px solid var(--border);background:#fafbfc}
+.sec-manual-drop{border:2px dashed var(--border);border-radius:6px;padding:8px;text-align:center;cursor:pointer;position:relative;font-size:12px;color:var(--muted);transition:all .15s}
+.sec-manual-drop:hover,.sec-manual-drop.over{border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
+.sec-manual-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+</style>
+</head>
+<body>
+<header>
+  <h1>TMO FL TRP Automation <span style="font-size:14px;opacity:.7;font-weight:400">— Telco Ready Package Generator</span></h1>
+</header>
+<div class="layout">
+
+  <div class="card full">
+    <div class="help"><b>How it works</b>
+      <ol>
+        <li>Fill in site information (Site Number, AAV Provider, Address, Date).</li>
+        <li>Upload <b>ROOM_READY_TEMPLATE.pptx</b>.</li>
+        <li>Choose your upload mode:
+          <ul style="margin-top:4px;margin-bottom:0;padding-left:18px">
+            <li><b>Auto (Excel + Photos)</b> — Upload the Excel mapping (Swift or Talonview) and all site photos. Photos are matched to categories automatically by filename.</li>
+            <li><b>Manual (Per Category)</b> — Drop photos directly into each category (Front Page, Telco Box, Cienna, Fiber Box, AAV Power). No Excel or specific filenames needed.</li>
+          </ul>
+        </li>
+        <li>Review the Validation Report — matched photos appear in each section. Use the <b>➕ drop zone</b> inside any section to manually add photos that weren't recognized, and the <b>✕</b> button to remove any photo.</li>
+        <li>Click <b>Generate TRP PowerPoint</b> and download the file from the bar that appears.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>1. Site Information</h2>
+    <div class="row">
+      <div><label>Site Number <span class="req">*</span></label><input type="text" id="siteNum"></div>
+      <div><label>AAV Provider <span class="req">*</span></label><input type="text" id="aav"></div>
+    </div>
+    <div class="row single">
+      <div><label>Site Address <span class="req">*</span></label><input type="text" id="addr"></div>
+    </div>
+    <div class="row single">
+      <div><label>Date <span class="req">*</span></label><input type="date" id="dt"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Upload Files</h2>
+
+    <label style="margin-bottom:4px">PowerPoint Template (.pptx) <span class="req">*</span></label>
+    <div class="drop" id="tplDrop">
+      <div class="ico">📋</div>
+      <div class="title">Drop <b>ROOM_READY_TEMPLATE.pptx</b></div>
+      <div class="hint">Must be .pptx format</div>
+      <div class="loaded" id="tplLoaded"></div>
+      <input type="file" id="tplInput" accept=".pptx">
+    </div>
+
+    <div style="height:16px"></div>
+    <label style="margin-bottom:8px">Photo Upload Mode</label>
+    <div class="tabs">
+      <button class="tab active" id="tabAuto" onclick="switchTab('auto')">📄 Auto (Excel + Photos)</button>
+      <button class="tab" id="tabManual" onclick="switchTab('manual')">🗂 Manual (Per Category)</button>
+    </div>
+
+    <div id="tabAutoContent" class="tab-content active">
+      <label style="margin-bottom:4px">Excel Mapping <span class="req" id="reqXl">*</span></label>
+      <div class="drop" id="xlDrop">
+        <div class="ico">📄</div>
+        <div class="title">Drop Excel Mapping (Swift or Talonview)</div>
+        <div class="hint">.xlsx — Swift or Talonview auto-detected</div>
+        <div class="loaded" id="xlLoaded"></div>
+        <input type="file" id="xlInput" accept=".xlsx,.xls">
+      </div>
+      <div style="height:10px"></div>
+      <label style="margin-bottom:4px">Site Photos <span class="req" id="reqPh">*</span></label>
+      <div class="drop" id="phDrop">
+        <div class="ico">📸</div>
+        <div class="title">Drop all site photos</div>
+        <div class="hint">.jpg .jpeg .png</div>
+        <div class="loaded" id="phLoaded"></div>
+        <input type="file" id="phInput" accept="image/jpeg,image/png" multiple>
+      </div>
+    </div>
+
+    <div id="tabManualContent" class="tab-content">
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Drop photos directly into each category below. No Excel mapping needed.</p>
+      <div id="manualCategories"></div>
+    </div>
+  </div>
+
+  <div class="card full">
+    <h2>3. Validation Report <span id="parserPill" style="display:none"></span></h2>
+    <div id="reportArea"><div class="empty">Upload Excel mapping and photos to see validation results.</div></div>
+  </div>
+
+  <div class="card full">
+    <div class="actions">
+      <div id="statusMsg" style="flex:1;font-size:13px;color:var(--muted)">Fill in site info and upload all files, then generate.</div>
+      <button class="btn secondary" id="resetBtn">Reset</button>
+      <button class="btn primary" id="genBtn" disabled><span id="genLbl">⬇ Generate TRP PowerPoint</span></button>
+    </div>
+  </div>
+
+
+</div>
+
+<script>
+/* ================================================================
+   TRP Automation — Reference-matched PPTX generation
+   Layout matches 9JK2981C_Telco_Ready_Package.pptx exactly:
+   - Front page: 2 photos side-by-side, Verdana bold text
+   - Section slides: portrait (3:4) and landscape (4:3) photos
+     placed at uniform sizes per orientation, no rotation
+   - Section titles: Calibri via slide placeholder (no override)
+   - One slide per section (6 slides total matching reference)
+================================================================ */
+
+const state = { templateBytes:null, mapping:null, parserType:null, photos:[], matches:{}, unmatched:[], manualPhotos:{}, reportManual:{} };
+
+// Section → slide numbers in template (photos distributed across multiple slides)
+const SECTION_SLIDES = {
+  'Front page': [1],
+  'Telco Box':  [2,3,4,5,6],
+  'Cienna':     [7,8],
+  'Fiber Box':  [9,10],
+  'AAV Power':  [11,12],
+};
+// Max photos per slide
+const MAX_PER_SLIDE = {1:2, 2:8,3:8,4:8,5:8,6:8, 7:8,8:8, 9:8,10:8, 11:8,12:8};
+
+// Standard photo sizes matching reference (in EMU)
+// Landscape: 2393000 x 1795000 (≈2.617" x 1.963", 4:3)
+// Portrait:  1795000 x 2393000 (≈1.963" x 2.617", 3:4)
+const LAND = { cx: 2392991, cy: 1794743 };  // landscape cell
+const PORT = { cx: 1794743, cy: 2392991 };  // portrait cell
+
+// Content area for section slides (below title wave)
+const CA = { x: 231689, y: 1473575, w: 8680522, h: 5156425 };
+
+// ── HELPERS ──────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const escXml = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+function fmtDate(v){ if(!v) return ''; const[y,m,d]=v.split('-'); return `${parseInt(m)}/${parseInt(d)}/${y}`; }
+
+// Detect photo orientation from a dataUrl by loading into Image
+function getOrientation(dataUrl){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      // Use a canvas to get the VISUALLY rendered dimensions after EXIF rotation.
+      // Some phones (HEIC/JPEG) store photos in landscape orientation with an EXIF
+      // rotate tag — the browser's naturalWidth/Height reflects the RAW pixels,
+      // not the displayed orientation. Drawing to canvas forces the correct visual size.
+      const canvas=document.createElement('canvas');
+      canvas.width=img.naturalWidth;
+      canvas.height=img.naturalHeight;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0);
+      // Check rendered dimensions via bounding box
+      // The browser CSS renders the image with EXIF applied, so offsetWidth/Height
+      // give the correct visual size when the image is in the DOM.
+      // Better: create an off-screen img with object-fit and measure it.
+      // Simplest reliable approach: use naturalWidth/naturalHeight ratio AND
+      // cross-check with a small rendered version to detect EXIF-rotated images.
+      const rw=img.naturalWidth, rh=img.naturalHeight;
+      const ratio=rw/rh;
+      // For images that are clearly landscape (ratio > 1.2) or portrait (ratio < 0.8),
+      // trust naturalWidth. For near-square or ambiguous, default to portrait.
+      // To properly detect EXIF rotation, render image in DOM briefly.
+      const tester=document.createElement('img');
+      tester.style.cssText='position:fixed;opacity:0;top:-9999px;left:-9999px;max-width:none;max-height:none';
+      tester.onload=()=>{
+        const vw=tester.offsetWidth||rw;
+        const vh=tester.offsetHeight||rh;
+        document.body.removeChild(tester);
+        const visualRatio=vw/vh;
+        resolve({
+          orientation: visualRatio >= 1 ? 'landscape' : 'portrait',
+          ratio: visualRatio,
+          naturalWidth: vw,
+          naturalHeight: vh,
+        });
+      };
+      tester.onerror=()=>{
+        document.body.removeChild(tester);
+        resolve({
+          orientation: ratio >= 1 ? 'landscape' : 'portrait',
+          ratio, naturalWidth:rw, naturalHeight:rh,
+        });
+      };
+      document.body.appendChild(tester);
+      tester.src=dataUrl;
+    };
+    img.onerror=()=>resolve({orientation:'landscape', ratio:4/3, naturalWidth:4, naturalHeight:3});
+    img.src=dataUrl;
+  });
+}
+
+// Universal cleaner for filename/requirement matching
+function clean(s){
+  let t=String(s||'').toUpperCase();
+  t=t.replace(/^\d+[\.\s]+/,'');
+  t=t.replace(/\s+\d+$/,'');
+  t=t.replace(/\(AT LEAST \d+ PHOTOS?\)/g,'');
+  t=t.replace(/\(MUST SHOW[^)]*\)/g,'');
+  t=t.replace(/[^A-Z0-9]+/g,' ');
+  return t.trim();
+}
+
+// ── DRAG & DROP ──────────────────────────────────────────────────
+['tpl','xl','ph'].forEach(pfx=>{
+  const d=$(`${pfx}Drop`);
+  d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('over');});
+  d.addEventListener('dragleave',()=>d.classList.remove('over'));
+  d.addEventListener('drop',e=>{
+    e.preventDefault();d.classList.remove('over');
+    const f=e.dataTransfer.files;
+    if(pfx==='tpl'&&f[0]) handleTemplate(f[0]);
+    if(pfx==='xl'&&f[0])  handleExcel(f[0]);
+    if(pfx==='ph'&&f.length) handlePhotos(f);
+  });
+});
+$('tplInput').addEventListener('change',e=>{if(e.target.files[0]) handleTemplate(e.target.files[0]);});
+$('xlInput').addEventListener('change',e=>{if(e.target.files[0]) handleExcel(e.target.files[0]);});
+$('phInput').addEventListener('change',e=>{if(e.target.files.length) handlePhotos(e.target.files);});
+$('resetBtn').addEventListener('click',resetAll);
+$('genBtn').addEventListener('click',generatePPTX);
+$('dt').value=new Date().toISOString().slice(0,10);
+state.uploadMode='auto'; setTimeout(()=>{ switchTab('auto'); updateManualCounters(); },0);
+
+// ── TEMPLATE ─────────────────────────────────────────────────────
+function handleTemplate(file){
+  if(!file.name.toLowerCase().endsWith('.pptx')){
+    alert('Please upload the .pptx version of the template.\nUse ROOM_READY_TEMPLATE.pptx provided alongside this tool.');
+    return;
+  }
+  const r=new FileReader();
+  r.onload=e=>{
+    const bytes=new Uint8Array(e.target.result);
+    if(bytes[0]!==0x50||bytes[1]!==0x4B){
+      alert('This file does not appear to be a valid .pptx. Please use ROOM_READY_TEMPLATE.pptx.');
+      return;
+    }
+    state.templateBytes=bytes;
+    $('tplLoaded').textContent=`✓ ${file.name}`;
+    checkReady();
+  };
+  r.readAsArrayBuffer(file);
+}
+
+// ── EXCEL ─────────────────────────────────────────────────────────
+function handleExcel(file){
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const hdr=rows[0]?rows[0].map(c=>String(c).toLowerCase()):[];
+      let catCol=hdr.findIndex(h=>h.includes('category'));
+      let reqCol=hdr.findIndex(h=>h.includes('requirement'));
+      if(reqCol<0) reqCol=hdr.findIndex(h=>h.includes('photo')&&!h.includes('category'));
+      if(catCol<0) catCol=0; if(reqCol<0) reqCol=1;
+      state.parserType=file.name.toLowerCase().includes('swift')?'Swift':'Talonview';
+      state.mapping=[];
+      for(let i=1;i<rows.length;i++){
+        const cat=String(rows[i][catCol]||'').trim();
+        const req=String(rows[i][reqCol]||'').trim();
+        if(cat&&req) state.mapping.push({category:cat,requirement:req});
+      }
+      $('xlLoaded').textContent=`✓ ${file.name} — ${state.mapping.length} requirements`;
+      const pill=$('parserPill');
+      pill.textContent=state.parserType; pill.className='pill'; pill.style.display='inline-block';
+      runValidation();
+    }catch(err){alert('Error reading Excel: '+err.message);}
+  };
+  r.readAsArrayBuffer(file);
+}
+
+// ── PHOTOS ────────────────────────────────────────────────────────
+// Compress image to max 1600px, quality 0.75 — reduces memory usage significantly
+function compressPhoto(file){
+  return new Promise(resolve=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const MAX=1600;
+        let w=img.naturalWidth, h=img.naturalHeight;
+        if(w>MAX||h>MAX){
+          if(w>h){ h=Math.round(h*MAX/w); w=MAX; }
+          else    { w=Math.round(w*MAX/h); h=MAX; }
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve({dataUrl:canvas.toDataURL('image/jpeg',0.75), mimeType:'image/jpeg', w, h});
+      };
+      img.onerror=()=>resolve({dataUrl:e.target.result, mimeType:file.type||'image/jpeg', w:0, h:0});
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function handlePhotos(files){
+  state.photos=[];let loaded=0;const arr=Array.from(files);
+  arr.forEach(async file=>{
+    const {dataUrl,mimeType,w,h}=await compressPhoto(file);
+    state.photos.push({file,name:file.name,baseName:file.name.replace(/\.[^.]+$/,''),dataUrl,mimeType});
+    if(++loaded===arr.length){
+      $('phLoaded').textContent=`✓ ${loaded} photo${loaded!==1?'s':''} loaded`;
+      runValidation();
+    }
+  });
+}
+
+// ── VALIDATION ────────────────────────────────────────────────────
+function runValidation(){
+  // In manual mode, mapping/photos may be empty — still render if reportManual has content
+  const hasReportManual=Object.values(state.reportManual||{}).some(a=>a.length>0);
+  if(!state.mapping||!state.photos.length){
+    if(hasReportManual) renderReport({mapping:[],matches:{},unmatched:[],photos:[]});
+    else renderReport(null);
+    return;
+  }
+  state.matches={};state.unmatched=[];
+  const byKey={};
+  state.photos.forEach(p=>{(byKey[clean(p.baseName)]=byKey[clean(p.baseName)]||[]).push(p);});
+  const claimed=new Set();
+  state.mapping.forEach(({requirement})=>{
+    const k=clean(requirement);
+    const hits=[];
+    (byKey[k]||[]).forEach(p=>{if(!claimed.has(p.name)){hits.push(p);claimed.add(p.name);}});
+    if(hits.length) state.matches[requirement]=hits;
+  });
+  state.unmatched=state.photos.filter(p=>!claimed.has(p.name));
+  renderReport(state);checkReady();
+}
+
+// ── REPORT ────────────────────────────────────────────────────────
+function renderReport(st){
+  const area=$('reportArea');
+  if(!st){area.innerHTML='<div class="empty">Upload Excel mapping and photos to see validation results.</div>';return;}
+  const total=(st.mapping||[]).length,matched=Object.keys(st.matches||{}).length,missing=total-matched,unrecog=(st.unmatched||[]).length;
+  const byCategory={};
+  (st.mapping||[]).forEach(({category,requirement})=>{if(!byCategory[category])byCategory[category]=[];byCategory[category].push(requirement);});
+  let html=`<div class="stats">
+    <div class="stat"><div class="num">${total}</div><div class="lbl">Required</div></div>
+    <div class="stat"><div class="num" style="color:var(--ok)">${matched}</div><div class="lbl">Matched</div></div>
+    <div class="stat"><div class="num" style="color:${missing?'var(--err)':'var(--ok)'}">${missing}</div><div class="lbl">Missing</div></div>
+    <div class="stat"><div class="num" style="color:${unrecog?'var(--warn)':'var(--ok)'}">${unrecog}</div><div class="lbl">Unrecognized</div></div>
+  </div>`;
+  Object.entries(byCategory).forEach(([cat,reqs])=>{
+    const m=reqs.filter(r=>st.matches[r]).length,bc=m===reqs.length?'ok':m===0?'err':'warn';
+    const catId=cat.replace(/[^a-z0-9]/gi,'-');
+    // reportManual = photos added via Section 3 drop zones (show with "Manual" label)
+    const reportManual=(state.reportManual&&state.reportManual[cat])||[];
+    html+=`<div class="sec-block"><div class="sec-hdr"><span class="sname">${cat}</span><span class="badge ${bc}">${m}/${reqs.length} matched</span>${reportManual.length?`<span style="font-size:11px;color:var(--ok);margin-left:6px">+${reportManual.length} manual</span>`:''}</div>`;
+    const mr=reqs.filter(r=>st.matches[r]);
+    if(mr.length||reportManual.length){
+      html+=`<div class="photo-grid">`;
+      mr.forEach(r=>{(st.matches[r]||[]).forEach(p=>{html+=`<div class="photo-tile" id="tile-${p.name.replace(/[^a-z0-9]/gi,'_')}"><img src="${p.dataUrl}"><div class="cap">${r}</div><button class="remove-btn" onclick="removePhoto('${p.name.replace(/'/g,"\\'")}')" title="Remove">✕</button></div>`;});});
+      reportManual.forEach((p,i)=>{html+=`<div class="photo-tile"><img src="${p.dataUrl}"><div class="cap" style="background:rgba(12,110,132,.8)">Manual</div><button class="remove-btn" onclick="removeReportManual('${cat}',${i})" title="Remove">✕</button></div>`;});
+      html+=`</div>`;
+    }
+    const mis=reqs.filter(r=>!st.matches[r]);
+    if(mis.length){html+=`<div class="miss-list">`;mis.forEach(r=>{html+=`<div class="miss-row"><div class="dot err"></div><span class="mlabel">Missing: ${r}</span></div>`;});html+=`</div>`;}
+    html+=`<div style="padding:8px 10px;border-top:1px solid var(--border);background:#fafbfc">
+      <div class="sec-manual-drop" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="handleReportDrop(event,'${cat}')">
+        ➕ Drop photos here to manually add to <b>${cat}</b>
+        <input type="file" accept="image/jpeg,image/png" multiple onchange="handleReportManualDrop('${cat}',this.files)">
+      </div>
+    </div>`;
+    html+=`</div>`;
+  });
+  // Track shown cats for the "always show" block below
+  // Always show ALL standard sections — even if not in Excel mapping
+  // so users can manually add photos to any category
+  const shownCats=new Set(Object.keys(byCategory).map(k=>clean(k)));
+  Object.keys(SECTION_SLIDES).forEach(sec=>{
+    if(sec==='Front page') return; // handled separately
+    if(shownCats.has(clean(sec))) return; // already rendered above
+    const rp=(state.reportManual&&state.reportManual[sec])||[];
+    const badge=rp.length?`<span class="badge ok">${rp.length} manual</span>`:`<span class="badge err">0 matched</span>`;
+    html+=`<div class="sec-block"><div class="sec-hdr"><span class="sname">${sec}</span>${badge}</div>`;
+    if(rp.length){
+      html+=`<div class="photo-grid">`;
+      rp.forEach((p,i)=>{html+=`<div class="photo-tile"><img src="${p.dataUrl}"><div class="cap" style="background:rgba(12,110,132,.8)">Manual</div><button class="remove-btn" onclick="removeReportManual('${sec}',${i})" title="Remove">✕</button></div>`;});
+      html+=`</div>`;
+    }
+    html+=`<div style="padding:8px 10px;${rp.length?'border-top:1px solid var(--border);':''}background:#fafbfc">
+      <div class="sec-manual-drop" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="handleReportDrop(event,'${sec}')">
+        ➕ Drop photos here to manually add to <b>${sec}</b>
+        <input type="file" accept="image/jpeg,image/png" multiple onchange="handleReportManualDrop('${sec}',this.files)">
+      </div>
+    </div>`;
+    html+=`</div>`;
+  });
+
+  // Also show any reportManual keys not already shown
+  Object.keys(state.reportManual||{}).forEach(cat=>{
+    if(shownCats.has(clean(cat))) return;
+    if(Object.keys(SECTION_SLIDES).some(s=>clean(s)===clean(cat))) return;
+    const rp=state.reportManual[cat]||[];
+    if(!rp.length) return;
+    html+=`<div class="sec-block"><div class="sec-hdr"><span class="sname">${cat}</span><span class="badge ok">${rp.length} manual</span></div>`;
+    html+=`<div class="photo-grid">`;
+    rp.forEach((p,i)=>{html+=`<div class="photo-tile"><img src="${p.dataUrl}"><div class="cap" style="background:rgba(12,110,132,.8)">Manual</div><button class="remove-btn" onclick="removeReportManual('${cat}',${i})" title="Remove">✕</button></div>`;});
+    html+=`</div></div>`;
+  });
+  if((st.unmatched||[]).length){
+    html+=`<div class="unmatched-box">⚠️ <strong>${st.unmatched.length} unrecognized photo${st.unmatched.length!==1?'s':''}</strong> — don't match any requirement:
+      <ul>${st.unmatched.map(p=>`<li>${p.name} <small style="opacity:.65">key: <code>${clean(p.baseName)}</code></small></li>`).join('')}</ul>
+      <details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600;font-size:12px">Show requirement keys</summary>
+      <ul style="margin-top:6px">${(st.mapping||[]).slice(0,6).map(({requirement})=>`<li>${requirement} <small style="opacity:.65">key: <code>${clean(requirement)}</code></small></li>`).join('')}</ul></details>
+    </div>`;
+  }
+  area.innerHTML=html;
+}
+
+function removePhoto(name){
+  // Remove from state.photos
+  state.photos = state.photos.filter(p => p.name !== name);
+  // Re-run validation to update matches
+  runValidation();
+  // Update photo loaded count
+  const n = state.photos.length;
+  $('phLoaded').textContent = n > 0 ? `✓ ${n} photo${n!==1?'s':''} loaded` : '';
+}
+
+// ── TAB SWITCHER ─────────────────────────────────────────────────
+function switchTab(tab){
+  $('tabAuto').className='tab'+(tab==='auto'?' active':'');
+  $('tabManual').className='tab'+(tab==='manual'?' active':'');
+  $('tabAutoContent').className='tab-content'+(tab==='auto'?' active':'');
+  $('tabManualContent').className='tab-content'+(tab==='manual'?' active':'');
+  state.uploadMode=tab;
+
+  // Show/hide required markers based on active tab
+  const reqXl=$('reqXl'), reqPh=$('reqPh');
+  if(reqXl) reqXl.style.display = tab==='auto' ? '' : 'none';
+  if(reqPh) reqPh.style.display = tab==='auto' ? '' : 'none';
+  // Grey out / restore the auto content when switching modes
+  const autoContent=$('tabAutoContent');
+  if(autoContent) autoContent.style.opacity = tab==='manual' ? '0.4' : '1';
+
+  // Clear opposite mode data when switching
+  if(tab==='manual'){
+    state.mapping=null; state.photos=[];
+    updateManualCounters(); runValidation();
+  }
+  if(tab==='auto'){
+    state.manualPhotos={};
+    updateManualCounters(); runValidation();
+  }
+}
+
+// ── MANUAL PHOTO DROP (upload section + report section) ───────────
+function handleManualDrop(category, files){
+  if(!files||!files.length) return;
+  if(!state.manualPhotos[category]) state.manualPhotos[category]=[];
+
+  // Deduplicate: skip files already loaded for this category
+  const existingNames=new Set(state.manualPhotos[category].map(p=>p.name));
+  const arr=Array.from(files).filter(f=>!existingNames.has(f.name));
+  if(!arr.length) return;
+
+
+
+  let loaded=0;
+  arr.forEach(file=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      state.manualPhotos[category].push({
+        file, name:file.name,
+        baseName:file.name.replace(/\.[^.]+$/,''),
+        dataUrl:e.target.result,
+        mimeType:file.type||'image/jpeg',
+        manual:true,
+      });
+      if(++loaded===arr.length){
+        updateManualCounters();
+        if(state.uploadMode==='manual') buildManualMappingAndValidate();
+        else renderReport(state);
+        checkReady();
+      }
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+function updateManualCounters(){
+  const container=$('manualCategories');
+  if(!container) return;
+  container.innerHTML='';
+  Object.keys(SECTION_SLIDES).forEach(sec=>{
+    const photos=state.manualPhotos[sec]||[];
+    const n=photos.length;
+    const block=document.createElement('div');
+    block.className='manual-sec';
+    // Header
+    const hdr=document.createElement('div');
+    hdr.className='manual-sec-hdr';
+    const icon=document.createElement('span');
+    icon.textContent='\uD83D\uDCF7 '+sec;
+    hdr.appendChild(icon);
+    const cnt=document.createElement('span');
+    cnt.style.cssText='font-size:11px;margin-left:6px;'+(n>0?'color:var(--ok);font-weight:600':'color:var(--muted)');
+    cnt.textContent=n+' photo'+(n!==1?'s':'');
+    hdr.appendChild(cnt);
+    if(n>0){
+      const thumbRow=document.createElement('span');
+      thumbRow.style.cssText='margin-left:8px;display:inline-flex;gap:3px;align-items:center;vertical-align:middle';
+      photos.slice(0,4).forEach(p=>{
+        const img=document.createElement('img');
+        img.src=p.dataUrl;
+        img.style.cssText='width:32px;height:32px;object-fit:cover;border-radius:4px;border:1px solid #ddd';
+        thumbRow.appendChild(img);
+      });
+      hdr.appendChild(thumbRow);
+      const clr=document.createElement('button');
+      clr.textContent='Clear';
+      clr.style.cssText='margin-left:auto;background:transparent;border:none;color:var(--err);cursor:pointer;font-size:11px;padding:2px 6px';
+      clr.onclick=()=>clearManualCategory(sec);
+      hdr.appendChild(clr);
+    }
+    block.appendChild(hdr);
+    // Drop zone
+    const dz=document.createElement('div');
+    dz.className='manual-drop-zone';
+    const inner=document.createElement('div');
+    inner.className='sec-manual-drop';
+    inner.style.position='relative';
+    const label=document.createElement('span');
+    label.textContent=n>0?'Add more photos':'Drop photos here';
+    inner.appendChild(label);
+    inner.ondragover=e=>{e.preventDefault();inner.classList.add('over');};
+    inner.ondragleave=()=>inner.classList.remove('over');
+    inner.ondrop=e=>{e.preventDefault();inner.classList.remove('over');handleManualDrop(sec,e.dataTransfer.files);};
+    const inp=document.createElement('input');
+    inp.type='file';inp.accept='image/jpeg,image/png';inp.multiple=true;
+    inp.style.cssText='position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%';
+    inp.onchange=function(){handleManualDrop(sec,this.files);};
+    inner.appendChild(inp);
+    dz.appendChild(inner);
+    block.appendChild(dz);
+    container.appendChild(block);
+  });
+}
+
+function clearManualCategory(category){
+  state.manualPhotos[category]=[];
+  updateManualCounters();
+  if(state.uploadMode==='manual') buildManualMappingAndValidate();
+  checkReady();
+}
+
+function handleManualDropEvent(event, category){
+  event.preventDefault();
+  event.currentTarget.classList.remove('over');
+  handleManualDrop(category, event.dataTransfer.files);
+}
+
+function handleReportDrop(event, category){
+  event.preventDefault();
+  event.currentTarget.classList.remove('over');
+  handleReportManualDrop(category, event.dataTransfer.files);
+}
+
+// Photos added via Section 3 report drop zones — shown as "Manual" tiles
+function handleReportManualDrop(category, files){
+  if(!files||!files.length) return;
+  if(!state.reportManual[category]) state.reportManual[category]=[];
+  const existingNames=new Set(state.reportManual[category].map(p=>p.name));
+  const arr=Array.from(files).filter(f=>!existingNames.has(f.name));
+  if(!arr.length) return;
+  let loaded=0;
+  arr.forEach(file=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      state.reportManual[category].push({
+        file, name:file.name,
+        baseName:file.name.replace(/\.[^.]+$/,''),
+        dataUrl:e.target.result,
+        mimeType:file.type||'image/jpeg',
+        manual:true,
+      });
+      if(++loaded===arr.length){
+        renderReport(state);
+        checkReady();
+      }
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+function removeManualPhoto(category, idx){
+  if(!state.manualPhotos[category]) return;
+  state.manualPhotos[category].splice(idx,1);
+  updateManualCounters();
+  if(state.uploadMode==='manual') buildManualMappingAndValidate();
+  else renderReport(state);
+  checkReady();
+}
+
+function removeReportManual(category, idx){
+  if(!state.reportManual[category]) return;
+  state.reportManual[category].splice(idx,1);
+  renderReport(state);
+  checkReady();
+}
+
+// Build synthetic mapping for manual mode (one requirement per photo slot)
+function buildManualMappingAndValidate(){
+  // Build mapping and directly assign matches — no fake name matching needed
+  state.mapping=[];
+  state.matches={};
+  state.unmatched=[];
+  state.photos=[];
+
+  Object.entries(state.manualPhotos).forEach(([cat,photos])=>{
+    if(!photos.length) return;
+    // One synthetic requirement per category (holds all photos)
+    const req=cat;
+    state.mapping.push({category:cat, requirement:req});
+    state.matches[req]=photos;
+  });
+
+  updateManualCounters();
+  renderReport(state);
+  checkReady();
+}
+
+function checkReady(){
+  const hasManual=state.uploadMode==='manual'&&Object.values(state.manualPhotos||{}).some(a=>a.length>0);
+  const ok=!!state.templateBytes&&(hasManual||(!!state.mapping&&state.photos.length>0));
+  $('genBtn').disabled=!ok;
+  if(ok){
+    if(state.uploadMode==='manual'){
+      const total=Object.values(state.manualPhotos||{}).reduce((s,a)=>s+a.length,0);
+      const cats=Object.keys(state.manualPhotos||{}).filter(k=>state.manualPhotos[k].length>0).length;
+      $('statusMsg').textContent=`Ready — ${total} photo${total!==1?'s':''} in ${cats} categor${cats!==1?'ies':'y'}. Click Generate.`;
+    } else {
+      const r=Object.keys(state.matches).length;
+      const p=Object.values(state.matches).reduce((s,a)=>s+a.length,0);
+      $('statusMsg').textContent=`Ready — ${p} photo${p!==1?'s':''} matched across ${r} requirement${r!==1?'s':''}. Click Generate.`;
+    }
+    $('statusMsg').style.color='var(--ok)';
+  }
+}
+
+function resetAll(){
+  state.templateBytes=null;state.mapping=null;state.parserType=null;state.photos=[];state.matches={};state.unmatched=[];state.manualPhotos={};state.reportManual={};state.uploadMode='auto'; setTimeout(()=>{ switchTab('auto'); updateManualCounters(); },0);
+  ['tplLoaded','xlLoaded','phLoaded'].forEach(id=>{$(id).textContent='';}); switchTab('auto');
+  ['tplInput','xlInput','phInput'].forEach(id=>{$(id).value='';});
+  $('parserPill').style.display='none';$('genBtn').disabled=true;
+  $('statusMsg').textContent='Fill in site info and upload all files, then generate.';$('statusMsg').style.color='var(--muted)';
+  $('reportArea').innerHTML='<div class="empty">Upload Excel mapping and photos to see validation results.</div>';
+}
+
+// ── PPTX GENERATION ──────────────────────────────────────────────
+async function generatePPTX(){
+  const btn=$('genBtn'),lbl=$('genLbl');
+  btn.disabled=true;lbl.textContent='⏳ Detecting orientations…';
+
+  try{
+    // Step 1: detect orientation for ALL photo sources
+    const allPhotoSources=[
+      ...Object.values(state.matches).flat(),
+      ...Object.values(state.manualPhotos||{}).flat(),
+      ...Object.values(state.reportManual||{}).flat(),
+    ];
+    for(const p of allPhotoSources){
+      if(!p.orientation){
+        const info=await getOrientation(p.dataUrl);
+        p.orientation=info.orientation;
+        p.ratio=info.ratio;
+        p.naturalWidth=info.naturalWidth;
+        p.naturalHeight=info.naturalHeight;
+      }
+    }
+
+    lbl.textContent='⏳ Building slides…';
+    const zip=await JSZip.loadAsync(state.templateBytes);
+    const siteNum=$('siteNum').value.trim();
+    const aav=$('aav').value.trim();
+    const addr=$('addr').value.trim();
+    const dateStr=fmtDate($('dt').value);
+
+    await updateFrontPage(zip,{siteNum,aav,addr,dateStr});
+    await insertAllSections(zip);
+
+    const b64=await zip.generateAsync({type:'base64',mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
+    triggerDownload(b64,`${siteNum||'TRP'}_Telco_Ready_Package.pptx`);
+
+    lbl.textContent='✓ Ready — see download bar below';
+    setTimeout(()=>{lbl.textContent='⬇ Generate TRP PowerPoint';btn.disabled=false;},5000);
+  }catch(err){
+    console.error(err);
+    alert('Generation failed: '+err.message+'\n\nCheck console for details.');
+    lbl.textContent='⬇ Generate TRP PowerPoint';btn.disabled=false;
+  }
+}
+
+// ── FRONT PAGE ────────────────────────────────────────────────────
+// Matches reference: Verdana bold, 2 photos side-by-side with slight tilt (97°)
+async function updateFrontPage(zip,{siteNum,aav,addr,dateStr}){
+  let xml=await zip.file('ppt/slides/slide1.xml').async('string');
+
+  // Populate text fields
+  xml=insertValueAfterLabel(xml,'AAV Provider:',aav,'1800');
+  xml=insertValueAfterLabel(xml,'Site #:',siteNum,'2400');
+  xml=insertValueAfterLabel(xml,'Site Address:',addr,'1800');
+  xml=insertValueAfterLabel(xml,'Date:',dateStr,'1800');
+
+  // Insert front page photos
+  const byCategory={};
+  state.mapping.forEach(({category,requirement})=>{if(!byCategory[category])byCategory[category]=[];byCategory[category].push(requirement);});
+  const catKey=Object.keys(byCategory).find(k=>clean(k)===clean('Front page'));
+  if(catKey){
+    const reqs=byCategory[catKey];
+    const photos=reqs.flatMap(r=>state.matches[r]||[]).slice(0,2);
+    if(photos.length){
+      let rxml=await zip.file('ppt/slides/_rels/slide1.xml.rels').async('string');
+      const rids=[...rxml.matchAll(/Id="rId(\d+)"/g)].map(m=>parseInt(m[1]));
+      const sids=[...xml.matchAll(/\bid="(\d+)"/g)].map(m=>parseInt(m[1]));
+      let nextRid=rids.length?Math.max(...rids)+1:5;
+      let nextSid=sids.length?Math.max(...sids)+1:100;
+      const pics=[],rels=[];
+
+      // Front page: photos placed side by side at their REAL aspect ratio, no distortion
+      // Available area on right side of front page
+      const FP_X=2743200, FP_Y=1143000, FP_W=6200000, FP_H=4343040, FP_PAD=57600;
+      const n=photos.length;
+
+      // Find the max height that fits each photo's real ratio within available area
+      // All photos share the same height; width varies per photo's actual ratio
+      const maxH = FP_H - 2*FP_PAD;
+      const totalPadW = (n+1)*FP_PAD;
+      // Start with height = maxH, check if total width fits
+      let ph = maxH;
+      let totalW = photos.reduce((s,p)=>s+Math.floor(ph*(p.ratio||4/3)),0) + (n-1)*FP_PAD;
+      if(totalW > FP_W - totalPadW){
+        // Scale down: find height where total width fits
+        const avgRatio = photos.reduce((s,p)=>s+(p.ratio||4/3),0)/n;
+        ph = Math.floor((FP_W - totalPadW) / (n * avgRatio));
+      }
+
+      // Total group width using each photo's real width
+      const photoWidths = photos.map(p=>Math.floor(ph*(p.ratio||4/3)));
+      const groupW = photoWidths.reduce((s,w)=>s+w,0) + (n-1)*FP_PAD;
+
+      // Center group horizontally and vertically
+      const startX = FP_X + Math.floor((FP_W - groupW) / 2);
+      const startY = FP_Y + Math.floor((FP_H - ph) / 2);
+
+      let curX = startX;
+      photos.forEach((p,i)=>{
+        const pw = photoWidths[i];
+        addPicToSlide(zip,p,curX,startY,pw,ph,1,i,pics,rels,nextRid,nextSid,0);
+        curX += pw + FP_PAD;
+        nextRid++;nextSid++;
+      });
+
+      xml=xml.replace('</p:spTree>',pics.join('\n')+'\n</p:spTree>');
+      rxml=rxml.replace('</Relationships>',rels.join('\n')+'\n</Relationships>');
+      zip.file('ppt/slides/_rels/slide1.xml.rels',rxml);
+    }
+  }
+  zip.file('ppt/slides/slide1.xml',xml);
+}
+
+function insertValueAfterLabel(xml,label,value,sz){
+  if(!value) return xml;
+  // Escape label for regex — handle special chars like # : &amp;
+  const labelXml = label.replace(/&/g,'&amp;');
+  const esc = labelXml.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  // Find the <a:r>...<a:t>LABEL</a:t></a:r> and insert value run right after it
+  const re = new RegExp(`(<a:r>(?:(?!</a:r>)[\\s\\S])*?<a:t>${esc}<\/a:t>\\s*<\/a:r>)`);
+  if(!re.test(xml)){
+    console.warn('[TRP] Label not found in XML:',label);
+    return xml;
+  }
+  const valueRun = `<a:r><a:rPr b="0" lang="en-US" sz="${sz}" spc="-1" strike="noStrike" dirty="0"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Verdana"/></a:rPr><a:t xml:space="preserve"> ${escXml(value)}</a:t></a:r>`;
+  return xml.replace(re, `$1${valueRun}`);
+}
+
+// ── SECTION SLIDES ────────────────────────────────────────────────
+async function insertAllSections(zip){
+  const byCategory={};
+  (state.mapping||[]).forEach(({category,requirement})=>{
+    if(!byCategory[category]) byCategory[category]=[];
+    byCategory[category].push(requirement);
+  });
+
+  for(const[section,slideNums] of Object.entries(SECTION_SLIDES)){
+    if(section==='Front page') continue;
+    const catKey=Object.keys(byCategory).find(k=>clean(k)===clean(section));
+    const reqs=catKey?byCategory[catKey]:[];
+    const matchedPhotos=reqs.flatMap(r=>state.matches[r]||[]);
+    // Section 2 upload panel manual photos — match by normalized key
+    const uploadManual=Object.entries(state.manualPhotos||{})
+      .filter(([k])=>clean(k)===clean(section))
+      .flatMap(([,v])=>v);
+    // Section 3 report drop zone manual photos
+    // Match by any key whose clean() equals clean(section) — handles case/spacing variants
+    const reportManualArr=Object.entries(state.reportManual||{})
+      .filter(([k])=>clean(k)===clean(section))
+      .flatMap(([,v])=>v);
+    // Deduplicate across all sources by filename
+    const seen=new Set();
+    const photos=[...matchedPhotos,...uploadManual,...reportManualArr].filter(p=>{
+      if(seen.has(p.name)) return false;
+      seen.add(p.name); return true;
+    });
+    if(!photos.length) continue;
+    // Distribute photos across multiple slides for this section
+    let idx=0;
+    for(const slideNum of slideNums){
+      if(idx>=photos.length) break;
+      const cap=MAX_PER_SLIDE[slideNum]||8;
+      const batch=photos.slice(idx,idx+cap);
+      idx+=cap;
+      await insertSectionSlide(zip,slideNum,section,batch);
+    }
+  }
+}
+
+async function insertSectionSlide(zip,slideNum,sectionName,photos){
+  const sp=`ppt/slides/slide${slideNum}.xml`;
+  const rp=`ppt/slides/_rels/slide${slideNum}.xml.rels`;
+  let sxml=await zip.file(sp).async('string');
+  let rxml=await zip.file(rp).async('string');
+
+  const rids=[...rxml.matchAll(/Id="rId(\d+)"/g)].map(m=>parseInt(m[1]));
+  const sids=[...sxml.matchAll(/\bid="(\d+)"/g)].map(m=>parseInt(m[1]));
+  let nextRid=rids.length?Math.max(...rids)+1:3;
+  let nextSid=sids.length?Math.max(...sids)+1:100;
+
+  const pics=[],rels=[];
+
+  // Sort: landscape first, then portrait (consistent with layout engine)
+  const allPhotos=[
+    ...photos.filter(p=>p.orientation==='landscape'),
+    ...photos.filter(p=>p.orientation==='portrait')
+  ];
+  // Pass full photo objects so layout engine uses real ratios
+  const positions=calcPhotoPositions(allPhotos);
+
+  allPhotos.forEach((p,i)=>{
+    const pos=positions[i];
+    if(!pos) return;
+    addPicToSlide(zip,p,pos.x,pos.y,pos.cx,pos.cy,slideNum,i,pics,rels,nextRid,nextSid,0);
+    nextRid++;nextSid++;
+  });
+
+  sxml=sxml.replace('</p:spTree>',pics.join('\n')+'\n</p:spTree>');
+  rxml=rxml.replace('</Relationships>',rels.join('\n')+'\n</Relationships>');
+  zip.file(sp,sxml);zip.file(rp,rxml);
+}
+
+// Layout engine: positions photos centered on slide, no rotation.
+// All landscape same size (4:3), all portrait same size (3:4).
+// Groups centered both horizontally and vertically in content area.
+const CA_X=231689, CA_Y=1473575, CA_W=8680522, CA_H=5156425, PAD=114300;
+
+// Layout engine: uses each photo's REAL aspect ratio — no stretching.
+// Photos are grouped into rows of up to 4. All photos in a row share the same height.
+// Landscape group and portrait group each get their own shared row height.
+// The whole arrangement is centered in the content area.
+function calcPhotoPositions(photos){
+  const n=photos.length;
+  if(!n) return [];
+
+  const COLS=4;
+  const landscape=photos.filter(p=>p.orientation==='landscape');
+  const portrait =photos.filter(p=>p.orientation==='portrait');
+  const nL=landscape.length, nP=portrait.length;
+
+  // Shared height for all landscape photos = content area width / COLS * avg landscape ratio inverted
+  // Use the TALLEST ratio among landscape photos to set row height (no cropping)
+  const lRows=nL>0?Math.ceil(nL/Math.min(nL,COLS)):0;
+  const pRows=nP>0?Math.ceil(nP/Math.min(nP,COLS)):0;
+
+  // Start with a target cell width
+  let cellW=Math.floor((CA_W-(COLS+1)*PAD)/COLS);
+
+  // For each group, row height = cellW / ratio of the photo in that group
+  // Use average ratio to set a shared height that fits all photos without distortion
+  const avgLratio=nL>0? landscape.reduce((s,p)=>s+(p.ratio||4/3),0)/nL : 1;
+  const avgPratio=nP>0? portrait.reduce((s,p)=>s+(p.ratio||3/4),0)/nP  : 1;
+
+  let lH=nL>0?Math.floor(cellW/avgLratio):0;
+  let pH=nP>0?Math.floor(cellW/avgPratio):0;
+
+  // Scale down if total height overflows
+  const totalNeeded=(lRows>0?lRows*(lH+PAD):0)+(pRows>0?pRows*(pH+PAD):0)+PAD;
+  if(totalNeeded>CA_H){
+    const scale=CA_H/totalNeeded;
+    lH=Math.floor(lH*scale);
+    pH=Math.floor(pH*scale);
+    cellW=Math.floor(cellW*scale);
+  }
+
+  const positions=[];
+  let curY=CA_Y+Math.floor((CA_H-((lRows>0?lRows*(lH+PAD):0)+(pRows>0?pRows*(pH+PAD):0)-PAD))/2);
+
+  // Place landscape photos — each gets width = height * its own real ratio
+  const lCols=Math.min(nL,COLS);
+  for(let i=0;i<nL;i++){
+    const p=landscape[i];
+    const ratio=p.ratio||4/3;
+    const pw=Math.floor(lH*ratio);  // real width for this photo's ratio
+    const col=i%lCols, row=Math.floor(i/lCols);
+    // Center each row horizontally
+    const rowStart=i-col;
+    const rowEnd=Math.min(rowStart+lCols,nL);
+    const rowPhotos=landscape.slice(rowStart,rowEnd);
+    const rowW=rowPhotos.reduce((s,rp)=>s+Math.floor(lH*(rp.ratio||4/3)),0)+(rowPhotos.length-1)*PAD;
+    const rowX=CA_X+Math.floor((CA_W-rowW)/2);
+    const x=rowX+rowPhotos.slice(0,col).reduce((s,rp)=>s+Math.floor(lH*(rp.ratio||4/3))+PAD,0);
+    positions.push({x, y:curY+row*(lH+PAD), cx:pw, cy:lH});
+  }
+  if(nL>0) curY+=lRows*(lH+PAD);
+
+  // Place portrait photos — each gets width = height * its own real ratio
+  const pCols=Math.min(nP,COLS);
+  for(let i=0;i<nP;i++){
+    const p=portrait[i];
+    const ratio=p.ratio||3/4;
+    const pw=Math.floor(pH*ratio);
+    const col=i%pCols, row=Math.floor(i/pCols);
+    const rowStart=i-col;
+    const rowEnd=Math.min(rowStart+pCols,nP);
+    const rowPhotos=portrait.slice(rowStart,rowEnd);
+    const rowW=rowPhotos.reduce((s,rp)=>s+Math.floor(pH*(rp.ratio||3/4)),0)+(rowPhotos.length-1)*PAD;
+    const rowX=CA_X+Math.floor((CA_W-rowW)/2);
+    const x=rowX+rowPhotos.slice(0,col).reduce((s,rp)=>s+Math.floor(pH*(rp.ratio||3/4))+PAD,0);
+    positions.push({x, y:curY+row*(pH+PAD), cx:pw, cy:pH});
+  }
+  return positions;
+}
+
+
+// ── ADD PICTURE TO SLIDE ─────────────────────────────────────────
+function addPicToSlide(zip,photo,x,y,cx,cy,slideNum,idx,pics,rels,rid,sid,rot){
+  const ext=photo.mimeType==='image/png'?'png':'jpeg';
+  const mime=photo.mimeType==='image/png'?'image/png':'image/jpeg';
+  const media=`trp_s${slideNum}_i${idx}.${ext}`;
+  zip.file(`ppt/media/${media}`,photo.dataUrl.split(',')[1],{base64:true});
+  ensureContentType(zip,ext,mime);
+  const ridStr=`rId${rid}`;
+  rels.push(`  <Relationship Id="${ridStr}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${media}"/>`);
+  const rotAttr=rot?` rot="${rot}"`:'';
+  pics.push(`<p:pic xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:nvPicPr><p:cNvPr id="${sid}" name="P${idx}" descr="${escXml(photo.name)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${ridStr}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm${rotAttr}><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln w="0"><a:noFill/></a:ln></p:spPr></p:pic>`);
+}
+
+const _ct={};
+async function ensureContentType(zip,ext,mime){
+  if(_ct[ext]) return; _ct[ext]=true;
+  const p='[Content_Types].xml';
+  let xml=await zip.file(p).async('string');
+  if(!xml.includes(`Extension="${ext}"`)){
+    xml=xml.replace('</Types>',`  <Default Extension="${ext}" ContentType="${mime}"/>\n</Types>`);
+    zip.file(p,xml);
+  }
+}
+
+function triggerDownload(b64,name){
+  const mime='application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  // Use data: URI directly — no Blob/URL API needed, works in sandboxed iframes
+  const dataUri=`data:${mime};base64,${b64}`;
+
+  const existing=$('downloadBar');
+  if(existing) existing.remove();
+
+  const bar=document.createElement('div');
+  bar.id='downloadBar';
+  bar.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#0C6E84;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:16px;z-index:9999;box-shadow:0 -2px 12px rgba(0,0,0,.2);';
+  bar.innerHTML=`
+    <span style="flex:1;font-size:15px;font-weight:600">✅ Your TRP PowerPoint is ready!</span>
+    <a href="${dataUri}" download="${name}" style="background:#fff;color:#0C6E84;padding:10px 24px;border-radius:7px;font-weight:700;font-size:14px;text-decoration:none;">
+      ⬇ Download ${name}
+    </a>
+    <button onclick="this.closest('#downloadBar').remove();" style="background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;">Dismiss</button>
+  `;
+  document.body.appendChild(bar);
+}
+</script>
+</body>
+</html>
