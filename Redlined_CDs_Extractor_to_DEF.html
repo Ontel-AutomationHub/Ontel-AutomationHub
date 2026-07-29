@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redlined CDs Extractor to DEF</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+
+// ── Regex patterns ──
+const COORD_REGEX  = /^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/;
+const DEGREE_REGEX = /(-?\d{1,3}\.\d+)°\s*,\s*(-?\d{1,3}\.\d+)°/;
+const LAT_LONG_RE  = /(?:LAT\s*[:/]?\s*)?(-?\d{1,3}\.\d+)\s*[,/]\s*(?:LONG\s*[:/]?\s*)?(-?\d{1,3}\.\d+)/i;
+const CABLE_RE     = /R(?:T)?\d+-HEX-(?:24|12|2|1)-WAY|\d*[x\-]?[\d.]+"\s*CONDUITS?/gi;
+const DIAMETER_MAP = { "24-WAY":1.733,"12-WAY":1.181,"2-WAY":0.5,"1-WAY":0.25 };
+
+// ── Main table columns ──
+const HEADERS  = ["Item Number","Block Type","Content","Equipment Callout","Coordinates","Bore Callout","Line Type","Line Type Code","EOP","Depth","Date"];
+const HEADER_LABELS = ["Item No.","Block Type","Content","Equipment Callout","Coordinates","Bore Callout","Line Type","Line Type Code","EOP","Depth","Date"];
+const FIELDS   = ["item","blockType","content","equipmentCallout","coordinates","boreCallout","lineType","lineTypeCode","eop","depth","date"];
+const COL_W    = ["55px","120px","200px","175px","155px","165px","200px","120px","90px","90px","100px"];
+
+// ── COP DATA ENTRY columns ──
+const COP_HEADERS = ["B_Sheet","C_Street","D_Microduct_Lines","E_Diameter","F_Date","G_EOP","H_Depth","I_Run_Length"];
+const COP_HEADER_LABELS = ["B: Sheet","C: Street","D: Microduct / Lines","E: Diameter","F: Date","G: EOP","H: Depth","I: Run Length"];
+const COP_FIELDS = ["bSheet","cStreet","dLines","eDiameter","fDate","gEop","hDepth","iRunLength"];
+const COP_COL_W = ["80px","140px","260px","90px","110px","70px","70px","100px"];
+
+// ── COP helper functions ──
+function inferBoreType(boreCallout) {
+  if (!boreCallout) return "";
+  if (/HAND\s*DIG/i.test(boreCallout)) return "(HAND DIG)";
+  if (/MISSILE/i.test(boreCallout)) return "(M-BORE (MISSILE))";
+  if (/BORE\s*&\s*PLACE/i.test(boreCallout) || /D-BORE/i.test(boreCallout)) return "(D-BORE (DIRECTIONAL))";
+  return "";
+}
+function extractRunLength(boreCallout) {
+  if (!boreCallout) return "";
+  const m = boreCallout.match(/TCB\w*\((\d+)'\)/i);
+  if (m) return m[1];
+  const m2 = boreCallout.match(/(?:BORE|MISSILE|HAND\s*DIG)\s*(?:&\s*PLACE)?\s*\((\d+)'\)/i);
+  if (m2) return m2[1];
+  return "";
+}
+function extractDiameter(lineType) {
+  if (!lineType) return "";
+  const lines = lineType.split("\n").map(l => l.trim()).filter(Boolean);
+  let maxDia = 0;
+  const hasConduit = lines.some(l => /CONDUITS?/i.test(l));
+  for (const l of lines) {
+    for (const [pat, dia] of Object.entries(DIAMETER_MAP)) {
+      if (l.includes(pat)) maxDia = Math.max(maxDia, dia);
+    }
+    const cm = l.match(/(\d+(?:\.\d+)?)["\u201D]\s*CONDUITS?/i);
+    if (cm) maxDia = Math.max(maxDia, parseFloat(cm[1]));
+  }
+  if (hasConduit && maxDia === 0) {
+    const cm2 = lineType.match(/(\d+(?:\.\d+)?)["\u201D]/);
+    if (cm2) maxDia = parseFloat(cm2[1]);
+  }
+  return maxDia > 0 ? maxDia.toString() : "";
+}
+function buildCopRows(sheets) {
+  const copRows = [];
+  for (const sheet of sheets) {
+    for (const row of sheet.rows) {
+      const bc = row.boreCallout || "";
+      const bt = row.blockType || "";
+      const hasBore = /BORE|HAND\s*DIG|MISSILE/i.test(bc) || /BORE|HAND\s*DIG|MISSILE/i.test(bt);
+      if (!hasBore && !bc.trim()) continue;
+      const lineTypeVal = row.lineType || "";
+      const boreType = inferBoreType(bc) || inferBoreType(bt);
+      const linesList = lineTypeVal.split("\n").map(l => l.trim()).filter(Boolean);
+      const dLines = boreType ? [...linesList, boreType].join("\n") : linesList.join("\n");
+      copRows.push({
+        bSheet: sheet.name.replace(/^Sheet\s*/i, ""),
+        cStreet: "",
+        dLines,
+        eDiameter: extractDiameter(lineTypeVal),
+        fDate: row.date || "",
+        gEop: row.eop || "",
+        hDepth: row.depth || "",
+        iRunLength: extractRunLength(bc),
+        _srcSheet: sheet.name,
+        _srcItem: row.item || "",
+      });
+    }
+  }
+  return copRows;
+}
+
+// ── OCR normalisation ──
+function normalizeContent(line) {
+  let s = line
+    .replace(/\bHFX\b/gi,"HEX").replace(/\bRTA-/gi,"RT4-").replace(/\bRTI-HEX\b/gi,"RT1-HEX")
+    .replace(/\bRTZ-HEX\b/gi,"RT2-HEX").replace(/\bRTS-HEX\b/gi,"RT5-HEX")
+    .replace(/HEX-1Z\b/gi,"HEX-12-WAY").replace(/HEX-Z4\b/gi,"HEX-24").replace(/HEX-Z\b/gi,"HEX-2-WAY")
+    .replace(/(RT\d+-HEX-(?:24|12|2|1))\s+WAY/gi,"$1-WAY").replace(/(RT\d+-HEX-(?:24|12|2|1))WAY/gi,"$1-WAY")
+    .replace(/\bR(\d+-HEX-(?:24|12|2|1)-WAY)\b/gi,"RT$1")
+    .replace(/\bVPD8\b/gi,"PDB").replace(/\bPD8\b/gi,"PDB")
+    .replace(/\bLAT\s+(\d+)\s+(\d+)\s*,?\s*LONG\s+(-?\d+)\s+(\d+)/gi,
+      (_,latInt,latDec,lngInt,lngDec)=>`LAT:${latInt}.${latDec}, LONG:${lngInt}.${lngDec}`);
+  s = s.replace(
+    /(?:LAT\s*[:/]?\s*)?(-?\d{1,3}\.\d{4,})\s*[,/]\s*(?:LONG\s*[:/]?\s*)?(-?\d{1,3}\.\d{4,})/gi,
+    (_, lat, lng) => `LAT:${lat}, LONG:${lng}`
+  );
+  return s;
+}
+
+// ── Business logic ──
+function getLineDiameter(line) {
+  const hm = line.match(/HEX-(24|12|2|1)-WAY/i);
+  if (hm) return DIAMETER_MAP[`${hm[1]}-WAY`] || 0;
+  const cm = line.match(/^(\d+)[x\-]([\d.]+)"\s*CONDUITS?/i);
+  if (cm) return parseInt(cm[1]) * parseFloat(cm[2]);
+  const sc = line.match(/^([\d.]+)"\s*CONDUITS?/i);
+  if (sc) return parseFloat(sc[1]);
+  return 0;
+}
+function getLineTypeCode(lineTypes, boreCallout) {
+  if (!lineTypes) return "";
+  const lines = lineTypes.split("\n");
+  const total = lines.reduce((s,l) => s + getLineDiameter(l), 0);
+  const hasConduit = lines.some(l => /CONDUITS?/i.test(l));
+  const isBore = /BORE\s*&\s*PLACE/i.test(boreCallout);
+  const isMissile = /MISSILE/i.test(boreCallout);
+  const isHand = /HAND DIG/i.test(boreCallout);
+  const codes = [];
+  if (isHand) codes.push("TCBHD5");
+  else if (isMissile) codes.push(total <= 4 ? "TCBMB1" : "TCBMB2");
+  else if (isBore) codes.push(total <= 4 ? "TCBDB2" : total <= 7 ? "TCBDB4" : "TCBDB5");
+  if (hasConduit) codes.push("TCMB7");
+  return codes.join(", ");
+}
+function normConduit(s) {
+  s = s.replace(/^R(\d+-HEX-)/i, "RT$1");
+  return s
+    .replace(/^(\d+)[\-x]([\d.]+)"\s*CONDUITS?$/i, (_, a, b) => {
+      const bN = parseFloat(b);
+      return a === "1" ? `${bN}" CONDUIT` : `${a}-${bN}" CONDUIT`;
+    })
+    .replace(/^([\d.]+)"\s*CONDUITS?$/i, (_, n) => `${parseFloat(n)}" CONDUIT`);
+}
+function fmtLen(s) {
+  if (!s) return "";
+  const num = s.replace(/[()'']/g, "").trim();
+  return `(${num}')`;
+}
+
+function processRow(r) {
+  const all = r.content.join(" ");
+  const hasDAP       = r.content.some(l => /\bDAP\w*/i.test(l.trim()));
+  const hasMarkerCap = /MARKER\s*\/\s*CAP|LOCATOR\s+MARKER/i.test(all);
+  const hasToby      = /\bTOBY BOX\b|\bTB\b/i.test(all);
+  const hasFDH       = /\bFDH\b/i.test(all);
+  const hasHH        = /\bHH\b/i.test(all);
+  const hasReamer    = /\bREAMER\b/i.test(all);
+  const hasBore    = /\bPDB\b|\bBORE\b|\bD-BORE\b/i.test(all) || (hasReamer && !/\bHAND\b|\bMISSILE\b|\bMB\b/i.test(all));
+  const hasHand    = /\bHAND\b/i.test(all);
+  const hasMissile = /\bMISSILE\b|\bM-BORE\b|\bMB\b/i.test(all);
+  const has4x4     = /4'?\s*[xX]\s*4'?/.test(all);
+  const hasEquipment = hasDAP || hasMarkerCap || hasToby || hasFDH || hasHH;
+  const hasBorePit = /\bBORE\s*PIT\b|\bBOREPIT\b|\bPIT\b/i.test(all);
+
+  const callouts = [];
+  if (hasDAP && hasToby) {
+    callouts.push("TB/DAP", "TCM8(1), TMBT(1)");
+  } else {
+    if (hasDAP && hasMarkerCap) callouts.push("MC/DAP, TCM8(1)");
+    else if (hasDAP)            callouts.push("DAP, TCM8(1)");
+    else if (hasMarkerCap)      callouts.push("MC");
+    if (hasToby) callouts.push("TOBY BOX, TMBT(1)");
+  }
+  if (hasFDH) callouts.push("FDH, TCMU4A (1)");
+  if (hasHH)  callouts.push("HH, TCMB3C (1)");
+  if (hasFDH || hasHH) callouts.push("TCMB10(3'), TCMB11(1)");
+
+  const latLong    = all.match(LAT_LONG_RE);
+  const coordLine  = r.content.find(l => COORD_REGEX.test(l.trim()));
+  const degreeLine = r.content.find(l => DEGREE_REGEX.test(l.trim()));
+  const degreeMatch = degreeLine?.match(DEGREE_REGEX);
+  const skipCoords = (has4x4 && !hasEquipment) || (hasBorePit && !hasEquipment);
+  const coordinates = skipCoords ? ""
+    : latLong    ? `${latLong[1]}, ${latLong[2]}`
+    : degreeMatch ? `${degreeMatch[1]}, ${degreeMatch[2]}`
+    : coordLine  ? coordLine.trim() : "";
+
+  const lenM  = all.match(/(\(\d+'\))/) || all.match(/\b(\d+)'(?!\))/)
+              || all.match(/(\(\d+\))/) || all.match(/\bPDB\s+(\d+)\b/i);
+  const rawLen = lenM ? lenM[1] : null;
+  const lenSfx = rawLen ? ` ${fmtLen(rawLen)}` : "";
+
+  const seeSheetMatch = all.match(/\bSEE\s+SHEET\s+(\d+)\b/i);
+
+  let boreCallout;
+  if (seeSheetMatch) {
+    boreCallout = `SEE SHEET ${seeSheetMatch[1]}`;
+  } else {
+    const boreParts = [];
+    if (hasBore)    boreParts.push(`BORE & PLACE${lenSfx}`);
+    if (hasHand)    boreParts.push(`HAND DIG${lenSfx}`);
+    if (hasMissile) boreParts.push(`MISSILE & PLACE${lenSfx}`);
+    boreCallout = boreParts.join(", ");
+  }
+
+  const lineTypes = seeSheetMatch ? "" : r.content
+    .flatMap(l => [...l.matchAll(CABLE_RE)].map(m =>
+      normConduit(m[0].toUpperCase().replace(/CONDUITS\b/g, "CONDUIT"))
+    ))
+    .join("\n");
+
+  const lineTypeList   = lineTypes ? lineTypes.split("\n").map(l => l.trim()).filter(Boolean) : [];
+  const bt = [];
+  if (hasDAP && hasMarkerCap) bt.push("MARKER/CAP, DAP");
+  else if (hasDAP)            bt.push("DAP");
+  else if (hasMarkerCap)      bt.push("MARKER/CAP");
+  if (hasToby) bt.push("TOBY BOX");
+  if (hasHH)   bt.push("HH");
+  if (hasFDH)  bt.push("FDH");
+  if (hasBore)    bt.push("BORE & PLACE");
+  if (hasHand)    bt.push("HAND DIG & PLACE");
+  if (hasMissile) bt.push("MISSILE & PLACE");
+
+  const finalBoreCallout = seeSheetMatch ? `SEE SHEET ${seeSheetMatch[1]}`
+    : boreCallout;
+
+  return {
+    item:             r.item,
+    blockType:        bt.join(", "),
+    content:          r.content.join("\n"),
+    equipmentCallout: callouts.join("\n"),
+    coordinates,
+    boreCallout:      finalBoreCallout,
+    lineType:         lineTypes,
+    lineTypeCode:     seeSheetMatch ? "" : getLineTypeCode(lineTypes, finalBoreCallout),
+    eop:              "",
+    depth:            seeSheetMatch ? "" : finalBoreCallout ? "3'" : "",
+    date:             "",
+  };
+}
+
+function applyCoordRules(rows) {
+  const isFDH = r => /\bFDH\b/i.test(r.blockType);
+  const isHHonly = r => /\bHH\b/i.test(r.blockType) && !isFDH(r);
+  const fdhCoords = new Set(rows.filter(r => isFDH(r) && r.coordinates.trim()).map(r => r.coordinates.trim()));
+  for (const row of rows) {
+    if (isHHonly(row) && row.coordinates.trim() && fdhCoords.has(row.coordinates.trim())) {
+      row.equipmentCallout = ""; row.coordinates = "";
+    }
+  }
+  const isToby = r => /\bTOBY BOX\b/i.test(r.blockType);
+  const isDAPonly = r => /\bDAP\b|\bMARKER\/CAP\b/i.test(r.blockType) && !isToby(r);
+  const tobyByCoord = new Map();
+  for (const row of rows) { if (isToby(row) && row.coordinates.trim()) tobyByCoord.set(row.coordinates.trim(), row); }
+  for (const row of rows) {
+    if (!isDAPonly(row) || !row.coordinates.trim()) continue;
+    const tobyRow = tobyByCoord.get(row.coordinates.trim());
+    if (!tobyRow) continue;
+    tobyRow.blockType = "TOBY BOX, DAP";
+    tobyRow.equipmentCallout = "TB/DAP\nTCM8(1), TMBT(1)";
+    row.equipmentCallout = ""; row.coordinates = "";
+  }
+}
+
+// ── Merge detection & splitting ──
+const BORE_ACTION_RE  = /^(BORE\s*&\s*PLACE|HAND\s*DIG\s*&?\s*(?:PLACE)?|MISSILE\s*&?\s*(?:PLACE)?|PDB\b|D-BORE\b|M-BORE\b)/i;
+const EQUIP_SIGNAL_RE = /\b(DAP[-\d]*\s*-?\s*WAY|DAP\b|TOBY\s*BOX|FDH\b|HH\b|MARKER\s*\/\s*CAP|LOCATOR\s+MARKER)\b/i;
+const DIG_PIT_RE      = /^DIG\s+4'?\s*[xX]\s*4'?\s*PIT/i;
+
+function splitMergedRow(item, content) {
+  let equipStart = -1, boreStart = -1;
+  for (let j = 0; j < content.length; j++) {
+    const l = content[j].trim();
+    if (boreStart === -1 && BORE_ACTION_RE.test(l)) boreStart = j;
+    if (equipStart === -1 && EQUIP_SIGNAL_RE.test(l)) equipStart = j;
+  }
+  let splitAt = -1;
+  if (equipStart !== -1 && boreStart !== -1) {
+    splitAt = boreStart < equipStart ? equipStart : boreStart;
+  }
+  if (splitAt === -1) {
+    for (let j = 1; j < content.length; j++) {
+      if (DIG_PIT_RE.test(content[j].trim())) { splitAt = j; break; }
+    }
+  }
+  if (splitAt <= 0) return [{ item, content }];
+  const part1 = content.slice(0, splitAt);
+  const part2 = content.slice(splitAt);
+  if (!part1.length || !part2.length) return [{ item, content }];
+  return [
+    { item, content: part1 },
+    { item, content: part2, _splitFrom: item },
+  ];
+}
+
+function parseImageText(text) {
+  const JUNK_LINE_RE = /^\*\*|^#{1,3}\s|^-{3,}$|sub-column|^left\s|^middle\s|^right\s|^column\s/i;
+  const lines = text.split("\n").map(l => l.trim()).filter(l => l && !JUNK_LINE_RE.test(l));
+  const rows = []; let i = 0;
+  while (i < lines.length) {
+    const m = lines[i].match(/^[（(]?(\d+)[)）]\s*(.*)/);
+    if (m) {
+      const item = parseInt(m[1]);
+      const content = m[2].trim() ? [m[2].trim()] : [];
+      i++;
+      while (i < lines.length && !lines[i].match(/^[（(]?\d+[)）]/)) {
+        const cl = lines[i];
+        if (!/^[,\s]*[\(\（]\d+[\)\）]/.test(cl)) content.push(cl);
+        i++;
+      }
+      if (content.length) {
+        const split = splitMergedRow(item, content);
+        rows.push(...split);
+      }
+    } else i++;
+  }
+  const seen = new Map();
+  for (const r of rows) seen.set(r.item, (seen.get(r.item)||0)+1);
+  const dupes = [...seen.entries()].filter(([,c]) => c>1).map(([n]) => `(${n})`);
+  const dupWarning = dupes.length ? `⚠️ Duplicate item number${dupes.length>1?"s":""} detected: ${dupes.join(", ")}` : "";
+  const processed = rows.sort((a,b) => a.item-b.item).map(r => { r.content = r.content.map(normalizeContent); return r; }).map(processRow);
+  applyCoordRules(processed);
+  return { rows: processed, dupWarning };
+}
+
+// ── Text layer cleaning ──
+const NOISE_LINE_RE = [
+  /ROUTE\s*[:.]?\s*\d/i,
+  /DUCT\s*[:.]?\s*\d/i,
+  /COLOR\s*[:.]?\s*[A-Z]/i,
+  /^\s*(BOC|C\/L|R\/W|PL|E\/P|BORE|TRENCH)\s*$/i,
+  /^\s*\d+'\s*$/,
+  /^\s*[\d.]+'\s+[\d.]+'\s*$/,
+  /^D-BORE\s+(UP\s+TO\s+[\d."]+\s+DIA|[\d.]+"-[\d."]+\s+DIA)/i,
+  /^HAND\s+DIG\s+\d+"-\d+"\s+COVER/i,
+  /^HEX-(1|2|12|24)-WAY\s+\d+['"']?/i,
+  /^MARKER\s+BALL\s+\d+/i,
+  /^\d+\s+STINGRAY\s+\d+['"']?/i,
+  /^FIBER\s+\d+F\s+\d+/i,
+  /^LOCATOR\s+MARKER\/CAP\s+\d+/i,
+  /^SPLICE\s+DAP\s+\d+/i,
+  /^SEE\s+PROFILE[-\s]\d+\s+ON\s+SHEET/i,
+  /^MATCH\s+TO\s+SHEET\s+\d+/i,
+  /^\s*\d{4,6}\s+\d{2,3}\s+\d{2,3}\s*$/,
+];
+function cleanTextLayer(rawText) {
+  if (!rawText) return "";
+  return rawText.split("\n").filter(line => {
+    const t = line.trim();
+    if (!t) return false;
+    if (NOISE_LINE_RE.some(re => re.test(t))) return false;
+    return true;
+  }).join("\n");
+}
+
+// ── PDF skip filter ──
+const SKIP_TITLE_PATTERNS = [
+  /bore\s*profiles?/i,
+  /bore\s*profile\s*\d/i,
+  /looking\s*(east|west|north|south)/i,
+  /minimum\s*standards?\s*for\s*boring/i,
+  /hexatronic\s*methods?\s*\(/i,
+  /hexatronic\s*pre.?configured\s*underground\s*fdh/i,
+  /typical\s*handhole\s*details?/i,
+  /toby\s*box\s*details?/i,
+  /typical\s*bore\s*details?/i,
+  /typical\s*fdh\s*(pedestal\s*)?details?/i,
+  /typical\s*fdh\s*pedestal\s*dimension/i,
+  /bill\s*of\s*materials?/i,
+  /splice\s*details?\s*#/i,
+  /general\s*abbreviations?\s*&\s*legends?/i,
+  /^legends?\s*$/im,
+  /construction\s*notes\b/i,
+  /plan\s*sheet\s*disclaimer/i,
+  /utility\s*right.?of.?way\s*permit/i,
+  /conditions\s*for\s*record/i,
+];
+
+function shouldSkipPage(pageIndex, pageText) {
+  if (!pageText) return false;
+  const head = pageText.slice(0, 800);
+  if (SKIP_TITLE_PATTERNS.some(re => re.test(head))) return true;
+  // Skip cover sheet: contains DRAWING INDEX and VICINITY MAP but no bore data
+  if (/DRAWING\s*INDEX/i.test(head) && /VICINITY\s*MAP/i.test(head)) return true;
+  return false;
+}
+
+// ── Position-aware callout BOX extraction (NO API) ──
+// Construction drawing callout boxes are ROTATED — in the PDF text layer:
+//   - Y coordinate = horizontal position on the page (which column the box is in)
+//   - X coordinate = vertical reading order WITHIN a box (highest X = first line = date)
+// All lines in a single callout box share the SAME Y (within ~5px).
+// Lines read from highest X to lowest X: Date → Activity → Microducts → Code → EOP → Depth
+
+const BOX_DATE_RE    = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
+const BOX_BORE_RE    = /^(BORE\s*&\s*PLACE|HAND\s*DIG|D-BORE|M-BORE|MISSILE\s*&?\s*(?:PLACE)?)\s*(\(\d+'?\))?/i;
+const BOX_CODE_RE    = /^TCB(DB|DH|HD|MB|D?B)\d+/i;
+const BOX_EOP_RE     = /^EOP:\s*\d+/i;
+const BOX_DEPTH_RE   = /^DEPTH:\s*\d+/i;
+const BOX_DUCT_RE    = /R?T?\d+-HEX-\d+-WAY/i;
+const BOX_EQUIP_RE   = /^(MC\/DAP|DAP-[A-Z]-?\d+)/i;
+const BOX_COORD_RE   = /^-?\d{1,3}\.\d{4,},\s*-?\d{1,3}\.\d{4,}$/;
+const BOX_ADDED_RE   = /^Added\s+in\s+Callout/i;
+const BOX_CONDUIT_RE = /\d[\d.]*["″]?\s*CONDUIT/i;
+const BOX_TCMB_RE    = /^TCM[B78]\d*\(/i;
+
+// Detect if a text item is valid callout box content (not noise)
+function isCalloutContent(text) {
+  const t = text.trim();
+  if (!t || t.length > 40) return false;
+  return BOX_DATE_RE.test(t) || BOX_BORE_RE.test(t) || BOX_CODE_RE.test(t) ||
+         BOX_EOP_RE.test(t) || BOX_DEPTH_RE.test(t) || BOX_DUCT_RE.test(t) ||
+         BOX_EQUIP_RE.test(t) || BOX_COORD_RE.test(t) || BOX_ADDED_RE.test(t);
+}
+
+function extractCalloutBoxesFromPage(textItems) {
+  // textItems = [{str, x, y}, ...] from pdf.js getTextContent
+  // x = transform[4], y = transform[5] in pdf.js coordinate space
+  // In rotated CDs: Y = page column, X = reading order within box
+
+  // Step 1: Group all items by Y position (within 5px bucket = same callout box column)
+  const Y_BUCKET = 5;
+  const yGroups = new Map();
+  for (const item of textItems) {
+    const bucket = Math.round(item.y / Y_BUCKET) * Y_BUCKET;
+    if (!yGroups.has(bucket)) yGroups.set(bucket, []);
+    yGroups.get(bucket).push(item);
+  }
+
+  // Step 2: For each Y-group, check if it contains callout box keywords
+  const MUST_HAVE = /TCBDB|TCBHD|TCBMB|DEPTH:/i;
+  const boxes = [];
+
+  for (const [yBucket, items] of yGroups) {
+    const combined = items.map(it => it.str).join(" ");
+    if (!MUST_HAVE.test(combined)) continue;
+
+    // Filter to only callout content items (remove noise like "R/W", "BOC", "PL", route numbers)
+    const calloutItems = items.filter(it => isCalloutContent(it.str));
+    if (calloutItems.length < 2) continue;
+
+    // Sort by X descending = read from top of box (date) to bottom (depth)
+    calloutItems.sort((a, b) => b.x - a.x);
+
+    // Parse the box lines
+    const lines = calloutItems.map(it => it.str.trim());
+    let date = "", activity = "", ducts = [], code = "", eop = "", depth = "", equip = "", coords = "";
+
+    for (const line of lines) {
+      if (BOX_DATE_RE.test(line) && !date) { date = line; continue; }
+      if (BOX_BORE_RE.test(line) && !activity) { activity = line; continue; }
+      if (BOX_CODE_RE.test(line) && !code) { code = line; continue; }
+      if (BOX_EOP_RE.test(line)) { eop = line.replace(/^EOP:\s*/i, "").replace(/'/g,"").trim(); continue; }
+      if (BOX_DEPTH_RE.test(line)) { depth = line.replace(/^DEPTH:\s*/i, "").trim(); continue; }
+      if (BOX_DUCT_RE.test(line)) { ducts.push(line); continue; }
+      if (BOX_EQUIP_RE.test(line)) { equip = line; continue; }
+      if (BOX_COORD_RE.test(line)) { coords = line; continue; }
+    }
+
+    // Must have at least an activity (BORE or HAND DIG) to be a real callout box
+    if (!activity) continue;
+
+    boxes.push({ date, activity, ducts, code, eop, depth, equip, coords,
+      _y: yBucket, _lineCount: calloutItems.length });
+  }
+
+  // Sort by Y descending (right-to-left on the drawing, but really just consistent ordering)
+  boxes.sort((a, b) => b._y - a._y);
+  return boxes;
+}
+
+// Convert parsed callout boxes to full table rows (11-column format)
+function calloutBoxesToRows(boxes) {
+  return boxes.map((box, idx) => {
+    const isMissile = /MISSILE|M-BORE/i.test(box.activity);
+    const isBore = !isMissile && /BORE\s*&\s*PLACE|D-BORE/i.test(box.activity);
+    const isHand = /HAND\s*DIG/i.test(box.activity);
+    // Get run length from activity or from code (e.g. TCBDB2(170'))
+    const lenMatch = box.activity.match(/\((\d+)'?\)/) || (box.runLength ? [null, box.runLength] : null);
+    const lenSfx = lenMatch ? ` (${lenMatch[1]}')` : "";
+    const boreCallout = isBore ? `BORE & PLACE${lenSfx}` : isMissile ? `MISSILE & PLACE${lenSfx}` : isHand ? `HAND DIG${lenSfx}` : box.activity;
+    const lineTypes = box.ducts.join("\n");
+
+    // Use extracted code or derive it
+    let ltCode = box.code || "";
+    // Clean code: strip run length suffix like TCBDB2(170') -> TCBDB2
+    ltCode = ltCode.replace(/\(.*$/, "").replace(/\s*,.*$/, "").trim();
+    if (!ltCode) {
+      const total = box.ducts.reduce((s, d) => {
+        const hm = d.match(/HEX-(24|12|2|1)-WAY/i);
+        return s + (hm ? (DIAMETER_MAP[`${hm[1]}-WAY`] || 0) : 0);
+      }, 0);
+      if (isHand) ltCode = "TCBHD5";
+      else if (isMissile) ltCode = total <= 4 ? "TCBMB1" : "TCBMB2";
+      else if (isBore) ltCode = total <= 4 ? "TCBDB2" : total <= 7 ? "TCBDB4" : "TCBDB8";
+    }
+
+    const bt = [];
+    if (box.equip && /MC\/DAP/i.test(box.equip)) bt.push("MARKER/CAP, DAP");
+    else if (box.equip && /DAP/i.test(box.equip)) bt.push("DAP");
+    if (isBore) bt.push("BORE & PLACE");
+    if (isMissile) bt.push("MISSILE & PLACE");
+    if (isHand) bt.push("HAND DIG & PLACE");
+
+    return {
+      item: String(idx + 1),
+      blockType: bt.join(", ") || (isBore ? "BORE & PLACE" : isMissile ? "MISSILE & PLACE" : isHand ? "HAND DIG & PLACE" : ""),
+      content: [box.date, box.activity, ...box.ducts, box.code, box.eop ? `EOP: ${box.eop}` : "", box.depth ? `DEPTH: ${box.depth}` : ""].filter(Boolean).join("\n"),
+      equipmentCallout: box.equip || "",
+      coordinates: box.coords || "",
+      boreCallout,
+      lineType: lineTypes,
+      lineTypeCode: ltCode,
+      eop: box.eop || "",
+      depth: box.depth || "",
+      date: box.date || "",
+    };
+  });
+}
+
+// ── Sort helpers ──
+function sortKeyForItem(item) {
+  const nums = String(item).match(/\d+(\.\d+)?/g);
+  if (!nums) return 0;
+  return Math.min(...nums.map(Number));
+}
+function sortRowsByItem(rows) {
+  return [...rows].sort((a, b) => sortKeyForItem(a.item) - sortKeyForItem(b.item));
+}
+
+// ── PDF text extraction via pdf.js ──
+async function loadPdfJs() {
+  if (window.pdfjsLib) return;
+  await new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+async function extractTextFromPage(page) {
+  try {
+    const tc = await page.getTextContent();
+    const items = tc.items.filter(it => it.str.trim());
+
+    // Build readable text for skip detection
+    const LINE_SNAP = 4;
+    items.sort((a, b) => {
+      const dy = b.transform[5] - a.transform[5];
+      if (Math.abs(dy) > LINE_SNAP) return dy;
+      return a.transform[4] - b.transform[4];
+    });
+    const rows = [];
+    let curRow = null, curY = null;
+    for (const it of items) {
+      const y = it.transform[5];
+      if (curY === null || Math.abs(y - curY) > LINE_SNAP) {
+        curRow = []; rows.push({ y, items: curRow }); curY = y;
+      }
+      curRow.push(it);
+    }
+    const text = rows.map(r => r.items.map(it => it.str).join(" ")).join("\n");
+    return text;
+  } catch {
+    return "";
+  }
+}
+
+// ── Extract callout boxes from PDF ANNOTATIONS (FreeText) ──
+// Callout box data in redlined construction drawings lives in FreeText annotations,
+// NOT in the regular page text content stream. pdf.js getTextContent() cannot see them,
+// but getAnnotations() can.
+async function extractCalloutBoxesFromAnnotations(page) {
+  try {
+    const annots = await page.getAnnotations();
+    if (!annots || annots.length === 0) return [];
+
+    const freeText = annots.filter(a => a.subtype === "FreeText");
+    if (freeText.length === 0) return [];
+
+    const BORE_RE = /BORE\s*&\s*PLACE|HAND\s*DIG|D-BORE|M-BORE|MISSILE/i;
+    const CODE_RE = /TCB(DB|DH|HD|MB|D?B)\d+/i;
+
+    const boxes = [];
+    for (const a of freeText) {
+      const raw = (a.contentsObj?.str || a.contents || "").trim();
+      if (!raw) continue;
+
+      const lines = raw.split(/\r|\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) continue;
+
+      // Must contain a bore/hand dig activity AND a TCB code to be a callout box
+      // Skip summary annotations (TOTALS, FCU, etc.)
+      if (/TOTALS\s*UG|FIBER\s*CORE\s*UNIT|^BORE\s*&\s*PLACE:\s*$/im.test(raw)) continue;
+      if (!BORE_RE.test(raw) || !CODE_RE.test(raw)) continue;
+
+      // Parse the lines
+      let date = "", activity = "", ducts = [], code = "", eop = "", depth = "", equip = "", coords = "";
+      for (const line of lines) {
+        if (BOX_DATE_RE.test(line) && !date) { date = line; continue; }
+        if (BOX_BORE_RE.test(line) && !activity) { activity = line; continue; }
+        if (BOX_CODE_RE.test(line) && !code) { code = line; continue; }
+        if (BOX_TCMB_RE && BOX_TCMB_RE.test(line) && !code) { code = line; continue; }
+        if (BOX_EOP_RE.test(line)) { eop = line.replace(/^EOP:\s*/i, "").replace(/'/g,"").trim(); continue; }
+        if (BOX_DEPTH_RE.test(line)) { depth = line.replace(/^DEPTH:\s*/i, "").trim(); continue; }
+        if (BOX_DUCT_RE.test(line)) { ducts.push(line); continue; }
+        if (BOX_CONDUIT_RE && BOX_CONDUIT_RE.test(line)) { ducts.push(line); continue; }
+        if (BOX_EQUIP_RE.test(line)) { equip = line; continue; }
+        if (BOX_COORD_RE.test(line)) { coords = line; continue; }
+      }
+
+      // If no activity parsed but raw contains D-BORE / HAND DIG, use the raw match
+      if (!activity) {
+        const bm = raw.match(/D-BORE|M-BORE|MISSILE|BORE\s*&\s*PLACE|HAND\s*DIG/i);
+        if (bm) activity = bm[0];
+      }
+      if (!activity) continue;
+
+      // Extract run length from code if embedded, e.g. TCBDB2(170')
+      let runLength = "";
+      const rlMatch = (code || "").match(/\((\d+)'?\)/);
+      if (rlMatch) runLength = rlMatch[1];
+      // Also check activity line for run length
+      if (!runLength) {
+        const rlMatch2 = (activity || "").match(/\((\d+)'?\)/);
+        if (rlMatch2) runLength = rlMatch2[1];
+      }
+
+      boxes.push({ date, activity, ducts, code, eop, depth, equip, coords, runLength,
+        _rect: a.rect, _lineCount: lines.length });
+    }
+
+    return boxes;
+  } catch (e) {
+    console.warn("Annotation extraction error:", e);
+    return [];
+  }
+}
+
+async function splitPdfToPages(file) {
+  await loadPdfJs();
+  const ab = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: ab }).promise;
+  const pages = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const pageText = await extractTextFromPage(page);
+    const preSkipped = shouldSkipPage(i - 1, pageText);
+
+    // Render thumbnail
+    const vp = page.getViewport({ scale: 0.3 });
+    const canvas = document.createElement("canvas");
+    canvas.width = vp.width; canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+    const thumbnail = canvas.toDataURL("image/jpeg", 0.6);
+
+    // Extract callout boxes from ANNOTATIONS (not text content)
+    const calloutBoxes = preSkipped ? [] : await extractCalloutBoxesFromAnnotations(page);
+    const hasCallouts = calloutBoxes.length > 0;
+
+    pages.push({
+      pageIndex: i - 1,
+      pageText,
+      preSkipped,
+      thumbnail,
+      hasCallouts,
+      calloutBoxes,
+    });
+  }
+  return pages;
+}
+
+// ── XLSX / ZIP helpers ──
+const escXml = v => String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\n/g,"&#10;");
+const _enc = s => new TextEncoder().encode(s);
+const _u16 = n => { const b=new Uint8Array(2); new DataView(b.buffer).setUint16(0,n,true); return b; };
+const _u32 = n => { const b=new Uint8Array(4); new DataView(b.buffer).setUint32(0,n,true); return b; };
+const _cat = (...a) => { const o=new Uint8Array(a.reduce((s,x)=>s+x.length,0)); let p=0; for(const x of a){o.set(x,p);p+=x.length;} return o; };
+const _CRC = (() => { const t=new Uint32Array(256); for(let i=0;i<256;i++){let n=i; for(let j=0;j<8;j++) n=n&1?(0xEDB88320^(n>>>1)):(n>>>1); t[i]=n;} return t; })();
+const _crc32 = buf => { let c=0xFFFFFFFF; for(let i=0;i<buf.length;i++) c=_CRC[(c^buf[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; };
+function packZip(files, mime="application/zip") {
+  const LFH=new Uint8Array([0x50,0x4B,0x03,0x04]),CDH=new Uint8Array([0x50,0x4B,0x01,0x02]),EOCD=new Uint8Array([0x50,0x4B,0x05,0x06]);
+  const hdrs=[]; let off=0;
+  const ents = files.map(f => { const nb=_enc(f.name),crc=_crc32(f.data); const lh=_cat(LFH,_u16(20),_u16(0),_u16(0),_u16(0),_u16(0),_u32(crc),_u32(f.data.length),_u32(f.data.length),_u16(nb.length),_u16(0),nb,f.data); hdrs.push({nb,crc,size:f.data.length,off}); off+=lh.length; return lh; });
+  const cds = hdrs.map(h=>_cat(CDH,_u16(20),_u16(20),_u16(0),_u16(0),_u16(0),_u16(0),_u32(h.crc),_u32(h.size),_u32(h.size),_u16(h.nb.length),_u16(0),_u16(0),_u16(0),_u16(0),_u32(0),_u32(h.off),h.nb));
+  const cdSz=cds.reduce((s,e)=>s+e.length,0);
+  const eocd=_cat(EOCD,_u16(0),_u16(0),_u16(files.length),_u16(files.length),_u32(cdSz),_u32(off),_u16(0));
+  return new Blob([_cat(...ents,...cds,eocd)],{type:mime});
+}
+
+function buildCopSheetXml(copRows) {
+  const NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+  const colWidths = [10, 18, 36, 12, 14, 8, 8, 12];
+  const styles = `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="${NS}"><fonts><font><sz val="12"/><name val="Calibri"/></font><font><sz val="12"/><b/><name val="Calibri"/><color rgb="FFFFFFFF"/></font><font><sz val="12"/><b/><name val="Calibri"/></font></fonts><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E79"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEEF4FB"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill></fills><borders><border><left/><right/><top/><bottom/></border><border><left style="thin"><color rgb="FFD0DCE8"/></left><right style="thin"><color rgb="FFD0DCE8"/></right><top style="thin"><color rgb="FFD0DCE8"/></top><bottom style="thin"><color rgb="FFD0DCE8"/></bottom></border><border><left style="thin"><color rgb="FFD0DCE8"/></left><right style="thin"><color rgb="FFD0DCE8"/></right><top style="thin"><color rgb="FFD0DCE8"/></top><bottom style="medium"><color rgb="FF1F4E79"/></bottom></border></borders><cellStyleXfs><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="2" xfId="0"><alignment horizontal="center" wrapText="1" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="2" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf></cellXfs><cellStyles><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const cols = colWidths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+  const headerRow = COP_HEADERS;
+  const dataRows = copRows.map(r => COP_FIELDS.map(f => r[f]));
+  const allRows = [headerRow, ...dataRows];
+  const rowsXml = allRows.map((row, ri) => {
+    const isHeader = ri === 0;
+    const isEven = !isHeader && ri % 2 === 0;
+    const cells = row.map((cell, ci) => {
+      const v = String(cell ?? '');
+      const safe = escXml(v);
+      const col = String.fromCharCode(65 + ci);
+      const ref = `${col}${ri + 1}`;
+      let s;
+      if (isHeader) s = 1;
+      else if (ci === 0) s = isEven ? 5 : 4;
+      else s = isEven ? 3 : 2;
+      return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${safe}</t></is></c>`;
+    }).join('');
+    const ht = isHeader ? ' ht="22" customHeight="1"' : '';
+    return `<row r="${ri+1}"${ht}>${cells}</row>`;
+  }).join('');
+  const sheet = `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="${NS}"><sheetPr><tabColor rgb="FF4CAF50"/></sheetPr><sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${rowsXml}</sheetData></worksheet>`;
+  return { sheet, styles };
+}
+
+function buildCopXlsxBlob(copRows) {
+  const built = buildCopSheetXml(copRows);
+  const wbXml=`<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="COP DATA ENTRY" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+  const wbRels=`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const pkgRels=`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  const ct=`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`;
+  return packZip([{name:"[Content_Types].xml",data:_enc(ct)},{name:"_rels/.rels",data:_enc(pkgRels)},{name:"xl/workbook.xml",data:_enc(wbXml)},{name:"xl/_rels/workbook.xml.rels",data:_enc(wbRels)},{name:"xl/styles.xml",data:_enc(built.styles)},{name:"xl/worksheets/sheet1.xml",data:_enc(built.sheet)}], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+
+function buildSheetXml(rows) {
+  const NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+  const colWidths = [8, 18, 32, 28, 22, 24, 28, 16, 10, 10, 12];
+  const blockTypeStyle = (bt) => {
+    if (!bt) return 12;
+    if (/\bHH\b|\bFDH\b/i.test(bt)) return 8;
+    if (/\bDAP\b|\bTOBY\s*BOX\b/i.test(bt)) return 9;
+    if (/\bMISSILE\s*&\s*PLACE\b/i.test(bt)) return 13;
+    if (/\bBORE\s*&\s*PLACE\b/i.test(bt)) return 10;
+    if (/\bHAND\s*DIG\b/i.test(bt)) return 11;
+    return 12;
+  };
+  const styles = `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="${NS}"><fonts><font><sz val="12"/><name val="Calibri"/></font><font><sz val="12"/><b/><name val="Calibri"/><color rgb="FFFFFFFF"/></font><font><sz val="12"/><b/><name val="Calibri"/></font></fonts><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E79"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEEF4FB"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFBF0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFF8F0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFCCFFCC"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFCCF5FF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFCC"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD9CC"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8E8E8"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFE0A0"/></patternFill></fill></fills><borders><border><left/><right/><top/><bottom/></border><border><left style="thin"><color rgb="FFD0DCE8"/></left><right style="thin"><color rgb="FFD0DCE8"/></right><top style="thin"><color rgb="FFD0DCE8"/></top><bottom style="thin"><color rgb="FFD0DCE8"/></bottom></border><border><left style="thin"><color rgb="FFD0DCE8"/></left><right style="thin"><color rgb="FFD0DCE8"/></right><top style="thin"><color rgb="FFD0DCE8"/></top><bottom style="medium"><color rgb="FF1F4E79"/></bottom></border></borders><cellStyleXfs><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="2" xfId="0"><alignment horizontal="center" wrapText="1" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="2" fillId="4" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="0" fontId="2" fillId="7" borderId="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="8" borderId="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="9" borderId="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="10" borderId="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="11" borderId="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="12" borderId="1" xfId="0"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs><cellStyles><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const cols = colWidths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+  const dataRows = rows.map(r => FIELDS.map(f => r[f]));
+  const allRows = [HEADERS, ...dataRows];
+  const rowsXml = allRows.map((row, ri) => {
+    const isHeader = ri === 0;
+    const isEven = !isHeader && ri % 2 === 0;
+    const btVal = !isHeader ? String(rows[ri-1]?.blockType ?? '') : '';
+    const cells = row.map((cell, ci) => {
+      const v = String(cell ?? '');
+      const safe = escXml(v);
+      const col = String.fromCharCode(65 + ci);
+      const ref = `${col}${ri + 1}`;
+      let s;
+      if (isHeader) s = 1;
+      else if (ci === 0) s = isEven ? 5 : 4;
+      else if (ci === 1 || ci === 3 || ci === 5) s = blockTypeStyle(btVal);
+      else s = isEven ? 3 : 2;
+      return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${safe}</t></is></c>`;
+    }).join('');
+    const ht = isHeader ? ' ht="22" customHeight="1"' : '';
+    return `<row r="${ri+1}"${ht}>${cells}</row>`;
+  }).join('');
+  const sheet = `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="${NS}"><sheetPr><tabColor rgb="FF1F4E79"/></sheetPr><sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${rowsXml}</sheetData></worksheet>`;
+  return { sheet, styles };
+}
+
+function buildXlsxBlob(sheetDefs) {
+  const builtSheets = sheetDefs.map(s => buildSheetXml(s.rows));
+  const styles = builtSheets[0].styles;
+  const wbXml=`<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetDefs.map((s,i)=>`<sheet name="${escXml(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join("")}</sheets></workbook>`;
+  const wbRels=`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetDefs.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join("")}<Relationship Id="rId${sheetDefs.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const pkgRels=`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  const overrides=sheetDefs.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("");
+  const ct=`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${overrides}</Types>`;
+  return packZip([{name:"[Content_Types].xml",data:_enc(ct)},{name:"_rels/.rels",data:_enc(pkgRels)},{name:"xl/workbook.xml",data:_enc(wbXml)},{name:"xl/_rels/workbook.xml.rels",data:_enc(wbRels)},{name:"xl/styles.xml",data:_enc(styles)},...builtSheets.map((s,i)=>({name:`xl/worksheets/sheet${i+1}.xml`,data:_enc(s.sheet)}))], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+
+async function buildZip(fileName, blob) { return packZip([{ name:fileName, data:new Uint8Array(await blob.arrayBuffer()) }]); }
+function triggerDownload(url, filename, revoke=false) { const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a); if(revoke) URL.revokeObjectURL(url); }
+
+// ── Styling constants ──
+const C = { navy:"#1F4E79",navyDk:"#163d61",green:"#217346",blue:"#0078d4",red:"#c62828",purple:"#7B1FA2",orange:"#e65100",gray:"#999" };
+const btn = (bg,dis=false) => ({ background:dis?C.gray:bg,color:"white",border:"none",borderRadius:"6px",padding:"8px 14px",fontWeight:"bold",fontSize:"13px",cursor:dis?"not-allowed":"pointer",whiteSpace:"nowrap" });
+const overlay = { position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center" };
+const mbox = (w="580px") => ({ background:"white",borderRadius:"10px",width:w,maxWidth:"96vw",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 32px rgba(0,0,0,0.3)" });
+const mhdr = { background:C.navy,color:"white",padding:"14px 20px",borderRadius:"10px 10px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center" };
+const mftr = { padding:"12px 20px",borderTop:"1px solid #eee",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0 };
+
+function blockTypeBg(bt) {
+  if (!bt) return null;
+  if (/\bHH\b|\bFDH\b/i.test(bt)) return "#CCFFCC";
+  if (/\bDAP\b|\bTOBY\s*BOX\b|\bMARKER\/CAP\b/i.test(bt)) return "#CCF5FF";
+  if (/\bBORE\s*&\s*PLACE\b/i.test(bt) && !/\bMISSILE/i.test(bt)) return "#FFFFCC";
+  if (/\bMISSILE\s*&\s*PLACE\b/i.test(bt)) return "#FFE0A0";
+  if (/\bHAND\s*DIG\b/i.test(bt)) return "#FFD9CC";
+  return "#E8E8E8";
+}
+
+function CloseBtn({ onClick }) {
+  return <button onClick={onClick} style={{ background:"none",border:"none",color:"white",fontSize:"18px",cursor:"pointer" }}>✕</button>;
+}
+
+const ST_COLOR = { done:C.green, extracting:C.orange, error:C.red, queued:"#888", skipped:"#aaa" };
+const ST_LABEL = { done:"✅ Done", extracting:"⏳ Extracting…", error:"❌ Error", queued:"⬜ Queued", skipped:"⏭ Skipped" };
+
+// ══════════════════════════════════════════════════════════════════════════
+// ██ MAIN APP COMPONENT
+// ══════════════════════════════════════════════════════════════════════════
+function App() {
+  const [sheets, setSheets] = useState([]);
+  const [activeSheet, setActiveSheet] = useState(0);
+  const [siteName, setSiteName] = useState("");
+  const [pdfStaging, setPdfStaging] = useState(null);
+  const [selectedPages, setSelectedPages] = useState(new Set());
+  const [dropHover, setDropHover] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [exportedAll, setExportedAll] = useState(false);
+  const [selectedRows, setSelectedRows] = useState(new Set());
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [editingTab, setEditingTab] = useState(null);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [showCOP, setShowCOP] = useState(false);
+  const [copRows, setCopRows] = useState([]);
+  const [copExported, setCopExported] = useState(false);
+  const [previewPage, setPreviewPage] = useState(null);
+  const [rowDragIdx, setRowDragIdx] = useState(null);
+  const [rowDragOver, setRowDragOver] = useState(null);
+
+  const pdfFileRef = useRef(null);
+  const hasSheets = sheets.length > 0;
+  const curSheet = sheets[activeSheet] || null;
+
+  const toggleRow = useCallback(ri => {
+    setSelectedRows(prev => { const n = new Set(prev); if (n.has(ri)) n.delete(ri); else n.add(ri); return n; });
+  }, []);
+
+  useEffect(() => { if (activeSheet >= 0) setSelectedRows(new Set()); }, [activeSheet]);
+
+  const recomputeDup = rows => { const seen=new Map(); for(const r of rows) seen.set(r.item,(seen.get(r.item)||0)+1); const d=[...seen.entries()].filter(([,c])=>c>1).map(([n])=>`(${n})`); return d.length?`⚠️ Duplicate item number${d.length>1?"s":""} detected: ${d.join(", ")}`:""; };
+  const deleteRow = ri => setSheets(prev => prev.map((s,i) => { if(i!==activeSheet) return s; const rows=s.rows.filter((_,j)=>j!==ri); return {...s,rows,dupWarning:recomputeDup(rows)}; }));
+  const deleteSelectedRows = () => {
+    if (!selectedRows.size) return;
+    setSheets(prev => prev.map((s,i) => { if(i!==activeSheet) return s; const rows=s.rows.filter((_,j)=>!selectedRows.has(j)); return {...s,rows,dupWarning:recomputeDup(rows)}; }));
+    setSelectedRows(new Set());
+  };
+  const addRow = () => setSheets(prev => prev.map((s,i) => {
+    if (i !== activeSheet) return s;
+    const blank = { item:"",blockType:"",content:"",equipmentCallout:"",coordinates:"",boreCallout:"",lineType:"",lineTypeCode:"",eop:"",depth:"",date:"" };
+    return { ...s, rows: [...s.rows, blank], dupWarning: recomputeDup([...s.rows, blank]) };
+  }));
+
+  // Row drag-and-drop reorder
+  const onRowDragStart = (e, ri) => { setRowDragIdx(ri); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ri); };
+  const onRowDragOver = (e, ri) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setRowDragOver(ri); };
+  const onRowDragLeave = () => setRowDragOver(null);
+  const onRowDrop = (e, targetIdx) => {
+    e.preventDefault();
+    const fromIdx = rowDragIdx;
+    setRowDragIdx(null); setRowDragOver(null);
+    if (fromIdx === null || fromIdx === targetIdx) return;
+    setSheets(prev => prev.map((s, i) => {
+      if (i !== activeSheet) return s;
+      const rows = [...s.rows];
+      const [moved] = rows.splice(fromIdx, 1);
+      rows.splice(targetIdx, 0, moved);
+      // Renumber all item fields sequentially
+      const renumbered = rows.map((r, idx) => ({ ...r, item: String(idx + 1) }));
+      return { ...s, rows: renumbered, dupWarning: recomputeDup(renumbered) };
+    }));
+    setSelectedRows(new Set());
+  };
+  const onRowDragEnd = () => { setRowDragIdx(null); setRowDragOver(null); };
+
+  const updateCell = (ri, field, value) => setSheets(prev => prev.map((s, i) => {
+    if (i !== activeSheet) return s;
+    const rows = s.rows.map((r, j) => {
+      if (j !== ri) return r;
+      const updated = { ...r, [field]: value };
+      if (field === "content") {
+        const contentLines = value.split("\n").map(l => normalizeContent(l.trim())).filter(Boolean);
+        const reprocessed = processRow({ item: r.item, content: contentLines });
+        return { ...updated, content: contentLines.join("\n"), blockType: reprocessed.blockType, equipmentCallout: reprocessed.equipmentCallout, coordinates: reprocessed.coordinates, boreCallout: reprocessed.boreCallout, lineType: reprocessed.lineType, lineTypeCode: reprocessed.lineTypeCode, depth: reprocessed.depth };
+      }
+      return updated;
+    });
+    applyCoordRules(rows);
+    return { ...s, rows, dupWarning: recomputeDup(rows) };
+  }));
+
+  const onTabDragStart = i => setDragIdx(i);
+  const onTabDragOver = (e,i) => { e.preventDefault(); if(dragIdx===null||dragIdx===i) return; const r=[...sheets]; const [m]=r.splice(dragIdx,1); r.splice(i,0,m); setSheets(r); setActiveSheet(i); setDragIdx(i); };
+  const onTabDragEnd = () => setDragIdx(null);
+  const deleteSheet = idx => { setSheets(prev=>prev.filter((_,i)=>i!==idx)); setActiveSheet(prev=>Math.max(0,Math.min(prev,sheets.length-2))); };
+
+  const copyTable = () => { if(!curSheet) return; const rows=[HEADERS,...curSheet.rows.map(r=>FIELDS.map(f=>String(r[f]??"").replace(/\n/g," ")))]; const ta=Object.assign(document.createElement("textarea"),{value:rows.map(r=>r.join("\t")).join("\n"),style:"position:fixed;top:0;left:0;opacity:0;"}); document.body.appendChild(ta); ta.focus(); ta.select(); try{document.execCommand("copy");setCopied(true);setTimeout(()=>setCopied(false),2000);}catch{} document.body.removeChild(ta); };
+  const exportAll = async () => { if(!sheets.length) return; const site=siteName.trim().toUpperCase(); const base=`${site} - Proposed Callouts`; const xlsxBlob=buildXlsxBlob(sheets.map(s=>({name:s.name,rows:s.rows}))); const zipBlob=await buildZip(`${base}.xlsx`,xlsxBlob); triggerDownload(URL.createObjectURL(zipBlob),`${base}.zip`,true); setExportedAll(true); setTimeout(()=>setExportedAll(false),3000); };
+
+  // ── PDF handling ──
+  const handlePdfUpload = useCallback(async file => {
+    setPdfStaging({ file, pages: [], splitting: true, error: "" });
+    try {
+      const pages = await splitPdfToPages(file);
+      // Auto-detect site name from filename
+      const nameMatch = file.name.match(/(D-[A-Z]{3}\d{3})/i);
+      if (nameMatch && !siteName) setSiteName(nameMatch[1].toUpperCase());
+      setPdfStaging({ file, pages, splitting: false, processing: false, error: "", phase: "preview" });
+      setSelectedPages(new Set(pages.filter(p => !p.preSkipped && p.hasCallouts).map(p => p.pageIndex)));
+    } catch(err) {
+      setPdfStaging(prev => prev ? { ...prev, splitting: false, error: "Failed to read PDF: " + err.message } : prev);
+    }
+  }, [siteName]);
+
+  const startTextExtraction = () => {
+    if (!pdfStaging) return;
+    const pages = pdfStaging.pages;
+    const selected = pages.filter(p => selectedPages.has(p.pageIndex));
+    const withCallouts = selected.filter(p => p.hasCallouts && p.calloutBoxes.length > 0);
+
+    if (!withCallouts.length) {
+      setPdfStaging(prev => prev ? { ...prev, error: "No pages with callout boxes found in selected pages." } : prev);
+      return;
+    }
+
+    // Build named groups for sheet naming
+    const namedGroups = withCallouts.map(p => ({
+      pageIndex: p.pageIndex,
+      tabName: `Page ${p.pageIndex + 1}`,
+      userSheetName: `Sheet ${p.pageIndex + 1}`,
+      calloutBoxes: p.calloutBoxes,
+      boxCount: p.calloutBoxes.length,
+    }));
+
+    setPdfStaging(prev => prev ? { ...prev, phase: "naming", namedGroups } : prev);
+  };
+
+  const confirmPdfNaming = () => {
+    if (!pdfStaging?.namedGroups) return;
+    const namedGroups = pdfStaging.namedGroups;
+    // Group by base sheet name (Sheet 5.1, Sheet 5.2 → Sheet 5)
+    const keyMap = new Map();
+    namedGroups.forEach(g => {
+      const name = g.userSheetName.trim() || g.tabName;
+      const base = name.replace(/\.\d+$/, "").trim();
+      if (!keyMap.has(base)) keyMap.set(base, []);
+      keyMap.get(base).push(g);
+    });
+    const built = [];
+    let idBase = Date.now();
+    keyMap.forEach((entries, baseName) => {
+      const allBoxes = entries.flatMap(g => g.calloutBoxes || []);
+      const rows = calloutBoxesToRows(allBoxes);
+      const dupWarning = "";
+      built.push({ id: idBase++, name: baseName, rows, dupWarning, source: "pdf" });
+    });
+    setSheets(prev => {
+      const merged = [...prev, ...built].sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric:true, sensitivity:'base' }));
+      setActiveSheet(merged.length - built.length);
+      return merged;
+    });
+    setPdfStaging(null);
+    setSelectedPages(new Set());
+  };
+
+  const onMainDrop = useCallback(async e => {
+    e.preventDefault(); setDropHover(false);
+    const files = Array.from(e.dataTransfer.files);
+    const pdf = files.find(f => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+    if (pdf) await handlePdfUpload(pdf);
+  }, [handlePdfUpload]);
+
+  // ── COP functions ──
+  const openCopView = () => { setCopRows(buildCopRows(sheets)); setShowCOP(true); };
+  const updateCopCell = (ri, field, val) => setCopRows(prev => prev.map((r, i) => i === ri ? { ...r, [field]: val } : r));
+  const addCopRow = () => setCopRows(prev => [...prev, { bSheet:"",cStreet:"",dLines:"",eDiameter:"",fDate:"",gEop:"",hDepth:"",iRunLength:"",_srcSheet:"",_srcItem:"" }]);
+  const deleteCopRow = (ri) => setCopRows(prev => prev.filter((_, i) => i !== ri));
+  const exportCopXlsx = () => {
+    const site = siteName.trim().toUpperCase() || "FTTH";
+    const blob = buildCopXlsxBlob(copRows);
+    triggerDownload(URL.createObjectURL(blob), `${site} - COP DATA ENTRY.xlsx`, true);
+    setCopExported(true); setTimeout(() => setCopExported(false), 3000);
+  };
+
+  return (
+    <div style={{ fontFamily:"Arial,sans-serif",background:"#f0f4f8",minHeight:"100vh",display:"flex",flexDirection:"column" }}>
+      <div style={{ height: hasSheets ? "88px" : "50px", flexShrink:0 }} />
+
+      {/* Top bar */}
+      <div style={{ background:C.navy,color:"white",padding:"0 20px",height:"50px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,position:"fixed",top:0,left:0,right:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,0.3)" }}>
+        <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+          <h2 style={{ margin:0,fontSize:"16px" }}>📡 FTTH Text Extractor</h2>
+          <span style={{fontSize:"11px",color:"#90CAF9",opacity:0.8}}>v1.0 · Text Layer</span>
+          {hasSheets && <button onClick={openCopView} style={{...btn(C.navyDk),border:"1px solid #FFB74D",padding:"4px 10px",fontSize:"12px"}}>📋 COP View</button>}
+        </div>
+        <div style={{ display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap" }}>
+          {selectedRows.size>=1 && <button onClick={deleteSelectedRows} style={{...btn(C.red),fontWeight:"bold"}}>🗑 Delete{selectedRows.size>1?` (${selectedRows.size})`:""}</button>}
+          {hasSheets && <button onClick={addRow} style={{...btn("#2E7D32"),fontWeight:"bold"}}>➕ Add Row</button>}
+          {hasSheets && <button onClick={()=>setSheets(prev=>prev.map((s,i)=>i!==activeSheet?s:{...s,rows:sortRowsByItem(s.rows)}))} style={{...btn("#00695C"),fontWeight:"bold"}}>↕ Sort</button>}
+          <input value={siteName} onChange={e=>setSiteName(e.target.value)} placeholder="Site name (e.g. D-HBR204)" style={{ padding:"7px 10px",borderRadius:"6px",border:"none",fontSize:"13px",background:C.navyDk,color:"white",width:"180px" }} />
+          {confirmClear
+            ? <>
+                <span style={{fontSize:"12px",color:"#fff",fontWeight:"bold"}}>Sure?</span>
+                <button onClick={()=>{ setSheets([]); setActiveSheet(0); setSiteName(""); setConfirmClear(false); }} style={btn(C.red)}>✅ Yes</button>
+                <button onClick={()=>setConfirmClear(false)} style={btn(C.navyDk)}>✕</button>
+              </>
+            : <button onClick={()=>setConfirmClear(true)} disabled={!hasSheets} style={btn(C.red,!hasSheets)}>🗑 Clear All</button>
+          }
+          <button onClick={copyTable} disabled={!curSheet} style={btn(C.blue,!curSheet)}>{copied?"✅ Copied!":"📋 Copy"}</button>
+          <button onClick={()=>{ if(!hasSheets||!siteName.trim()) return; exportAll(); }} disabled={!hasSheets||!siteName.trim()} style={btn("#7B1FA2",!hasSheets||!siteName.trim())}>{exportedAll?"✅ Exported!":"📦 Export All"}{hasSheets?` (${sheets.length})`:""}</button>
+        </div>
+      </div>
+
+      {/* Sheet tabs */}
+      {hasSheets && (
+        <div style={{ background:C.navyDk,display:"flex",alignItems:"center",padding:"0 12px",overflowX:"auto",flexShrink:0,position:"fixed",top:"50px",left:0,right:0,zIndex:99,boxShadow:"0 2px 6px rgba(0,0,0,0.25)",borderTop:"1px solid rgba(255,255,255,0.1)" }}>
+          {sheets.map((s,i) => (
+            <div key={s.id||i} draggable={editingTab!==i} onDragStart={()=>onTabDragStart(i)} onDragOver={e=>onTabDragOver(e,i)} onDragEnd={onTabDragEnd}
+              onClick={()=>{ if(editingTab!==i) setActiveSheet(i); }}
+              style={{ display:"flex",alignItems:"center",gap:"6px",padding:"8px 16px",cursor:"grab",fontSize:"13px",whiteSpace:"nowrap",userSelect:"none",borderBottom:i===activeSheet?"3px solid #4FC3F7":"3px solid transparent",color:i===activeSheet?"#4FC3F7":"#aac",fontWeight:i===activeSheet?"bold":"normal" }}>
+              {editingTab===i ? (
+                <input autoFocus defaultValue={s.name} onClick={e=>e.stopPropagation()}
+                  onBlur={e=>{ const v=e.target.value.trim(); if(v) setSheets(prev=>prev.map((sh,si)=>si===i?{...sh,name:v}:sh)); setEditingTab(null); }}
+                  onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditingTab(null); }}
+                  style={{ fontSize:"13px",fontWeight:"bold",color:"#fff",background:"transparent",border:"none",borderBottom:"1px solid #4FC3F7",outline:"none",width:`${Math.max(s.name.length,6)}ch`,padding:"0" }}
+                />
+              ) : (
+                <span onDoubleClick={e=>{e.stopPropagation();setActiveSheet(i);setEditingTab(i);}} style={{cursor:"text"}}>{s.name}</span>
+              )}
+              <span onClick={e=>{e.stopPropagation();deleteSheet(i);}} style={{marginLeft:"4px",color:"#ff8a80",fontSize:"11px",cursor:"pointer"}}>✕</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── COP DATA ENTRY View ── */}
+      {showCOP && (
+        <div style={{...overlay, zIndex:250}}>
+          <div style={{background:"white",borderRadius:"0",width:"100vw",height:"100vh",display:"flex",flexDirection:"column"}}>
+            <div style={{background:"#2E7D32",color:"white",padding:"0 20px",height:"50px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+                <h2 style={{margin:0,fontSize:"16px"}}>📋 COP DATA ENTRY</h2>
+                <span style={{fontSize:"12px",opacity:0.8}}>{copRows.length} row{copRows.length!==1?"s":""}</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                <button onClick={addCopRow} style={{...btn("#1B5E20"),border:"1px solid rgba(255,255,255,0.3)",padding:"6px 12px",fontSize:"12px"}}>➕ Add Row</button>
+                <button onClick={exportCopXlsx} style={{...btn("#FF8F00"),padding:"6px 12px",fontSize:"12px"}}>{copExported?"✅ Exported!":"📦 Export COP .xlsx"}</button>
+                <button onClick={()=>{ const hdr=COP_HEADER_LABELS.join("\t"); const body=copRows.map(r=>COP_FIELDS.map(f=>String(r[f]??"").replace(/\n/g," ")).join("\t")).join("\n"); navigator.clipboard.writeText(hdr+"\n"+body); }} style={{...btn("#0277BD"),padding:"6px 12px",fontSize:"12px"}}>📋 Copy</button>
+                <button onClick={()=>{ setCopRows(buildCopRows(sheets)); }} style={{...btn("#5D4037"),padding:"6px 12px",fontSize:"12px"}}>🔄 Refresh</button>
+                <button onClick={()=>setShowCOP(false)} style={{...btn("#C62828"),padding:"6px 12px",fontSize:"12px"}}>✕ Close</button>
+              </div>
+            </div>
+            <div style={{flex:1,overflow:"auto",padding:"0"}}>
+              {copRows.length === 0 ? (
+                <div style={{textAlign:"center",padding:"60px 20px",color:"#666"}}>
+                  <div style={{fontSize:"48px",marginBottom:"12px"}}>📋</div>
+                  <div style={{fontSize:"15px",fontWeight:"bold"}}>No bore run data found</div>
+                </div>
+              ) : (
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:"13px",tableLayout:"fixed"}}>
+                  <thead><tr>
+                    <th style={{position:"sticky",top:0,zIndex:10,background:"#1F4E79",color:"white",padding:"8px 4px",textAlign:"center",borderBottom:"2px solid #0D2F4F",fontSize:"12px",width:"32px"}}>#</th>
+                    <th style={{position:"sticky",top:0,zIndex:10,background:"#1F4E79",color:"white",padding:"8px 4px",textAlign:"center",borderBottom:"2px solid #0D2F4F",fontSize:"12px",width:"32px"}}>✕</th>
+                    {COP_HEADER_LABELS.map((h,ci)=>(
+                      <th key={ci} style={{position:"sticky",top:0,zIndex:10,background:"#1F4E79",color:"white",padding:"8px 6px",textAlign:"center",borderBottom:"2px solid #0D2F4F",borderRight:"1px solid #D0DCE8",fontSize:"12px",width:COP_COL_W[ci]}}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {copRows.map((row, ri) => {
+                      const isEven = ri % 2 === 1;
+                      const rowBg = isEven ? "#EEF4FB" : "#ffffff";
+                      const border = "1px solid #D0DCE8";
+                      return (
+                        <tr key={ri} style={{background:rowBg}}>
+                          <td style={{padding:"3px 4px",borderRight:border,borderBottom:border,textAlign:"center",fontWeight:"bold",fontSize:"11px",color:"#666"}}>{ri+1}</td>
+                          <td style={{padding:"3px 4px",borderRight:border,borderBottom:border,textAlign:"center"}}>
+                            <button onClick={()=>deleteCopRow(ri)} style={{background:"none",border:"none",color:"#c62828",cursor:"pointer",fontSize:"13px",padding:"0 2px"}}>✕</button>
+                          </td>
+                          {COP_FIELDS.map((f,ci) => (
+                            <td key={ci} data-cop={`${ri}-${ci}`} style={{padding:"0",borderRight:border,borderBottom:border,verticalAlign:"top",width:COP_COL_W[ci]}}>
+                              <div contentEditable suppressContentEditableWarning
+                                onBlur={e=>updateCopCell(ri,f,e.currentTarget.innerText.trim())}
+                                onFocus={e=>{e.currentTarget.style.background="#dbeeff";}}
+                                onBlurCapture={e=>e.currentTarget.style.background=""}
+                                onKeyDown={e=>{
+                                  if(e.key==="Enter"&&e.altKey){e.preventDefault();return;}
+                                  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();updateCopCell(ri,f,e.currentTarget.innerText.trim());document.querySelector(`[data-cop="${Math.min(ri+1,copRows.length-1)}-${ci}"] div`)?.focus();return;}
+                                  if(e.key==="Tab"&&!e.shiftKey){e.preventDefault();updateCopCell(ri,f,e.currentTarget.innerText.trim());const nci=ci+1<COP_FIELDS.length?ci+1:0;const nri=ci+1<COP_FIELDS.length?ri:Math.min(ri+1,copRows.length-1);document.querySelector(`[data-cop="${nri}-${nci}"] div`)?.focus();return;}
+                                  if(e.key==="Escape"){e.preventDefault();e.currentTarget.innerText=String(row[f]??"");e.currentTarget.blur();}
+                                }}
+                                style={{ padding:"3px 8px",whiteSpace:ci===2?"pre-wrap":"normal",wordBreak:"break-word",minHeight:"100%",width:"100%",boxSizing:"border-box",outline:"none",cursor:"text",display:"block",textAlign:ci===0?"center":"left",fontWeight:ci===0?"bold":"normal" }}
+                              >{row[f]}</div>
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+              {copRows.length > 0 && <div style={{padding:"8px 4px"}}><button onClick={addCopRow} style={{...btn("#2E7D32"),fontSize:"12px",padding:"5px 14px"}}>＋ Add Row</button></div>}
+            </div>
+            <div style={{background:"#F5F5F5",borderTop:"1px solid #ddd",padding:"6px 20px",fontSize:"11px",color:"#666",display:"flex",justifyContent:"space-between",flexShrink:0}}>
+              <span>Click any cell to edit · Enter = move down · Tab = move across · Esc = cancel</span>
+              <span>{copRows.filter(r=>r.iRunLength).reduce((s,r)=>s+parseInt(r.iRunLength||"0",10),0)}' total run length</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Staging modal */}
+      {pdfStaging && (
+        <div style={{...overlay,zIndex:150,background:"rgba(0,0,0,0.6)"}}>
+          <div style={{...mbox("700px"),maxHeight:"90vh"}}>
+            <div style={mhdr}>
+              <span style={{fontWeight:"bold",fontSize:"15px"}}>{pdfStaging.splitting?"📄 Reading PDF pages…":pdfStaging.phase==="naming"?"📝 Name Your Sheets":`📄 PDF Preview — ${pdfStaging.file?.name}`}</span>
+              {!pdfStaging.splitting&&<CloseBtn onClick={()=>setPdfStaging(null)}/>}
+            </div>
+            <div style={{padding:"16px 20px",overflowY:"auto",flex:1}}>
+              {pdfStaging.splitting ? (
+                <div style={{textAlign:"center",padding:"40px",color:"#555"}}><div style={{fontSize:"32px",marginBottom:"12px"}}>⏳</div><div>Splitting PDF into pages…</div></div>
+              ) : pdfStaging.error ? (
+                <div style={{color:C.red,padding:"16px",background:"#fff0f0",borderRadius:"6px"}}>{pdfStaging.error}</div>
+              ) : pdfStaging.phase === "naming" ? (
+                <>
+                  <p style={{margin:"0 0 12px",fontSize:"13px",color:"#555"}}>
+                    <strong style={{color:C.green}}>✅ {pdfStaging.namedGroups.length} page{pdfStaging.namedGroups.length!==1?"s":""} with callout boxes found ({pdfStaging.namedGroups.reduce((s,g)=>s+(g.boxCount||0),0)} total boxes).</strong><br/>
+                    Set sheet names. Use <strong>Sheet 5.1</strong>, <strong>Sheet 5.2</strong> to merge pages into one tab.
+                  </p>
+                  <div style={{border:"1px solid #ddd",borderRadius:"6px",overflow:"hidden"}}>
+                    {pdfStaging.namedGroups.map((g,gi)=>(
+                      <div key={gi} style={{display:"flex",alignItems:"center",padding:"7px 12px",background:gi%2===0?"#f9f9f9":"#fff",borderBottom:gi<pdfStaging.namedGroups.length-1?"1px solid #eee":"none",gap:"10px"}}>
+                        <span style={{fontSize:"12px",color:"#888",flexShrink:0,width:"56px"}}>{g.tabName}</span>
+                        <input value={g.userSheetName}
+                          onChange={e=>setPdfStaging(prev=>({...prev,namedGroups:prev.namedGroups.map((x,xi)=>xi===gi?{...x,userSheetName:e.target.value}:x)}))}
+                          style={{flex:1,padding:"5px 8px",border:"1px solid #ccc",borderRadius:"4px",fontSize:"13px"}} />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{margin:"0 0 14px",fontSize:"13px",color:"#555"}}>
+                    {pdfStaging.pages.length} pages detected — <strong style={{color:C.green}}>{pdfStaging.pages.filter(p=>!p.preSkipped&&p.hasCallouts).length} with callouts</strong>, <strong style={{color:"#888"}}>{pdfStaging.pages.filter(p=>p.preSkipped).length} pre-skipped</strong>.
+                    Select pages and click <strong>✅ Extract Callouts</strong>.
+                  </p>
+                  <div style={{border:"1px solid #ddd",borderRadius:"6px",overflow:"hidden"}}>
+                    {(()=>{
+                      const selectablePgs = pdfStaging.pages.filter(p=>!p.preSkipped);
+                      const allSelected = selectablePgs.length>0 && selectablePgs.every(p=>selectedPages.has(p.pageIndex));
+                      const togglePage = (pageIndex) => setSelectedPages(prev=>{ const s=new Set(prev); s.has(pageIndex)?s.delete(pageIndex):s.add(pageIndex); return s; });
+                      const toggleAll = () => { if(allSelected) setSelectedPages(new Set()); else setSelectedPages(new Set(selectablePgs.map(p=>p.pageIndex))); };
+                      return(<>
+                        <div style={{display:"flex",alignItems:"center",padding:"5px 12px",background:"#e8edf4",borderBottom:"1px solid #ccc"}}>
+                          <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{marginRight:"8px",cursor:"pointer"}} />
+                          <span style={{fontSize:"11px",fontWeight:"bold",color:"#555",flex:1}}>{selectedPages.size} page{selectedPages.size!==1?"s":""} selected</span>
+                          {selectedPages.size>0 && <span onClick={()=>setSelectedPages(new Set())} style={{fontSize:"11px",color:C.blue,cursor:"pointer",textDecoration:"underline"}}>Clear all</span>}
+                        </div>
+                        {pdfStaging.pages.map((p,pi)=>{
+                          const isChecked = selectedPages.has(p.pageIndex);
+                          const isPreSkipDimmed = p.preSkipped && !isChecked;
+                          const isForceIncluded = p.preSkipped && isChecked;
+                          const calloutLabel = p.hasCallouts ? ` 📋 ${p.calloutBoxes.length} callout box${p.calloutBoxes.length!==1?"es":""}` : p.preSkipped ? " (cover/legend/detail)" : " (no callout boxes detected)";
+                          return(
+                            <div key={pi} onClick={()=>togglePage(p.pageIndex)}
+                              style={{display:"flex",alignItems:"center",padding:"6px 12px",
+                                background:isForceIncluded?"#fff8e1":isPreSkipDimmed?"#fafafa":isChecked?"#e3f2fd":pi%2===0?"#f4f4f4":"#fff",
+                                borderBottom:pi<pdfStaging.pages.length-1?"1px solid #eee":"none",
+                                opacity:isPreSkipDimmed?0.6:1,cursor:"pointer"}}>
+                              <input type="checkbox" checked={isChecked} onChange={()=>{}} style={{marginRight:"8px",cursor:"pointer",flexShrink:0}} />
+                              {p.thumbnail && (
+                                <img src={p.thumbnail} alt="" style={{width:"40px",height:"30px",objectFit:"cover",borderRadius:"3px",marginRight:"8px",border:"1px solid #ddd",flexShrink:0,cursor:"pointer"}}
+                                  onClick={e=>{e.stopPropagation();setPreviewPage(p);}} />
+                              )}
+                              <span style={{fontSize:"12px",color:"#666",width:"52px",flexShrink:0}}>Page {p.pageIndex+1}</span>
+                              <span style={{fontSize:"12px",flex:1,color:isPreSkipDimmed?"#aaa":"#333",fontStyle:isPreSkipDimmed?"italic":"normal"}}>{calloutLabel}</span>
+                              <span style={{fontSize:"11px",fontWeight:"bold",color:p.hasCallouts?C.green:isPreSkipDimmed?"#bbb":"#888",whiteSpace:"nowrap"}}>{p.hasCallouts?"✅ Ready":isPreSkipDimmed?"⏭ Skipped":"⬜ No data"}</span>
+                            </div>
+                          );
+                        })}
+                      </>);
+                    })()}
+                  </div>
+                </>
+              )}
+            </div>
+            <div style={{...mftr,justifyContent:"flex-end"}}>
+              {pdfStaging.phase==="naming" ? (
+                <>
+                  <button onClick={()=>setPdfStaging(null)} style={{background:"#ccc",border:"none",padding:"8px 18px",borderRadius:"5px",cursor:"pointer",fontSize:"13px"}}>Cancel</button>
+                  <button onClick={confirmPdfNaming} style={{...btn(C.green),marginLeft:"10px"}}>✅ Add {pdfStaging.namedGroups.length} Sheet{pdfStaging.namedGroups.length!==1?"s":""}</button>
+                </>
+              ) : !pdfStaging.splitting && !pdfStaging.error && (
+                <>
+                  <button onClick={()=>setPdfStaging(null)} style={{background:"#ccc",border:"none",padding:"8px 18px",borderRadius:"5px",cursor:"pointer",fontSize:"13px"}}>Cancel</button>
+                  <button onClick={startTextExtraction} style={{...btn(C.green),marginLeft:"10px"}}>✅ Extract Callouts ({selectedPages.size} page{selectedPages.size!==1?"s":""})</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Page Preview modal */}
+      {previewPage && (
+        <div style={{...overlay,zIndex:200}} onClick={()=>setPreviewPage(null)}>
+          <div style={{background:"white",borderRadius:"10px",padding:"20px",maxWidth:"90vw",maxHeight:"90vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
+              <span style={{fontWeight:"bold",fontSize:"15px",color:C.navy}}>Page {previewPage.pageIndex+1} — {previewPage.calloutBoxes?.length || 0} Callout Boxes Detected</span>
+              <button onClick={()=>setPreviewPage(null)} style={{...btn(C.navy),padding:"5px 12px",fontSize:"12px"}}>✕ Close</button>
+            </div>
+            {previewPage.calloutBoxes?.length > 0 && (
+              <div style={{marginBottom:"12px"}}>
+                <div style={{fontWeight:"bold",fontSize:"13px",color:C.navy,marginBottom:"6px"}}>Detected Callout Boxes:</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))",gap:"8px"}}>
+                  {previewPage.calloutBoxes.map((box, bi) => (
+                    <div key={bi} style={{background:/HAND/i.test(box.activity)?"#FFD9CC":/MISSILE/i.test(box.activity)?"#FFE0A0":"#FFFFCC",border:"1px solid #ddd",borderRadius:"6px",padding:"8px 10px",fontSize:"11px",fontFamily:"monospace",lineHeight:"1.5"}}>
+                      <div style={{fontWeight:"bold",color:"#333"}}>{box.date && <span style={{color:"#0277BD"}}>{box.date} </span>}{box.activity}</div>
+                      {box.ducts.map((d,di)=><div key={di} style={{color:"#555"}}>{d}</div>)}
+                      <div style={{display:"flex",gap:"12px",color:"#888",marginTop:"2px"}}>
+                        {box.code && <span>{box.code}</span>}
+                        {box.eop && <span>EOP: {box.eop}</span>}
+                        {box.depth && <span>DEPTH: {box.depth}</span>}
+                      </div>
+                      {box.equip && <div style={{color:"#6A1B9A",fontSize:"10px"}}>{box.equip}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <details style={{marginTop:"8px"}}>
+              <summary style={{cursor:"pointer",fontSize:"12px",color:"#666"}}>Raw Text Layer</summary>
+            <pre style={{background:"#f5f7fa",padding:"16px",borderRadius:"6px",fontSize:"11px",fontFamily:"monospace",whiteSpace:"pre-wrap",maxHeight:"70vh",overflow:"auto",border:"1px solid #ddd",lineHeight:"1.5"}}>{previewPage.pageText}</pre>
+            </details>
+          </div>
+        </div>
+      )}
+
+      {/* Main content */}
+      <div style={{padding:"12px 20px",display:"flex",flexDirection:"column",flex:1,position:"relative"}}
+        onDragOver={e=>{e.preventDefault();setDropHover(true);}}
+        onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDropHover(false);}}
+        onDrop={onMainDrop}>
+
+        {curSheet?.dupWarning && <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:"6px",padding:"8px 14px",marginBottom:"10px",fontSize:"13px",color:"#b45309",fontWeight:"bold"}}>{curSheet.dupWarning}</div>}
+
+        {dropHover && (
+          <div style={{position:"absolute",inset:0,background:"rgba(31,78,121,0.15)",border:`4px dashed ${C.navy}`,borderRadius:"10px",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+            <div style={{background:"white",padding:"24px 44px",borderRadius:"10px",boxShadow:"0 4px 24px rgba(0,0,0,0.18)",textAlign:"center"}}>
+              <div style={{fontSize:"44px",marginBottom:"10px"}}>📄</div>
+              <div style={{fontSize:"16px",fontWeight:"bold",color:C.navy}}>Drop PDF here</div>
+            </div>
+          </div>
+        )}
+
+        {!hasSheets ? (
+          <div style={{textAlign:"center",padding:"60px 20px",background:"white",border:`2px dashed ${dropHover?C.navy:"#c0c8d0"}`,borderRadius:"10px"}}>
+            <div style={{fontSize:"52px",marginBottom:"14px"}}>📂</div>
+            <p style={{fontSize:"18px",fontWeight:"bold",color:C.navy,margin:"0 0 10px"}}>Drop a PDF Construction Drawing to Begin</p>
+            <p style={{fontSize:"13px",margin:"0 0 16px",color:"#555",maxWidth:"480px",display:"inline-block"}}>
+              This tool extracts callouts using the <strong>PDF text layer</strong> — no OCR or API calls needed. Extraction is instant.
+            </p>
+            <div style={{display:"flex",gap:"12px",justifyContent:"center"}}>
+              <button onClick={()=>pdfFileRef.current?.click()} style={{...btn(C.purple),display:"flex",alignItems:"center",gap:"6px"}}>📄 Browse PDF</button>
+            </div>
+            <input ref={pdfFileRef} type="file" accept="application/pdf,.pdf" style={{display:"none"}} onChange={e=>{if(e.target.files[0]) handlePdfUpload(e.target.files[0]); e.target.value="";}} />
+          </div>
+        ) : (
+          <div style={{overflowX:"scroll",overflowY:"auto",background:"white",flex:1}}>
+            {!curSheet || curSheet.rows.length===0 ? (
+              <div style={{padding:"40px",textAlign:"center",color:"#888"}}>No data yet.</div>
+            ) : (
+              <table style={{borderCollapse:"collapse",tableLayout:"fixed",width:"100%",fontSize:"12px",fontFamily:"Calibri,Arial,sans-serif"}}>
+                <thead><tr>
+                  <th style={{background:"#1F4E79",padding:"5px 6px",borderRight:"1px solid #2E6DA4",borderBottom:"3px solid #0F2D4A",width:"28px",position:"sticky",top:0,zIndex:2,textAlign:"center"}}>☑</th>
+                  {HEADER_LABELS.map((h,i)=><th key={i} style={{background:"#1F4E79",color:"#ffffff",padding:"5px 8px",textAlign:"center",verticalAlign:"middle",fontWeight:"bold",fontSize:"14px",whiteSpace:i===0?"normal":"nowrap",width:COL_W[i],maxWidth:COL_W[i],borderRight:"1px solid #2E6DA4",borderBottom:"3px solid #0F2D4A",position:"sticky",top:0,zIndex:2}}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {(()=>{
+                    const dupItems=new Set([...curSheet.rows.reduce((m,r)=>m.set(r.item,(m.get(r.item)||0)+1),new Map())].filter(([,c])=>c>1).map(([n])=>n));
+                    return curSheet.rows.map((row,ri)=>{
+                      const isDup=dupItems.has(row.item);
+                      const isEven=ri%2===1;
+                      const rowBg=isDup?"#fff8e1":isEven?"#EEF4FB":"#ffffff";
+                      const border="1px solid #D0DCE8";
+                      const isDragging=rowDragIdx===ri;
+                      const isDropTarget=rowDragOver===ri&&rowDragIdx!==ri;
+                      return(
+                        <tr key={ri}
+                          draggable
+                          onDragStart={e=>onRowDragStart(e,ri)}
+                          onDragOver={e=>onRowDragOver(e,ri)}
+                          onDragLeave={onRowDragLeave}
+                          onDrop={e=>onRowDrop(e,ri)}
+                          onDragEnd={onRowDragEnd}
+                          style={{background:selectedRows.has(ri)?"#E8F0FE":rowBg,opacity:isDragging?0.4:1,borderTop:isDropTarget?"3px solid #1976D2":"none",transition:"border-top 0.1s"}}>
+                          <td style={{padding:"2px 4px",borderRight:border,borderBottom:border,textAlign:"center",verticalAlign:"middle",width:"28px",background:selectedRows.has(ri)?"#E8F0FE":rowBg,cursor:"grab",userSelect:"none"}}
+                            title="Drag to reorder">
+                            <div style={{display:"flex",alignItems:"center",gap:"2px",justifyContent:"center"}}>
+                              <span style={{fontSize:"10px",color:"#999",lineHeight:1,letterSpacing:"-1px",cursor:"grab"}}>⠿</span>
+                              <input type="checkbox" checked={selectedRows.has(ri)} onChange={()=>toggleRow(ri)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer",width:"14px",height:"14px"}}/>
+                            </div>
+                          </td>
+                          {FIELDS.map((f,ci)=>{
+                            const isBlockType=ci===1;
+                            const isEqCallout=ci===3;
+                            const isBoreCallout=ci===5;
+                            const isItem=ci===0;
+                            const btBg=(isBlockType||isEqCallout||isBoreCallout)?blockTypeBg(row.blockType):null;
+                            const cellBg=isDup?(btBg||"#fff8e1"):btBg||rowBg;
+                            return(
+                              <td key={ci} data-cell={`${ri}-${ci}`}
+                                onClick={e=>{ if(e.target===e.currentTarget) e.currentTarget.querySelector('div[contenteditable]')?.focus(); }}
+                                onDragStart={e=>{e.preventDefault();e.stopPropagation();}}
+                                draggable={false}
+                                style={{ padding:"0",borderRight:border,borderBottom:border,verticalAlign:(isItem||isBlockType)?"middle":"top",width:COL_W[ci],maxWidth:COL_W[ci],background:selectedRows.has(ri)?"#E8F0FE":cellBg }}>
+                                <div contentEditable suppressContentEditableWarning
+                                  onBlur={e=>updateCell(ri,f,e.currentTarget.innerText.trim())}
+                                  onFocus={e=>{e.currentTarget.style.background="#dbeeff";}}
+                                  onBlurCapture={e=>e.currentTarget.style.background=""}
+                                  onKeyDown={e=>{
+                                    const TR=curSheet.rows.length, TC=FIELDS.length;
+                                    if(e.key==="Enter"&&e.altKey){e.preventDefault();return;}
+                                    if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();updateCell(ri,f,e.currentTarget.innerText.trim());document.querySelector(`[data-cell="${Math.min(ri+1,TR-1)}-${ci}"] div`)?.focus();return;}
+                                    if(e.key==="Enter"&&e.shiftKey){e.preventDefault();updateCell(ri,f,e.currentTarget.innerText.trim());document.querySelector(`[data-cell="${Math.max(ri-1,0)}-${ci}"] div`)?.focus();return;}
+                                    if(e.key==="Tab"&&!e.shiftKey){e.preventDefault();updateCell(ri,f,e.currentTarget.innerText.trim());const nci=ci+1<TC?ci+1:0;const nri=ci+1<TC?ri:Math.min(ri+1,TR-1);document.querySelector(`[data-cell="${nri}-${nci}"] div`)?.focus();return;}
+                                    if(e.key==="Escape"){e.preventDefault();e.currentTarget.innerText=String(row[f]??"");e.currentTarget.blur();}
+                                  }}
+                                  style={{ padding:"3px 8px",whiteSpace:(ci===2||ci===3||ci===5||ci===6)?"pre-wrap":"normal",wordBreak:"break-word",minHeight:"100%",width:"100%",boxSizing:"border-box",outline:"none",cursor:"text",display:"block",textAlign:isItem?"center":"left",fontWeight:(isItem||isBlockType)?"bold":"normal" }}
+                                >{row[f]}</div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            )}
+            {curSheet && curSheet.rows.length > 0 && (
+              <div style={{padding:"8px 4px"}}><button onClick={addRow} style={{...btn("#2E7D32"),fontSize:"12px",padding:"5px 14px"}}>＋ Add Row</button></div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      {hasSheets && (
+        <div style={{background:"#F5F5F5",borderTop:"1px solid #ddd",padding:"6px 20px",fontSize:"11px",color:"#666",display:"flex",justifyContent:"space-between",flexShrink:0}}>
+          <span>Click any cell to edit · Enter = down · Shift+Enter = up · Tab = across · Esc = cancel</span>
+          <span>{curSheet?.rows?.length||0} rows in {curSheet?.name||"?"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

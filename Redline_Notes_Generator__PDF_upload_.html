@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redline Notes Generator (PDF upload)</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+
+function usePdfJs() {
+  const [ready, setReady] = useState(!!window.pdfjsLib);
+  useEffect(() => {
+    if (window.pdfjsLib) { setReady(true); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      setReady(true);
+    };
+    document.head.appendChild(s);
+  }, []);
+  return ready;
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(",")[1]);
+    r.onerror = () => rej(new Error("Read failed"));
+    r.readAsDataURL(file);
+  });
+}
+
+// ── Annotation extraction from PDF ───────────────────────────────────────────
+// Uses richText.str field (FreeText annotations store text here).
+// TC code check discards construction template markers.
+// Position filter discards FCU table / title block area annotations.
+// ── Text-layer callout matching ───────────────────────────────────────────────
+// Uses PDF.js getTextContent() to extract text items with exact positions.
+// Finds the callout number (digit prefix of a callout row) nearest to each annotation.
+// Both annotation rects and text item transforms are in the same PDF coordinate space.
+
+// ── Rotation helpers ──────────────────────────────────────────────────────────
+// PDF annotation rects and text item transforms are in the raw (pre-rotation)
+// PDF coordinate space. The rendered viewport applies the page's rotation, so
+// we must rotate coordinates into the same space before doing any positional
+// matching. pageW/pageH are the RAW (pre-rotation) page dimensions.
+function rotatePoint(x, y, pageW, pageH, rotation) {
+  switch ((rotation || 0) % 360) {
+    case 90:  return { x: y,          y: pageW - x };
+    case 180: return { x: pageW - x,  y: pageH - y };
+    case 270: return { x: pageH - y,  y: x         };
+    default:  return { x,             y             };
+  }
+}
+
+// After rotation the viewport dimensions swap for 90/270 — return post-rotation w/h.
+function rotatedDims(pageW, pageH, rotation) {
+  const r = (rotation || 0) % 360;
+  return (r === 90 || r === 270)
+    ? { w: pageH, h: pageW }
+    : { w: pageW, h: pageH };
+}
+
+// ── Text layer extraction ─────────────────────────────────────────────────────
+// Returns flat list of {str, x, y, w} for all non-empty text spans on the page.
+// Coordinates are rotated into the viewport space so they match annotation rects.
+async function getTextItems(pdfPage) {
+  const rotation = pdfPage.rotate || 0;
+  const rawVp    = pdfPage.getViewport({ scale: 1, rotation: 0 });
+  const pageW    = rawVp.width;
+  const pageH    = rawVp.height;
+
+  const tc = await pdfPage.getTextContent();
+  return tc.items
+    .filter(item => item.str && item.str.trim())
+    .map(item => {
+      const rx = item.transform[4];
+      const ry = item.transform[5];
+      const { x, y } = rotatePoint(rx, ry, pageW, pageH, rotation);
+      return { str: item.str.trim(), x, y, w: item.width || 0 };
+    });
+}
+
+// ── Annotation value collector ───────────────────────────────────────────────
+// We no longer attempt to assign annotation values to callout numbers via
+// coordinate matching — the text layer is too noisy (station numbers, address
+// numbers, dimension labels all look like callout numbers). Instead we collect
+// every extracted value as a flat hint list and pass it to the visual diff,
+// which reads the actual rendered callout bubbles and assigns correctly.
+function collectAnnotationValues(annotations) {
+  const values = [];
+  for (const ann of annotations) {
+    const v = ann.isStrikeout ? "Removed" : ann.value;
+    if (v && !values.includes(v)) values.push(v);
+  }
+  return values;
+}
+
+// Per-line equipment/code detector — used to filter individual lines, not whole annotations
+const CODE_LINE_RE = /\bTC[A-Z][A-Z0-9]+|\bTMBT\b|\bTCM\d|MC\/DAP|FDH-HH|TCMU|TCMB|TCSSM|\bTCBDB\d*\b|\bTCBHD\d*\b|DAP-[A-Z\d]|LOCATE\s+BALL/i;
+const GPS_RE       = /^\d{2}\.\d{4,}/;
+
+// Station pattern: bare "04+07", "STA 04+07", "STA.04+07"
+const STA_RE = /^(?:STA[.:]?\s*)?(\d{1,3})\+(\d{2,3})$/i;
+function parseStationLine(str) {
+  const m = str.match(STA_RE);
+  if (!m) return null;
+  return "STA " + m[1].padStart(2, "0") + "+" + m[2].padStart(2, "0");
+}
+
+async function extractAnnotations(pdfPage, pageHeight, pageWidth) {
+  const rawAnns = await pdfPage.getAnnotations();
+  const kept = [];
+
+  for (const ann of rawAnns) {
+    // StrikeOut — always keep, no content check
+    if (ann.subtype === "StrikeOut" && ann.rect) {
+      kept.push({ value: "Removed", rect: ann.rect, isStrikeout: true });
+      continue;
+    }
+    if (ann.subtype !== "FreeText" || !ann.rect) continue;
+
+    const raw = ((ann.richText && ann.richText.str) || ann.contents || "")
+      .replace(/\r/g, "\n").trim();
+    if (!raw) continue;
+
+    // Discard pure GPS coordinate annotations (first line starts with lat degrees)
+    if (GPS_RE.test(raw.split("\n")[0].trim())) continue;
+
+    const allLines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+    if (!allLines.length) continue;
+
+    // Rules:
+    // (1) If ANY line contains an equipment code -> discard entire annotation (station never
+    //     co-exists with coded lines; RT*-HEX lines in coded blocks are also discarded)
+    // (2) GPS-only annotations are already discarded above
+    const hasAnyCodeLine = allLines.some(l => CODE_LINE_RE.test(l));
+    if (hasAnyCodeLine) continue;
+
+    // All lines are clean — proceed with extraction
+    const nonCodeLines = allLines.filter(l => !GPS_RE.test(l));
+    if (!nonCodeLines.length) continue;
+
+    const cx = (ann.rect[0] + ann.rect[2]) / 2;
+    const cy = (ann.rect[1] + ann.rect[3]) / 2;
+
+    // Iterate non-code lines and extract every recognisable value
+    for (const line of nonCodeLines) {
+      let value = null;
+
+      // Skip date lines (11/17/25) — not a value
+      if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(line)) continue;
+
+      // Station: bare "04+07", "STA 04+07", "STA.04+07" — anywhere on page
+      value = parseStationLine(line);
+      if (value) { kept.push({ value, rect: ann.rect, isStrikeout: false, cx, cy }); continue; }
+
+      // Footage from work-type block: "BORE & PLACE (49')" or "HAND DIG (7')"
+      const workM = line.match(/^(?:BORE\s*&\s*PLACE|HAND\s*DIG(?:\s*&\s*PLACE)?)\s*\((\d+(?:\.\d+)?)'?\)/i);
+      if (workM) { kept.push({ value: workM[1] + "'", rect: ann.rect, isStrikeout: false, cx, cy }); continue; }
+
+      // Bare footage in parens: (62')
+      const parenM = line.match(/^\((\d+(?:\.\d+)?)'?\)$/);
+      if (parenM) { kept.push({ value: parenM[1] + "'", rect: ann.rect, isStrikeout: false, cx, cy }); continue; }
+
+      // Bare footage with apostrophe: 62'
+      const bareM = line.match(/^(\d+(?:\.\d+)?)'$/);
+      if (bareM) { kept.push({ value: bareM[0], rect: ann.rect, isStrikeout: false, cx, cy }); continue; }
+
+      // Dimension strings: 24"x36"x24"
+      if (/\d+"x\d+"/i.test(line) || /^[\d.]+"$/.test(line)) {
+        kept.push({ value: line, rect: ann.rect, isStrikeout: false, cx, cy }); continue;
+      }
+
+      // Hexatronic block type standalone: RT#-HEX-#-WAY
+      if (/^RT\d+-?HEX-?\d+-?WAY$/i.test(line)) {
+        kept.push({ value: line, rect: ann.rect, isStrikeout: false, cx, cy }); continue;
+      }
+    }
+  }
+
+  return kept;
+}
+
+async function pdfToImages(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const lib = window.pdfjsLib;
+  if (!lib) throw new Error("PDF.js not ready, please try again.");
+  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+  const out = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page     = await pdf.getPage(i);
+    const rotation = page.rotate || 0;
+
+    // Raw (pre-rotation) viewport — used for coordinate transforms
+    const rawVp  = page.getViewport({ scale: 1, rotation: 0 });
+    const rawW   = rawVp.width;
+    const rawH   = rawVp.height;
+
+    // Rendered viewport — applies the page's embedded rotation
+    const baseVp = page.getViewport({ scale: 1 });            // uses page.rotate
+    const { w: vpW, h: vpH } = rotatedDims(rawW, rawH, rotation);
+
+    const scale = baseVp.width < 800 ? 4.5 : 3.5;
+    const vp    = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width  = vp.width;
+    canvas.height = vp.height;
+    // Render WITH annotations (original)
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+
+    // Render WITHOUT annotations (clean copy for diff)
+    const canvasClean = document.createElement("canvas");
+    canvasClean.width  = vp.width;
+    canvasClean.height = vp.height;
+    await page.render({
+      canvasContext: canvasClean.getContext("2d"),
+      viewport: vp,
+      annotationMode: 0,   // DISABLE annotation layer
+    }).promise;
+    const b64Clean = canvasClean.toDataURL("image/jpeg", 0.99).split(",")[1];
+
+    // Extract annotations — rotate their rects into viewport space
+    const rawAnns    = await extractAnnotations(page, rawH, rawW);
+    const annotations = rawAnns.map(ann => {
+      const [x0, y0, x1, y1] = ann.rect;
+      const p0 = rotatePoint(x0, y0, rawW, rawH, rotation);
+      const p1 = rotatePoint(x1, y1, rawW, rawH, rotation);
+      const cx = (p0.x + p1.x) / 2;
+      const cy = (p0.y + p1.y) / 2;
+      return { ...ann, cx, cy };
+    });
+
+    const textItems = await getTextItems(page);   // already rotated inside getTextItems
+
+    console.log("[ANN] Page " + i + " (rot=" + rotation + "°): " + annotations.length + " annotations, values: " + annotations.map(a => a.value).join(", "));
+    out.push({ pageNum: i, b64: canvas.toDataURL("image/jpeg", 0.99).split(",")[1], b64Clean, mimeType: "image/jpeg", annotations, textItems, pageHeight: vpH, pageWidth: vpW });
+  }
+  return out;
+}
+
+
+// --- Diff prompt (original vs clean) ----------------------------------------
+const SYSTEM_DIFF =
+  "You are a redline extraction engine for FTTH construction drawings. " +
+  "You will receive TWO images of the same page. Output ONLY final redlined values " +
+  "for numbered callouts. Never describe changes. Never output equipment codes.";
+
+const PROMPT_DIFF =
+  "TWO images of the same FTTH construction drawing page:\n" +
+  "IMAGE 1 = ORIGINAL  (the redlined drawing — has annotation boxes, red text, strikethroughs)\n" +
+  "IMAGE 2 = CLEAN     (same page, annotation boxes removed)\n\n" +
+  "STEP 1 — Read the callout sidebar in IMAGE 2 (the clean base drawing).\n" +
+  "The sidebar is a numbered list on the left/right margin. Each callout has:\n" +
+  "  - A numbered bubble (circled or hexagonal number)\n" +
+  "  - Action line: BORE & PLACE (90'), HAND DIG & PLACE (8'), DIG 4'X4' PIT, etc.\n" +
+  "  - Sub-lines: cable type, STA.##+#+##, coordinates, DAP, SERVES, etc.\n\n" +
+  "STEP 2 — Compare IMAGE 1 vs IMAGE 2 for each callout number.\n" +
+  "A redline exists when IMAGE 1 shows a value DIFFERENT from or ABSENT IN IMAGE 2.\n" +
+  "  - Red/orange ink on a value = redline\n" +
+  "  - Annotation box added over a callout = redline (use the value inside the box)\n" +
+  "  - Strikethrough on a value = Removed <value>\n" +
+  "  - Identical text in both images = BASE DRAWING CONTENT, skip it\n\n" +
+  "STEP 3 — For STATION callouts (DIG 4'X4' PIT with STA.##+#+##):\n" +
+  "  The base STA value is in IMAGE 2. If IMAGE 1 shows a DIFFERENT station number\n" +
+  "  (via annotation box or red ink), output the NEW redlined station value.\n" +
+  "  Format: STA ##+#+## (zero-pad both parts: 2+53 -> STA 02+53)\n" +
+  "  Read every digit individually. STA 04+07 and STA 04+70 are different.\n\n" +
+  "--- STRICT OUTPUT RULES ---\n" +
+  "(1) Output ONLY the final value token — never describe the change\n" +
+  "    WRONG: BORE & PLACE changed from (41') to (40')\n" +
+  "    WRONG: STA changed from 08+43 to 08+35\n" +
+  "    RIGHT: 40'\n" +
+  "    RIGHT: STA 08+35\n" +
+  "(2) Only extract from NUMBERED CALLOUTS in the sidebar (callout numbers 1-99)\n" +
+  "(3) NEVER output equipment codes: TCBDB*, TCBHD*, DAP, RT*-HEX*-WAY, EOP, DEPTH,\n" +
+  "    DUCT, COLOR, FCU rows, node IDs, GPS coordinates\n" +
+  "(4) For BORE & PLACE / HAND DIG: output only the footage e.g. 84'\n" +
+  "(5) For DIG PIT / STA callouts: output STA ##+#+## only\n" +
+  "(6) For dimension callouts: output e.g. 24\"x36\"x24\"\n" +
+  "(7) For strikethroughs: output Removed <item>\n" +
+  "(8) If a callout value is IDENTICAL in both images: SKIP IT\n\n" +
+  "--- SIDEBAR READING RULES ---\n" +
+  "The sidebar may have 2-3 columns. Read each column top-to-bottom independently.\n" +
+  "Each numbered bubble is a separate callout entry — never merge two bubbles.\n" +
+  "Short callouts (1-2 lines) are valid — do not skip them.\n\n" +
+  "--- OUTPUT FORMAT ---\n" +
+  "Sheet [sheet-id]:\n" +
+  "Callout [number]: [value]\n" +
+  "Sort numerically. One value per line. No commentary.\n" +
+  "If nothing qualifies -> output exactly: NO_REDLINES";
+
+// --- Single-pass prompt (visual scan fallback for D-HLF103 and similar) --------
+const SYSTEM_SINGLE =
+  "You are a precision redline extraction engine for FTTH construction drawings. " +
+  "Extract ONLY callouts that have a visibly RED or ORANGE value, or a strikethrough. " +
+  "Callout number shapes are always red by design — never report them.";
+
+const PROMPT_SINGLE =
+  "Extract every redlined value from this FTTH construction drawing callout list.\n\n" +
+  "--- LOCATE CALLOUT PANELS ---\n" +
+  "The callout sidebar is a numbered list, usually on the left or right margin.\n" +
+  "It may have 2-3 columns. Read ALL columns top-to-bottom per column, then combine.\n" +
+  "Each numbered bubble (circle or hexagon) is ONE callout entry.\n\n" +
+  "--- WHAT COUNTS AS A REDLINE ---\n" +
+  "A callout has a redline ONLY if:\n" +
+  "  (a) A value is printed in VISIBLY RED or ORANGE ink\n" +
+  "  (b) A line has a visible strikethrough\n" +
+  "  (c) An annotation box is placed on the callout with a value\n" +
+  "Black text = base drawing content = SKIP.\n\n" +
+  "--- WHAT TO EXTRACT ---\n" +
+  "  BORE & PLACE (84')      -> red footage only      -> 84'\n" +
+  "  HAND DIG & PLACE (7')   -> red footage only      -> 7'\n" +
+  "  DIG 4'X4' PIT / STA     -> red station digits    -> STA 00+68\n" +
+  "  PL. NEW HH (24\"x36\")   -> red dimension         -> 24\"x36\"x24\"\n" +
+  "  [strikethrough item]    -> Removed <item>\n" +
+  "  RT#-HEX-#-WAY in red   -> RT#-HEX-#-WAY\n\n" +
+  "--- STATION RULES ---\n" +
+  "Format: STA ##+#+## — zero-pad BOTH parts (2+53 -> STA 02+53).\n" +
+  "Read every digit individually — STA 04+07 and STA 04+70 are DIFFERENT.\n" +
+  "Only report a station if its digits are in RED ink or inside an annotation box.\n\n" +
+  "--- SIDEBAR COMPLETENESS ---\n" +
+  "(!) Find the highest callout number visible. Your output must cover up to it (gaps OK).\n" +
+  "(!) If callout numbering jumps (e.g. ends at 17, but circles 18-23 exist in drawing),\n" +
+  "    there is a SECOND PANEL elsewhere — find and read it too.\n" +
+  "(!) Short callouts (1-2 lines) are valid. Never skip a bubble.\n\n" +
+  "--- NEVER OUTPUT ---\n" +
+  "Equipment codes (TCBDB*, TCBHD*, DAP alone, TCM*), FCU table rows,\n" +
+  "GPS coordinates, road labels, duct/route labels, node IDs.\n\n" +
+  "--- OUTPUT FORMAT ---\n" +
+  "Sheet [sheet-id]:\n" +
+  "Callout [number]: [value]\n" +
+  "Sort numerically. One value per line. No commentary.\n" +
+  "WRONG: Callout 5: BORE & PLACE (84') — appears in red\n" +
+  "RIGHT: Callout 5: 84'\n" +
+  "If no redlines -> output exactly: NO_REDLINES";
+
+async function apiCall(messages, maxTokens, system) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: maxTokens, system, messages }),
+    });
+    if (!r.ok) throw new Error(`API ${r.status}`);
+    const d = await r.json();
+    return d.content.find(b => b.type === "text")?.text?.trim() || "";
+  } finally { clearTimeout(timeout); }
+}
+
+async function callAI(b64, b64Clean, mimeType, annotations, textItems, pageHeight, pageWidth) {
+  const imgOrig  = { type: "image", source: { type: "base64", media_type: mimeType, data: b64 } };
+  const imgClean = b64Clean ? { type: "image", source: { type: "base64", media_type: mimeType, data: b64Clean } } : null;
+
+  // ── Collect annotation values as hints for the visual diff ────────────────
+  // We extract what values exist from PDF annotation objects (footage, stations,
+  // dimensions) but do NOT attempt coordinate-based callout assignment — the
+  // text layer is too noisy. The visual diff assigns values to callout numbers
+  // by reading the actual rendered callout bubbles.
+  const annValues = collectAnnotationValues(annotations || []);
+  const hintBlock = annValues.length
+    ? "\n\nKNOWN REDLINE VALUES (from PDF annotation objects — assign to correct callout numbers by reading the image):\n" +
+      annValues.map(v => "  • " + v).join("\n")
+    : "";
+
+  // Find sheet ID from text layer
+  let sheet = "?";
+  for (const item of (textItems || [])) {
+    const m = item.str.match(/\bD-[A-Z]{2,6}\d{2,6}\b/);
+    if (m) { sheet = m[0]; break; }
+  }
+
+  // ── Visual diff: original vs clean ───────────────────────────────────────
+  // Send both images (or just original if no clean) and let the model read
+  // the callout bubbles directly to assign values to the right callout numbers.
+  const debugRows = annValues.map(v => ({
+    value: v, cx: null, cy: null, matched: null, type: "ann", source: "ann"
+  }));
+
+  try {
+    let result;
+    if (imgClean) {
+      result = await apiCall(
+        [{ role: "user", content: [
+          { type: "text", text: "IMAGE 1 (ORIGINAL with annotations):" },
+          imgOrig,
+          { type: "text", text: "IMAGE 2 (CLEAN, annotations stripped):" },
+          imgClean,
+          { type: "text", text: PROMPT_DIFF + hintBlock },
+        ]}],
+        3000, SYSTEM_DIFF
+      );
+    } else {
+      result = await apiCall(
+        [{ role: "user", content: [imgOrig, { type: "text", text: PROMPT_SINGLE + hintBlock }] }],
+        3000, SYSTEM_SINGLE
+      );
+    }
+
+    if (!result || result.trim() === "NO_REDLINES") return "NO_REDLINES";
+
+    const parsed = parseResult(result);
+    if (!parsed) return "NO_REDLINES";
+
+    // Patch sheet from text layer if model returned "?"
+    if (parsed.sheet === "?" && sheet !== "?") parsed.sheet = sheet;
+
+    // Update debug rows with matched callout numbers from diff result
+    for (const c of parsed.callouts) {
+      for (const part of c.parts) {
+        const row = debugRows.find(r => r.value === part.text && !r.matched);
+        if (row) { row.matched = c.num; row.source = "diff"; }
+        else debugRows.push({ value: part.text, cx: null, cy: null, matched: c.num, type: "diff", source: "diff" });
+      }
+    }
+
+    console.log(`[DIFF] Sheet ${parsed.sheet}: ${parsed.callouts.length} callouts, ann hints: ${annValues.length}`);
+    return { __annParsed: true, parsed, debug: { layout: "visual-diff", rows: debugRows }, rawResult: result };
+
+  } catch (e) {
+    console.warn("[DIFF] failed:", e);
+    return "NO_REDLINES";
+  }
+}
+
+async function callAIWithRetry(b64, b64Clean, mimeType, annotations, textItems, pageHeight, pageWidth, maxRetries = 3) {
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try { return await callAI(b64, b64Clean, mimeType, annotations, textItems, pageHeight, pageWidth); }
+    catch (e) {
+      lastErr = e;
+      if (attempt < maxRetries) {
+        const is429 = String(e).includes("429");
+        const delay = is429 ? 15000 * (attempt + 1) : 1000 * Math.pow(2, attempt);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+// Normalize all station variants -> "STA ##+#+##"
+function normalizeStation(value) {
+  const m = value.match(/^(?:stations?|sta\.?:?\s*)\s*(\d{1,3})\+(\d{2,3})$/i)
+         || value.match(/^(\d{1,3})\+(\d{2,3})$/);
+  if (m) return `STA ${m[1].padStart(2, "0")}+${m[2].padStart(2, "0")}`;
+  return value;
+}
+
+// Normalize Hexatronic variants -> RT#-HEX-#-WAY
+// Handles: RT#HEX, RT#-HEX, space/no-space before WAY
+function normalizeHex(value) {
+  // Match: RT<id>[-]HEX[-]<way>[-]?[ ]?WAY  (case-insensitive)
+  const m = value.match(/^(RT[A-Z0-9]+)-?HEX-?(\d+)[-\s]?WAY$/i);
+  if (m) return `${m[1].toUpperCase()}-HEX-${m[2]}-WAY`;
+  return value;
+}
+
+// Normalize conduit variants -> #-#.#" CONDUIT  (count=1 -> drop count)
+function normalizeConduit(value) {
+  // With count: "2-1.25" CONDUIT(S)" or "2x1.25" CONDUIT(S)"
+  const withCount = value.match(/^(\d+)[-x](\d+(?:\.\d+)?)"?\s*CONDUITS?$/i);
+  if (withCount) {
+    const count = withCount[1], size = withCount[2];
+    return count === "1" ? `${size}" CONDUIT` : `${count}-${size}" CONDUIT`;
+  }
+  // Without count: "1.25" CONDUIT(S)"
+  const bare = value.match(/^(\d+(?:\.\d+)?)"?\s*CONDUITS?$/i);
+  if (bare) return `${bare[1]}" CONDUIT`;
+  return value;
+}
+
+// Canonical block type names (order matters  -  longer/more-specific first)
+const BLOCK_TYPES = [
+  { re: /^BORE\s*&\s*PLACE$/i,        canon: "BORE & PLACE",     dbore: false },
+  { re: /^HAND\s*DIG\s*&\s*PLACE$/i,  canon: "HAND DIG & PLACE", dbore: false },
+  { re: /^MISSILE\s*&\s*PLACE$/i,     canon: "MISSILE & PLACE",  dbore: false },
+  { re: /^MISSILE$/i,                 canon: "MISSILE",           dbore: false },
+  { re: /^M-BORE$/i,                  canon: "M-BORE",            dbore: false },
+  { re: /^MB$/i,                      canon: "MB",                dbore: false },
+  { re: /^HAND\s*DIG$/i,              canon: "HAND DIG",          dbore: false },
+  { re: /^HD$/i,                      canon: "HD",                dbore: false },
+  { re: /^PDB$/i,                     canon: "PDB",               dbore: false },
+  { re: /^D-BORE\b/i,                 canon: "D-BORE",            dbore: true  },
+];
+
+// Length pattern: optional '(' then digits then "'" then optional ')'
+const LEN_RE = /\(?\s*(\d+(?:\.\d+)?')\s*\)?$/;
+
+function normalizeBlockType(value) {
+  const v = value.trim();
+  const lenMatch = v.match(LEN_RE);
+  if (!lenMatch) return v;
+  const len = lenMatch[1];
+  const beforeLen = v.slice(0, v.lastIndexOf(lenMatch[0])).trim();
+  for (const bt of BLOCK_TYPES) {
+    if (bt.re.test(beforeLen) || bt.re.test(v.replace(LEN_RE, "").trim())) {
+      if (bt.dbore) return `D-BORE (${len})`;
+      if (bt.canon === "PDB" && !v.includes("(")) return `PDB ${len}`;
+      if ((bt.canon === "MB" || bt.canon === "HD") && !v.includes("(")) return `${bt.canon} ${len}`;
+      return `${bt.canon} (${len})`;
+    }
+  }
+  return v;
+}
+
+// Descriptor-only strings that should never appear as a redline value
+const BLACKLISTED_DESCRIPTORS = [
+  /^TOBY\s*BOX/i, /^BOREPIT/i, /^BORE\s*PIT/i, /^SPLICE\s*DAP/i,
+  /^DAP\s+IN\s+PIT/i, /^DAP$/i,
+  /^NEW\s*SWING\s*ARM/i, /^12F\s*STINGRAY/i, /^PL\.?\s*NEW\s*TOBY/i,
+  /^LAT[:\s]/i, /^LONG[:\s]/i, /^\d{2}\.\d+/,
+  /^\(\d+[A-Z]?\)$/i,
+  /^FIBER\s*ROUTE/i, /^NEW\s*CONDUIT$/i, /^EXISTING\s+/i,
+  /^[A-Z]{1,4}\s*\/\s*[A-Z]{1,4}$/, /^STREET\s*LIGHT/i,
+  /^UTILITY\s*POLE/i, /^POWER\s*POLE/i, /^PEDESTAL/i, /^PULL\s*BOX$/i,
+  // Diff-specific noise: equipment codes, node IDs, depth/EOP specs
+  /^TCBDB\d*/i, /^TCBHD\d*/i,         // equipment codes
+  /^EOP[:\s]/i,                         // EOP:6'
+  /^DEPTH[:\s]/i,                       // DEPTH:3'
+  /^DUCT[:\s]/i,                        // DUCT:13
+  /^COLOR[:\s]/i,                       // COLOR:WHITE
+  /^node-/i,                             // node-17922 etc
+  /^FCU-?\d+/i,                         // FCU-1, FCU-2
+  /^Bore\s+Summary/i,                   // FCU table rows
+  /^Equipment\s+Summary/i,
+  /^Hex\s+Summary/i,
+  /^HH\s+size/i,                        // "HH size changed..."
+  /^BORE\s*&\s*PLACE\s+changed/i,     // leftover change descriptions
+  /^HAND\s*DIG.*changed/i,
+];
+
+function isBlacklistedDescriptor(v) {
+  return BLACKLISTED_DESCRIPTORS.some(re => re.test(v.trim()));
+}
+
+function normalizeValue(value) {
+  let v = value.trim();
+
+  // Strip trailing parenthetical noise like (P), (P.), (N), (E) added by model
+  v = v.replace(/\s*\([A-Z]\.?\)\s*$/i, "").trim();
+
+  // Strip bare parens around a footage value: (7') -> 7'
+  const bareFootage = v.match(/^\((\d+(?:\.\d+)?')\)$/);
+  if (bareFootage) return bareFootage[1];
+
+  // Station
+  const sta = normalizeStation(v);
+  if (sta !== v) return sta;
+  // Hexatronic
+  const hex = normalizeHex(v);
+  if (hex !== v) return hex;
+  // Conduit
+  const cond = normalizeConduit(v);
+  if (cond !== v) return cond;
+  // Block type with length
+  return normalizeBlockType(v);
+}
+
+// Parse a single value token  -  handles "Removed X" and regular values
+function parseValueToken(raw) {
+  const v = raw.trim();
+  const removedMatch = v.match(/^Removed\s+(.+)$/i);
+  if (removedMatch) {
+    const item = normalizeValue(removedMatch[1].trim());
+    return { type: "removed", text: `Removed ${item}` };
+  }
+  return { type: "redline", text: normalizeValue(v) };
+}
+
+function parseResult(raw) {
+  if (!raw || raw.includes("NO_REDLINES")) return null;
+  const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+  let sheet = "?"; const callouts = [];
+  for (const line of lines) {
+    const sm = line.match(/^Sheet\s+(.+?):\s*$/i);
+    if (sm) { sheet = sm[1]; continue; }
+    const cm = line.match(/^Callout\s+([^:]+):\s*(.+)$/i);
+    if (cm) {
+      // Reject non-numeric callout IDs (node-XXXXX, FCU-N, etc.)
+      const numStr = cm[1].trim();
+      if (!/^\d{1,3}(&\d{1,3})*$/.test(numStr)) continue;
+      // Strip trailing AI commentary and "changed from X to Y" diff descriptions
+      const cleaned = cm[2]
+        // "changed from (41') to (40')" -> keep only the final value token before " --"
+        .replace(/\s*(?:changed\s+from\s+.+?\s+to\s+|HH\s+size\s+changed\s+.*?to\s+)/gi, "")
+        // "-- Clean shows (40')" / "-- identical; skip" / "-- Original: ..."
+        .replace(/\s*[—–-]{1,2}\s*(Clean\s+shows|Original:|identical[;,]?\s*skip|redlined?)[^\n]*/gi, "")
+        // Bold/italic commentary
+        .replace(/\s*-\s*\*{1,2}[^*]+\*{1,2}\s*appears\s+in.*/gi, "")
+        .replace(/\s*-\s*\*{1,2}.*$/gi, "")
+        .replace(/\s*\.{3,}.*$/g, "")
+        .replace(/\s*[-=>\s]\s*(RED\/?ORANGE\s*ink|redline|(ok)\s*REDLINE|red\s*ink|orange\s*ink|strikethrough|struck)[^\S\n]*.*/gi, "")
+        .replace(/\s*\((red|orange|redline|ink|color)\)\s*$/gi, "")
+        .replace(/\s*\[(red|orange|redline|ink|color)\]\s*$/gi, "")
+        .trim();
+      if (!cleaned) continue;
+      let parts = cleaned.split(/\s*[;|]\s*/).map(parseValueToken);
+      // Drop blacklisted descriptor values (TOBY BOX, PL. NEW TOBY BOX, LAT/LONG, etc.)
+      parts = parts.filter(p => !isBlacklistedDescriptor(p.text.replace(/^Removed\s+/i, "")));
+      if (!parts.length) continue;
+      // If any part is "Added in Callout #", drop all Removed parts
+      const hasAdded = parts.some(p => p.type === "redline" && /^Added\s+in\s+(Sheet\s+\S+\s+)?Callout\s+\S+/i.test(p.text));
+      if (hasAdded) parts = parts.filter(p => p.type !== "removed");
+      if (!parts.length) continue;
+      callouts.push({ num: cm[1].trim(), parts });
+    }
+  }
+  if (!callouts.length) return null;
+
+  // Merge callouts that share an identical station value (station-only  -  not lengths)
+  const partsKey = (parts) => parts.map(p => p.text).join("|");
+  const isStationOnly = (parts) =>
+    parts.length === 1 && parts[0].type === "redline" && /^STA\s+\d{2}\+\d{2,3}$/i.test(parts[0].text.trim());
+  const merged = [];
+  for (const c of callouts) {
+    if (isStationOnly(c.parts)) {
+      const key = partsKey(c.parts);
+      const existing = merged.find(m => partsKey(m.parts) === key);
+      if (existing) {
+        const nums = [...existing.num.split("&"), ...c.num.split("&")]
+          .map(n => n.trim())
+          .sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
+        existing.num = nums.join("&");
+        continue;
+      }
+    }
+    merged.push({ ...c });
+  }
+
+  return { sheet, callouts: merged };
+}
+
+// Colors
+const bg    = "#0d1117", panel = "#161b22", card = "#1c2330";
+const bdr   = "#21293a", bdrB  = "#2d3a50";
+const red   = "#f0554a", redS  = "rgba(240,85,74,0.12)", redG = "rgba(240,85,74,0.3)";
+const gold  = "#f5a623", goldS = "rgba(245,166,35,0.12)";
+const green = "#2ea96a", greenS = "rgba(46,169,106,0.12)";
+const blue  = "#3b82f6", blueS = "rgba(59,130,246,0.1)";
+const txt   = "#e6edf3", sub   = "#7d8fa8", muted = "#3d4f66";
+const mono  = "'IBM Plex Mono',monospace";
+const sans  = "'IBM Plex Sans',sans-serif";
+
+
+function App() {
+  usePdfJs();
+
+  const [pages,       setPages]       = useState([]);
+  const [drag,        setDrag]        = useState(false);
+  const [gs,          setGs]          = useState("idle");
+  const [err,         setErr]         = useState("");
+  const [fname,       setFname]       = useState("");
+  const [copied,      setCopied]      = useState(false);
+  const [copiedPage,  setCopiedPage]  = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [pickModal,   setPickModal]   = useState(null);
+
+  const ref = useRef();
+
+  // Step 1  -  render all pages, open picker modal
+  const openPicker = useCallback(async (file) => {
+    if (!file) return;
+    const isImg = file.type.startsWith("image/"), isPdf = file.type === "application/pdf";
+    if (!isImg && !isPdf) { setErr("Please upload a PDF or image file."); return; }
+    setErr(""); setFname(file.name); setGs("picking");
+    try {
+      let all;
+      if (isImg) {
+        const b64 = await fileToBase64(file);
+        all = [{ pageNum: 1, b64, mimeType: file.type, annotations: [], pageHeight: 0, pageWidth: 0 }];
+      } else {
+        all = await pdfToImages(file);
+      }
+      setPickModal({ allPages: all, selected: new Set(all.map((_, i) => i)) });
+    } catch (e) { setErr(String(e)); setGs("idle"); }
+  }, []);
+
+  // Step 2  -  user confirms, process selected pages with concurrent AI calls
+  const startProcessing = useCallback(async () => {
+    if (!pickModal) return;
+    const { allPages, selected } = pickModal;
+    const list = allPages.filter((_, i) => selected.has(i));
+    if (!list.length) return;
+    setPickModal(null); setPages([]); setSelectedIdx(0); setGs("loading");
+    try {
+      setPages(list.map(p => ({ ...p, s: "pending", raw: "", parsed: null })));
+
+      // Process pages sequentially (each page = 1 extraction call + N/5 redline calls)
+      for (let i = 0; i < list.length; i++) {
+        const { pageNum, b64, b64Clean, mimeType, annotations, textItems, pageHeight, pageWidth } = list[i];
+        setPages(prev => prev.map(p => p.pageNum === pageNum ? { ...p, s: "proc" } : p));
+        try {
+          const result = await callAIWithRetry(b64, b64Clean||null, mimeType, annotations||[], textItems||[], pageHeight||0, pageWidth||0);
+          const isAnn = result && typeof result === "object" && result.__annParsed;
+          const raw = isAnn ? "" : result;
+          const parsed = isAnn ? result.parsed : parseResult(result);
+          const debug = isAnn ? (result.debug || null) : null;
+          const rawResult = isAnn ? (result.rawResult || "") : raw;
+          setPages(prev => prev.map(p => p.pageNum === pageNum ? { ...p, s: "done", raw, parsed, debug, rawResult } : p));
+        if (i < list.length - 1) await new Promise(r => setTimeout(r, 500));
+        } catch (e) {
+          setPages(prev => prev.map(p => p.pageNum === pageNum ? { ...p, s: "err", raw: String(e) } : p));
+        }
+      }
+
+      setGs("done");
+    } catch (e) { setErr(String(e)); setGs("err"); }
+  }, [pickModal]);
+
+  const done   = pages.filter(p => p.s === "done" || p.s === "err").length;
+  const total  = pages.reduce((s, p) => s + (p.parsed?.callouts?.length || 0), 0);
+  const hasAny = pages.some(p => p.parsed?.callouts?.length);
+  const selPage = pages[selectedIdx];
+
+  // Patch a page's callout list immutably
+  const updatePageCallouts = useCallback((pageIdx, updater) => {
+    setPages(prev => prev.map((p, i) => {
+      if (i !== pageIdx || !p.parsed) return p;
+      const newCallouts = updater(p.parsed.callouts);
+      // Ensure parsed exists even if callouts emptied
+      return { ...p, parsed: { ...p.parsed, callouts: newCallouts } };
+    }));
+  }, []);
+
+  const editSheet = useCallback((pageIdx, newSheet) => {
+    setPages(prev => prev.map((p, i) => {
+      if (i !== pageIdx || !p.parsed) return p;
+      return { ...p, parsed: { ...p.parsed, sheet: newSheet.trim() || "?" } };
+    }));
+  }, []);
+
+  const deleteCallout = useCallback((pageIdx, calloutIdx) => {
+    updatePageCallouts(pageIdx, cs => cs.filter((_, i) => i !== calloutIdx));
+  }, [updatePageCallouts]);
+
+  // Merge callouts that share identical parts  -  only when the value is purely a station
+  const isStationOnly = (parts) =>
+    parts.length === 1 && parts[0].type === "redline" && /^STA\s+\d{2}\+\d{2,3}$/i.test(parts[0].text.trim());
+
+  const mergeCallouts = (cs) => {
+    const partsKey = (parts) => parts.map(p => p.text).join("|");
+    const merged = [];
+    for (const c of cs) {
+      if (isStationOnly(c.parts)) {
+        const key = partsKey(c.parts);
+        const existing = merged.find(m => partsKey(m.parts) === key);
+        if (existing) {
+          const nums = [...existing.num.split("&"), ...c.num.split("&")]
+            .map(n => n.trim())
+            .sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
+          existing.num = nums.join("&");
+          continue;
+        }
+      }
+      merged.push({ ...c });
+    }
+    return merged;
+  };
+
+  const editCallout = useCallback((pageIdx, calloutIdx, newNum, rawValue) => {
+    const parts = rawValue.split(/\s*;\s*/).map(s => parseValueToken(s.trim())).filter(p => p.text);
+    if (!parts.length) return;
+    updatePageCallouts(pageIdx, cs => {
+      const updated = cs.map((c, i) => i === calloutIdx ? { num: newNum.trim(), parts } : c);
+      updated.sort((a, b) => (parseFloat(a.num) || 0) - (parseFloat(b.num) || 0));
+      return mergeCallouts(updated);
+    });
+  }, [updatePageCallouts]);
+
+  const addCallout = useCallback((pageIdx, num, rawValue) => {
+    const parts = rawValue.split(/\s*;\s*/).map(s => parseValueToken(s.trim())).filter(p => p.text);
+    if (!parts.length) return;
+    updatePageCallouts(pageIdx, cs => {
+      const combined = [...cs, { num: num.trim(), parts }];
+      combined.sort((a, b) => (parseFloat(a.num) || 0) - (parseFloat(b.num) || 0));
+      return mergeCallouts(combined);
+    });
+  }, [updatePageCallouts]);
+
+  const pageText = (p) => p?.parsed
+    ? `Sheet ${p.parsed.sheet}:\n` + p.parsed.callouts.map(c =>
+        `Callout ${c.num}: ${c.parts.map(pt => pt.text).join("; ")}`
+      ).join("\n")
+    : "";
+
+  const copyToClipboard = (text, onSuccess) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(onSuccess).catch(() => fallbackCopy(text, onSuccess));
+    } else {
+      fallbackCopy(text, onSuccess);
+    }
+  };
+
+  const fallbackCopy = (text, onSuccess) => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand("copy"); onSuccess(); } catch (e) { console.error("Copy failed", e); }
+    document.body.removeChild(ta);
+  };
+
+  const allText = pages.filter(p => p.parsed).map(pageText).join("\n\n");
+  const copy     = () => copyToClipboard(allText, () => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  const copyPage = () => {
+    const p = pages[selectedIdx];
+    if (!p) return;
+    copyToClipboard(pageText(p), () => { setCopiedPage(true); setTimeout(() => setCopiedPage(false), 2000); });
+  };
+
+  const togglePage  = (i) => setPickModal(prev => {
+    if (!prev) return prev;
+    const s = new Set(prev.selected);
+    s.has(i) ? s.delete(i) : s.add(i);
+    return { ...prev, selected: s };
+  });
+  const selectAll  = () => setPickModal(prev => prev ? { ...prev, selected: new Set(prev.allPages.map((_, i) => i)) } : prev);
+  const selectNone = () => setPickModal(prev => prev ? { ...prev, selected: new Set() } : prev);
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{background:${bg};font-family:${sans};color:${txt};-webkit-font-smoothing:antialiased}
+        ::-webkit-scrollbar{width:5px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:${bdrB};border-radius:4px}
+        ::-webkit-scrollbar-thumb:hover{background:${sub}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+        @keyframes in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes mIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 ${redG}}50%{box-shadow:0 0 0 4px transparent}}
+        .in{animation:in .25s cubic-bezier(.22,1,.36,1) both}
+        .mIn{animation:mIn .2s ease both}
+        .sp{animation:spin .9s linear infinite;display:inline-block}
+        .bl{animation:blink 1.6s ease infinite}
+        .dz{transition:all .2s;cursor:pointer}
+        .dz:hover,.dz.on{border-color:${red}!important;background:rgba(240,85,74,0.06)!important;box-shadow:0 0 0 3px ${redS}!important}
+        .row:hover{background:rgba(255,255,255,0.025)!important}
+        .pg-btn{transition:background .12s;cursor:pointer;border:none;text-align:left;width:100%}
+        .pg-btn:hover{background:rgba(255,255,255,0.04)!important}
+        .pg-btn.active{background:rgba(240,85,74,0.1)!important;border-left:3px solid ${red}!important}
+        .th-card{transition:transform .15s,box-shadow .15s;cursor:pointer;border-radius:10px;overflow:hidden;position:relative;user-select:none}
+        .th-card:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(0,0,0,.6)!important}
+        .btn-ghost{background:transparent;border:1px solid ${bdrB};color:${sub};border-radius:7px;
+          padding:6px 14px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;font-family:${sans}}
+        .btn-ghost:hover{border-color:${sub};color:${txt};background:rgba(255,255,255,.04)}
+        .editable-input{
+          background:${panel};
+          border:1.5px solid ${bdrB};
+          border-radius:6px;
+          color:${txt};
+          font-family:${mono};
+          font-size:13px;
+          font-weight:500;
+          padding:6px 10px;
+          outline:none;
+          transition:border-color .15s, box-shadow .15s;
+          width:100%;
+        }
+        .editable-input:focus{
+          border-color:${blue};
+          box-shadow:0 0 0 3px rgba(59,130,246,0.15);
+          background:${bg};
+        }
+        .editable-input:hover:not(:focus){border-color:${sub}}
+        .editable-num{
+          background:${panel};
+          border:1.5px solid ${bdrB};
+          border-radius:6px;
+          color:${sub};
+          font-family:${mono};
+          font-size:11px;
+          font-weight:600;
+          padding:4px 8px;
+          outline:none;
+          transition:border-color .15s, box-shadow .15s;
+          text-align:center;
+          width:90px;
+        }
+        .editable-num:focus{
+          border-color:${blue};
+          box-shadow:0 0 0 3px rgba(59,130,246,0.15);
+          background:${bg};
+          color:${txt};
+        }
+        .editable-num:hover:not(:focus){border-color:${sub}}
+        .sheet-input{
+          background:rgba(245,166,35,0.08);
+          border:1.5px solid rgba(245,166,35,0.3);
+          border-radius:5px;
+          color:${gold};
+          font-family:${mono};
+          font-size:10px;
+          font-weight:700;
+          padding:2px 6px;
+          outline:none;
+          letter-spacing:.04em;
+          transition:border-color .15s, box-shadow .15s;
+        }
+        .sheet-input:focus{
+          border-color:${gold};
+          box-shadow:0 0 0 2px rgba(245,166,35,0.2);
+        }
+        .sheet-input:hover:not(:focus){border-color:rgba(245,166,35,0.5)}
+      `}</style>
+
+      <div style={{ minHeight: "100vh", background: bg, display: "flex", flexDirection: "column" }}>
+
+        {/* Navbar */}
+        <div style={{ background: panel, borderBottom: `1px solid ${bdr}`, height: 60, display: "flex", alignItems: "center", padding: "0 28px", justifyContent: "space-between", flexShrink: 0, boxShadow: "0 1px 0 rgba(255,255,255,.04)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: `linear-gradient(135deg, ${red}, #c93d31)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, boxShadow: `0 2px 12px ${redG}, 0 0 0 1px rgba(255,255,255,.06)` }}>&#9998;</div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-.01em", color: txt }}>Redline Notes Generator</div>
+              <div style={{ fontSize: 10, color: muted, fontFamily: mono, letterSpacing: ".03em", marginTop: 1 }}>FTTH · Construction Drawing Annotation Parser</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {hasAny && selPage?.parsed && (
+              <button onClick={copyPage} className="btn-ghost" style={{ color: copiedPage ? green : sub, borderColor: copiedPage ? green : bdrB, gap: 6, display: "flex", alignItems: "center" }}>
+                {copiedPage ? "✓ Copied!" : "Copy Page"}
+              </button>
+            )}
+            {hasAny && (
+              <button onClick={copy} style={{
+                background: copied ? green : `linear-gradient(135deg, ${red}, #d9443a)`,
+                color: "#fff", border: "none", borderRadius: 7,
+                padding: "7px 16px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                boxShadow: copied ? `0 2px 12px rgba(46,169,106,.4)` : `0 2px 12px ${redG}`,
+                transition: "all .2s", letterSpacing: ".01em",
+              }}>{copied ? "✓ Copied!" : "Copy All"}</button>
+            )}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", maxWidth: 1160, width: "100%", margin: "0 auto", padding: "24px 20px 48px", gap: 20, alignItems: "flex-start" }}>
+
+          {/* Left sidebar */}
+          <div style={{ width: 230, flexShrink: 0, display: "flex", flexDirection: "column", gap: 14 }}>
+
+            {/* Drop zone */}
+            <div className={`dz${drag ? " on" : ""}`}
+              onDragOver={e => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={e => { e.preventDefault(); setDrag(false); openPicker(e.dataTransfer.files?.[0]); }}
+              onClick={() => ref.current?.click()}
+              style={{ border: `2px dashed ${bdrB}`, borderRadius: 14, background: panel, padding: "22px 16px 20px", textAlign: "center" }}
+            >
+              <input ref={ref} type="file" accept=".pdf,image/*" style={{ display: "none" }} onChange={e => { openPicker(e.target.files?.[0]); e.target.value = ""; }} />
+              <div style={{ fontSize: 28, marginBottom: 8, lineHeight: 1 }}>
+                {gs === "picking" || gs === "loading" ? <span className="sp" style={{ fontSize: 22, color: red }}>↻</span> : "📄"}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, lineHeight: 1.4 }}>
+                {gs === "picking" ? <span className="bl" style={{ fontSize: 11, color: gold }}>Rendering pages…</span>
+                 : gs === "loading" ? <span className="bl" style={{ fontSize: 11, color: gold }}>Processing…</span>
+                 : gs === "done"    ? <span style={{ color: green, fontSize: 11 }}>✓ Done · click to reload</span>
+                 : <span style={{ color: sub }}>Drop PDF or image</span>}
+              </div>
+              {fname && <div style={{ fontSize: 10, color: muted, wordBreak: "break-all", marginTop: 4, fontFamily: mono }}>{fname}</div>}
+              {!fname && gs === "idle" && <div style={{ fontSize: 10, color: muted, marginTop: 2 }}>or click to browse</div>}
+              {gs === "loading" && pages.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ height: 3, background: bdr, borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: `linear-gradient(90deg, ${red}, ${gold})`, borderRadius: 2, width: `${(done / pages.length) * 100}%`, transition: "width .4s" }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: muted, marginTop: 5, fontFamily: mono }}>{done} / {pages.length} pages</div>
+                </div>
+              )}
+            </div>
+
+            {/* Page list */}
+            {pages.length > 0 && (
+              <div style={{ background: panel, border: `1px solid ${bdr}`, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "9px 13px", borderBottom: `1px solid ${bdr}`, fontSize: 10, fontWeight: 700, color: muted, letterSpacing: ".1em", textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Pages</span>
+                  <span style={{ color: bdrB, fontFamily: mono }}>{pages.length}</span>
+                </div>
+                <div style={{ maxHeight: 400, overflowY: "auto" }}>
+                  {pages.map((p, i) => {
+                    const isActive = i === selectedIdx;
+                    const count = p.parsed?.callouts?.length || 0;
+                    const dotColor = p.s === "proc" ? gold : p.s === "pending" ? muted : p.s === "err" ? red : count > 0 ? red : green;
+                    return (
+                      <button key={i} className={`pg-btn${isActive ? " active" : ""}`} onClick={() => setSelectedIdx(i)}
+                        style={{ padding: "10px 13px", background: "transparent",
+                          borderLeft: `3px solid ${isActive ? red : "transparent"}`,
+                          borderRight: "none", borderTop: "none", borderBottom: `1px solid ${bdr}` }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                            <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                              background: isActive ? redS : `${dotColor}15`,
+                              border: `1.5px solid ${isActive ? red : dotColor + "60"}`,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 9, fontWeight: 700, color: isActive ? red : dotColor, fontFamily: mono }}>
+                              {p.s === "proc" ? <span className="sp" style={{ fontSize: 9 }}>↻</span> : p.pageNum}
+                            </div>
+                            <div style={{ textAlign: "left" }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: isActive ? txt : sub, lineHeight: 1.2 }}>Page {p.pageNum}</div>
+                              {p.parsed?.sheet && p.parsed.sheet !== "?" && (
+                                <div style={{ fontSize: 9, color: muted, fontFamily: mono, marginTop: 1 }}>Sheet {p.parsed.sheet}</div>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            {p.s === "proc"    && <span style={{ fontSize: 9, color: gold }} className="bl">***</span>}
+                            {p.s === "pending" && <span style={{ fontSize: 9, color: muted }}>–</span>}
+                            {p.s === "done" && count > 0 && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 10, background: redS, color: red, fontFamily: mono }}>{count}</span>}
+                            {p.s === "done" && count === 0 && <span style={{ fontSize: 11, color: green }}>✓</span>}
+                            {p.s === "err" && <span style={{ fontSize: 11, color: red }}>!</span>}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {gs === "done" && (
+                  <div style={{ padding: "9px 13px", borderTop: `1px solid ${bdr}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 10, color: muted }}>{pages.filter(p => p.parsed?.callouts?.length).length} w/ redlines</span>
+                    <span style={{ fontSize: 11, color: red, fontFamily: mono, fontWeight: 700 }}>{total} total</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Idle tips */}
+            {gs === "idle" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[["📂","Upload","Drop a PDF or image file"],["☑","Pick pages","Choose which pages to scan"],["📋","Export","Copy extracted redlines"]].map(([ico,t,d]) => (
+                  <div key={t} style={{ background: card, border: `1px solid ${bdr}`, borderRadius: 10, padding: "11px 13px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 15 }}>{ico}</span>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 2, color: txt }}>{t}</div>
+                      <div style={{ fontSize: 10, color: muted, lineHeight: 1.5 }}>{d}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right: detail + summary */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+            {err && <div style={{ background: "rgba(240,85,74,0.1)", border: `1px solid rgba(240,85,74,0.3)`, borderRadius: 10, padding: "12px 16px", color: red, fontSize: 13, display: "flex", gap: 8, alignItems: "flex-start" }}>⚠ {err}</div>}
+            {!selPage && gs === "idle" && (
+              <div style={{ background: panel, border: `1px solid ${bdr}`, borderRadius: 16, padding: "60px 24px", textAlign: "center" }}>
+                <div style={{ fontSize: 40, marginBottom: 14, opacity: .6 }}>📄</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: sub, marginBottom: 8 }}>No file loaded</div>
+                <div style={{ fontSize: 12, color: muted, lineHeight: 1.6 }}>Upload a PDF or image from the left panel<br/>to extract redline annotations</div>
+              </div>
+            )}
+            {selPage && <PageCard page={selPage} total={pages.length}
+              onDelete={(ci) => deleteCallout(selectedIdx, ci)}
+              onEdit={(ci, num, val) => editCallout(selectedIdx, ci, num, val)}
+              onEditSheet={(sheet) => editSheet(selectedIdx, sheet)}
+              onAdd={(num, val) => addCallout(selectedIdx, num, val)}
+              debug={selPage?.debug}
+              rawResult={selPage?.rawResult}
+              b64={selPage?.b64}
+              b64Clean={selPage?.b64Clean}
+              mimeType={selPage?.mimeType} />}
+            {/* Live summary of all pages */}
+            {pages.some(p => p.parsed) && <SummaryPanel pages={pages} />}
+          </div>
+        </div>
+      </div>
+
+      {/* -- Page Picker Modal ----------------------------------------------- */}
+      {pickModal && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) { setPickModal(null); setGs("idle"); } }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.72)", zIndex: 100,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div className="mIn" style={{ background: panel, border: `1px solid ${bdrB}`, borderRadius: 16,
+            width: "100%", maxWidth: 800, maxHeight: "88vh", display: "flex", flexDirection: "column",
+            boxShadow: "0 32px 80px rgba(0,0,0,.7)" }}>
+
+            {/* Modal header */}
+            <div style={{ padding: "16px 20px", borderBottom: `1px solid ${bdr}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>Select Pages to Scan</div>
+                <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>
+                  {fname} &nbsp;·&nbsp; {pickModal.allPages.length} page{pickModal.allPages.length !== 1 ? "s" : ""} &nbsp;·&nbsp;
+                  <span style={{ color: pickModal.selected.size > 0 ? red : muted, fontWeight: 600 }}>
+                    {pickModal.selected.size} selected
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button className="btn-ghost" onClick={selectAll}>Select All</button>
+                <button className="btn-ghost" onClick={selectNone}>Deselect All</button>
+                <button onClick={() => { setPickModal(null); setGs("idle"); }}
+                  style={{ background: "transparent", border: "none", color: muted, fontSize: 20, lineHeight: 1, cursor: "pointer", padding: "0 4px", marginLeft: 4 }}>✕</button>
+              </div>
+            </div>
+
+            {/* Thumbnail grid */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 14 }}>
+                {pickModal.allPages.map((p, i) => {
+                  const sel = pickModal.selected.has(i);
+                  return (
+                    <div key={i} className="th-card" onClick={() => togglePage(i)}
+                      style={{ background: card, border: `2px solid ${sel ? red : bdr}`,
+                        boxShadow: sel ? `0 0 0 3px ${redS}` : "none" }}>
+                      {/* Thumbnail */}
+                      <div style={{ position: "relative", background: "#0a0f14", lineHeight: 0 }}>
+                        <img src={`data:image/jpeg;base64,${p.b64}`} alt={`Page ${p.pageNum}`}
+                          style={{ width: "100%", height: 108, objectFit: "cover", objectPosition: "top",
+                            display: "block", opacity: sel ? 1 : 0.45, transition: "opacity .15s" }} />
+                        {/* Check badge */}
+                        <div style={{ position: "absolute", top: 7, right: 7,
+                          width: 22, height: 22, borderRadius: "50%",
+                          background: sel ? red : "rgba(0,0,0,.55)",
+                          border: `2px solid ${sel ? red : bdrB}`,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 11, color: "#fff", fontWeight: 700,
+                          transition: "all .15s", boxShadow: sel ? `0 0 8px ${redG}` : "none" }}>
+                          {sel ? "✓" : ""}
+                        </div>
+                      </div>
+                      {/* Label */}
+                      <div style={{ padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: sel ? txt : sub }}>Page {p.pageNum}</span>
+                        {sel && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 8, background: redS, color: red, fontFamily: mono }}>✓</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal footer */}
+            <div style={{ padding: "14px 20px", borderTop: `1px solid ${bdr}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 12 }}>
+              <div style={{ fontSize: 12, color: muted }}>
+                {pickModal.selected.size === 0
+                  ? "⚠ Select at least one page to continue"
+                  : `${pickModal.selected.size} page${pickModal.selected.size !== 1 ? "s" : ""} will be sent to AI`}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn-ghost" onClick={() => { setPickModal(null); setGs("idle"); }}>Cancel</button>
+                <button onClick={startProcessing} disabled={pickModal.selected.size === 0}
+                  style={{ background: pickModal.selected.size === 0 ? bdr : red,
+                    color: pickModal.selected.size === 0 ? muted : "#fff",
+                    border: "none", borderRadius: 7, padding: "8px 22px",
+                    fontSize: 13, fontWeight: 700,
+                    cursor: pickModal.selected.size === 0 ? "not-allowed" : "pointer",
+                    boxShadow: pickModal.selected.size > 0 ? `0 0 14px ${redG}` : "none",
+                    transition: "all .2s" }}>
+                  Scan {pickModal.selected.size > 0 ? `${pickModal.selected.size} Page${pickModal.selected.size !== 1 ? "s" : ""}` : "Pages"} →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+
+function SummaryPanel({ pages }) {
+  const [copied, setCopied] = useState(false);
+
+  const sheets = pages
+    .filter(p => p.parsed?.callouts?.length)
+    .map(p => ({ sheet: p.parsed.sheet, callouts: p.parsed.callouts }));
+
+  if (!sheets.length) return null;
+
+  const summaryText = sheets.map(({ sheet, callouts }) =>
+    `Sheet ${sheet}:\n` + callouts.map(c =>
+      `Callout ${c.num}: ${c.parts.map(pt => pt.text).join("; ")}`
+    ).join("\n")
+  ).join("\n");
+
+  const copy = () => {
+    const onSuccess = () => { setCopied(true); setTimeout(() => setCopied(false), 2000); };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(summaryText).then(onSuccess).catch(() => fallback());
+    } else {
+      fallback();
+    }
+    function fallback() {
+      const ta = document.createElement("textarea");
+      ta.value = summaryText;
+      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      try { document.execCommand("copy"); onSuccess(); } catch (e) { console.error("Copy failed", e); }
+      document.body.removeChild(ta);
+    }
+  };
+
+  const totalCallouts = sheets.reduce((n, s) => n + s.callouts.length, 0);
+
+  return (
+    <div className="in" style={{ background: card, border: `1px solid ${bdr}`, borderRadius: 14, overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ padding: "13px 18px", background: panel, borderBottom: `1px solid ${bdr}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 7, background: `rgba(59,130,246,0.15)`, border: `1px solid rgba(59,130,246,0.3)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>?</div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: txt }}>Summary</div>
+            <div style={{ fontSize: 10, color: muted, fontFamily: mono, marginTop: 1 }}>
+              {sheets.length} sheet{sheets.length !== 1 ? "s" : ""} ? {totalCallouts} callout{totalCallouts !== 1 ? "s" : ""}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={copy}
+          style={{
+            background: copied ? green : "transparent",
+            color: copied ? "#fff" : sub,
+            border: `1.5px solid ${copied ? green : bdrB}`,
+            borderRadius: 7, padding: "6px 14px", fontSize: 11, fontWeight: 600,
+            cursor: "pointer", transition: "all .2s", fontFamily: sans,
+            boxShadow: copied ? `0 2px 10px rgba(46,169,106,.3)` : "none",
+          }}
+        >{copied ? "✓ Copied!" : "Copy"}</button>
+      </div>
+
+      {/* Plain text preview */}
+      <div style={{ padding: "16px 18px" }}>
+        <pre style={{ fontFamily: mono, fontSize: 12.5, lineHeight: 2, whiteSpace: "pre-wrap", wordBreak: "break-word", margin: 0 }}>
+          {sheets.map(({ sheet, callouts }) => (
+            <span key={sheet}>
+              <span style={{ color: gold, fontWeight: 600 }}>{`Sheet ${sheet}:\n`}</span>
+              {callouts.map((c, ci) => (
+                <span key={ci} style={{ color: txt, opacity: .9 }}>{`Callout ${c.num}: `}<span style={{ color: red, fontWeight: 600 }}>{`${c.parts.map(pt => pt.text).join("; ")}\n`}</span></span>
+              ))}
+            </span>
+          ))}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function PageCard({ page, total, onDelete, onEdit, onEditSheet, onAdd, debug, rawResult, b64, b64Clean, mimeType }) {
+  const { pageNum, s, raw, parsed } = page;
+  const has = !!parsed?.callouts?.length;
+
+  // Sheet editable state
+  const [sheetVal, setSheetVal] = useState(parsed?.sheet ?? "?");
+  useEffect(() => { setSheetVal(parsed?.sheet ?? "?"); }, [parsed?.sheet]);
+  const sheetCommitted = useRef(false);
+  const commitSheet = () => { if (onEditSheet) onEditSheet(sheetVal); };
+  const handleSheetKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sheetCommitted.current = true;
+      commitSheet();
+      e.target.blur();
+      setTimeout(() => { sheetCommitted.current = false; }, 50);
+    }
+  };
+  const handleSheetBlur = () => { if (!sheetCommitted.current) commitSheet(); };
+
+  // Per-row editable state
+  const [rowNums, setRowNums] = useState([]);
+  const [rowVals, setRowVals] = useState([]);
+  const [saved,   setSaved]   = useState({});
+  const justCommitted = useRef(false);
+
+  useEffect(() => {
+    if (parsed?.callouts) {
+      setRowNums(parsed.callouts.map(c => c.num));
+      setRowVals(parsed.callouts.map(c => c.parts.map(p => p.text).join("; ")));
+      setSaved({});
+    }
+  }, [parsed?.callouts]);
+
+  const commitRow = (i) => {
+    const num = (rowNums[i] ?? "").trim();
+    const val = (rowVals[i] ?? "").trim();
+    if (!num || !val) return;
+    onEdit(i, num, val);
+    setSaved(prev => ({ ...prev, [i]: true }));
+    setTimeout(() => setSaved(prev => { const n = { ...prev }; delete n[i]; return n; }), 1400);
+  };
+
+  const handleRowKeyDown = (e, i) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      justCommitted.current = true;
+      commitRow(i);
+      e.target.blur();
+      setTimeout(() => { justCommitted.current = false; }, 50);
+    }
+  };
+
+  const handleRowBlur = (i) => {
+    if (justCommitted.current) return;
+    commitRow(i);
+  };
+
+  // Add form
+  const [addNum, setAddNum] = useState("");
+  const [addVal, setAddVal] = useState("");
+  const [addErr, setAddErr] = useState("");
+  const addRef = useRef();
+
+  const submitAdd = () => {
+    const num = addNum.trim(), val = addVal.trim();
+    if (!num) { setAddErr("Enter a callout number"); return; }
+    if (!val) { setAddErr("Enter a value"); return; }
+    if (!/^\d+(&\d+)?$/.test(num)) { setAddErr("Must be a number (e.g. 5 or 1&2)"); return; }
+    onAdd(num, val);
+    setAddNum(""); setAddVal(""); setAddErr("");
+    setTimeout(() => addRef.current?.focus(), 50);
+  };
+
+  const chipColor = s === "proc" ? gold : has ? red : s === "err" ? red : green;
+  const chipBg    = s === "proc" ? goldS : has ? redS : s === "err" ? redS : greenS;
+
+  return (
+    <div className="in" style={{ background: card, border: `1px solid ${bdr}`, borderRadius: 14, overflow: "hidden" }}>
+
+      {/* -- Header -- */}
+      <div style={{ padding: "13px 18px", background: panel, borderBottom: `1px solid ${bdr}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+          {/* Page badge */}
+          <div style={{
+            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+            background: chipBg, border: `1.5px solid ${chipColor}55`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 11, fontWeight: 700, color: chipColor, fontFamily: mono,
+          }}>{s === "proc" ? <span className="sp">↻</span> : pageNum}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: txt, lineHeight: 1.2 }}>
+              {total === 1 ? "Uploaded Drawing" : `Page ${pageNum}`}
+            </div>
+            {parsed?.sheet !== undefined && (
+              <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+                <span style={{ fontSize: 10, color: muted, fontFamily: mono, letterSpacing: ".05em" }}>SHEET</span>
+                <input
+                  className="sheet-input"
+                  value={sheetVal}
+                  onChange={e => setSheetVal(e.target.value)}
+                  onKeyDown={handleSheetKeyDown}
+                  onBlur={handleSheetBlur}
+                  style={{ width: Math.max(32, sheetVal.length * 8 + 16) }}
+                  title="Edit sheet number"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ flexShrink: 0 }}>
+          {s === "proc" && <Chip c={gold} bg={goldS} label="Scanning…" blink />}
+          {s === "err"  && <Chip c={red}  bg={redS}  label="Error" />}
+          {s === "done" && has  && <Chip c={red}   bg={redS}   label={`${parsed.callouts.length} redline${parsed.callouts.length !== 1 ? "s" : ""}`} />}
+          {s === "done" && !has && <Chip c={green} bg={greenS} label="Clean" />}
+        </div>
+      </div>
+
+      {/* -- Status states -- */}
+      {s === "proc" && (
+        <div style={{ padding: "28px 18px", color: sub, fontSize: 13, display: "flex", alignItems: "center", gap: 10 }} className="bl">
+          <span style={{ fontSize: 16 }}>↻</span> Scanning for redline annotations…
+        </div>
+      )}
+      {s === "err" && (
+        <div style={{ padding: "14px 18px", color: red, fontSize: 13, background: redS, borderBottom: `1px solid ${red}33` }}>(!) {raw}</div>
+      )}
+      {s === "done" && !has && (
+        <div style={{ padding: "32px 18px", textAlign: "center" }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>(ok)</div>
+          <div style={{ fontSize: 13, color: sub, fontWeight: 500 }}>No redlines found on this page</div>
+        </div>
+      )}
+
+      {/* -- Callout rows -- */}
+      {has && (
+        <div>
+          {/* Column header */}
+          <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 32px", gap: 10, padding: "8px 18px", borderBottom: `1px solid ${bdr}`, background: `${bdr}60` }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: muted, letterSpacing: ".1em", textTransform: "uppercase", fontFamily: mono }}>Callout #</span>
+            <span style={{ fontSize: 9, fontWeight: 700, color: muted, letterSpacing: ".1em", textTransform: "uppercase", fontFamily: mono }}>Value</span>
+            <span />
+          </div>
+
+          {parsed.callouts.map((c, i) => (
+            <div key={i} className="row" style={{
+              display: "grid", gridTemplateColumns: "120px 1fr 32px", gap: 10,
+              padding: "8px 18px", alignItems: "center",
+              borderBottom: i < parsed.callouts.length - 1 ? `1px solid ${bdr}` : "none",
+            }}>
+              {/* Callout number input */}
+              <input
+                className="editable-num"
+                value={rowNums[i] ?? c.num}
+                onChange={e => setRowNums(prev => { const n = [...prev]; n[i] = e.target.value; return n; })}
+                onKeyDown={e => handleRowKeyDown(e, i)}
+                onBlur={() => handleRowBlur(i)}
+                title="Callout number"
+              />
+
+              {/* Value input */}
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  className="editable-input"
+                  value={rowVals[i] ?? c.parts.map(p => p.text).join("; ")}
+                  onChange={e => setRowVals(prev => { const n = [...prev]; n[i] = e.target.value; return n; })}
+                  onKeyDown={e => handleRowKeyDown(e, i)}
+                  onBlur={() => handleRowBlur(i)}
+                  style={{ color: red, fontWeight: 600 }}
+                  title="Edit value  -  Enter or click away to save"
+                />
+                {saved[i] && (
+                  <span style={{ position: "absolute", right: 10, fontSize: 11, color: green, fontWeight: 700, pointerEvents: "none" }}>(ok)</span>
+                )}
+              </div>
+
+              {/* Delete */}
+              {onDelete && (
+                <button
+                  onClick={() => onDelete(i)}
+                  title="Delete callout"
+                  style={{ width: 28, height: 28, borderRadius: 6, background: "transparent", border: `1px solid transparent`, color: muted, fontSize: 13, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = redS; e.currentTarget.style.borderColor = red + "44"; e.currentTarget.style.color = red; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.color = muted; }}
+                >✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* -- Add callout form -- */}
+      {s === "done" && onAdd && (
+        <div style={{ padding: "14px 18px", borderTop: `1px solid ${bdr}`, background: `${bg}88` }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10, fontFamily: mono }}>
+            Add Callout
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <input
+              ref={addRef}
+              className="editable-num"
+              value={addNum}
+              onChange={e => { setAddNum(e.target.value); setAddErr(""); }}
+              onKeyDown={e => e.key === "Enter" && submitAdd()}
+              placeholder="#"
+              style={{ width: 52 }}
+            />
+            <input
+              className="editable-input"
+              value={addVal}
+              onChange={e => { setAddVal(e.target.value); setAddErr(""); }}
+              onKeyDown={e => e.key === "Enter" && submitAdd()}
+              placeholder="Value  (e.g. 43'  or  RT5-HEX-12-WAY)"
+              style={{ flex: 1, minWidth: 200 }}
+            />
+            <button onClick={submitAdd} style={{
+              background: `linear-gradient(135deg, ${red}, #d9443a)`, color: "#fff",
+              border: "none", borderRadius: 7, padding: "7px 16px", fontSize: 12,
+              fontWeight: 600, cursor: "pointer", boxShadow: `0 2px 10px ${redG}`,
+              transition: "opacity .15s", flexShrink: 0, fontFamily: sans,
+            }}
+              onMouseEnter={e => e.currentTarget.style.opacity = ".85"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >+ Add</button>
+          </div>
+          {addErr && <div style={{ fontSize: 11, color: red, marginTop: 7, display: "flex", alignItems: "center", gap: 5 }}>⚠ {addErr}</div>}
+          <div style={{ fontSize: 10, color: muted, marginTop: 8, lineHeight: 1.6 }}>
+            Use <span style={{ fontFamily: mono, color: sub, background: bdr, padding: "1px 5px", borderRadius: 3 }}>;</span> to separate multiple values &nbsp;?&nbsp;
+            prefix <span style={{ fontFamily: mono, color: sub, background: bdr, padding: "1px 5px", borderRadius: 3 }}>Removed X</span> for deletions
+          </div>
+        </div>
+      )}
+
+      {/* -- Annotation debug panel -- */}
+      {/* -- Callout reader raw output -- */}
+      {rawResult && s === "done" && <CalloutReaderPanel rawResult={rawResult} />}
+
+      {/* -- Page image comparison viewer -- */}
+      {(b64 || b64Clean) && s === "done" && (
+        <PageImageViewer b64={b64} b64Clean={b64Clean} mimeType={mimeType} />
+      )}
+
+      {debug && <AnnotationDebugPanel debug={debug} />}
+    </div>
+  );
+}
+
+function Chip({ c, bg, label, blink: bl }) {
+  return (
+    <span className={bl ? "bl" : ""} style={{
+      fontSize: 10, fontWeight: 600, padding: "3px 10px", borderRadius: 20,
+      background: bg, color: c, border: `1.5px solid ${c}44`, letterSpacing: ".02em",
+      fontFamily: sans,
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function AnnotationDebugPanel({ debug }) {
+  const [open, setOpen] = useState(false);
+  if (!debug) return null;
+  const { layout, rows } = debug;
+  const unmatched = rows.filter(r => !r.matched);
+  const matched   = rows.filter(r =>  r.matched);
+
+  return (
+    <div style={{ borderTop: `1px solid ${bdr}`, background: `${bg}cc` }}>
+      {/* Toggle header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", background: "transparent", border: "none", cursor: "pointer",
+          padding: "10px 18px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          color: sub, fontFamily: sans,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", fontFamily: mono }}>
+            Annotation Debug
+          </span>
+          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 8, background: blueS, color: blue, fontWeight: 700, fontFamily: mono }}>
+            {rows.length} ann · {layout}
+          </span>
+          {unmatched.length > 0 && (
+            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 8, background: goldS, color: gold, fontWeight: 700, fontFamily: mono }}>
+              {unmatched.length} unmatched
+            </span>
+          )}
+        </div>
+        <span style={{ fontSize: 13, transition: "transform .15s", display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 18px 14px" }}>
+          {/* Layout info */}
+          <div style={{ fontSize: 10, color: muted, marginBottom: 10, fontFamily: mono }}>
+            Method: <span style={{ color: blue }}>{layout}</span>
+            {layout === "visual-diff" ? " — callout numbers assigned by image reading" :
+             layout === "horizontal"  ? " — matching by X axis" : " — matching by Y axis"}
+          </div>
+
+          {/* Table header */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "1fr 60px 60px 80px 50px 50px",
+            gap: 8, padding: "5px 8px",
+            background: bdr, borderRadius: "6px 6px 0 0",
+            fontSize: 9, fontWeight: 700, color: muted, letterSpacing: ".08em",
+            textTransform: "uppercase", fontFamily: mono,
+          }}>
+            <span>Value</span>
+            <span>CX</span>
+            <span>CY</span>
+            <span>→ Callout</span>
+            <span>Type</span>
+            <span>Source</span>
+          </div>
+
+          {/* Rows */}
+          <div style={{ border: `1px solid ${bdr}`, borderTop: "none", borderRadius: "0 0 6px 6px", overflow: "hidden" }}>
+            {rows.map((r, i) => {
+              const isUnmatched = !r.matched;
+              const isDiff = r.source === "diff";
+              return (
+                <div key={i} style={{
+                  display: "grid", gridTemplateColumns: "1fr 60px 60px 80px 50px 50px",
+                  gap: 8, padding: "5px 8px", alignItems: "center",
+                  borderBottom: i < rows.length - 1 ? `1px solid ${bdr}` : "none",
+                  background: isDiff ? `rgba(59,130,246,0.06)` : isUnmatched ? `rgba(245,166,35,0.04)` : "transparent",
+                }}>
+                  <span style={{ fontFamily: mono, fontSize: 11, fontWeight: 600, color: isUnmatched ? gold : red, wordBreak: "break-all" }}>
+                    {r.value}
+                  </span>
+                  <span style={{ fontFamily: mono, fontSize: 10, color: sub }}>{r.cx ?? "—"}</span>
+                  <span style={{ fontFamily: mono, fontSize: 10, color: sub }}>{r.cy ?? "—"}</span>
+                  <span style={{ fontFamily: mono, fontSize: 11, fontWeight: 700, color: isUnmatched ? gold : green }}>
+                    {isUnmatched ? "⚠ none" : `#${r.matched}`}
+                  </span>
+                  <span style={{ fontSize: 9, color: muted, fontFamily: mono }}>{r.type}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, fontFamily: mono,
+                    color: isDiff ? blue : sub,
+                    padding: "1px 5px", borderRadius: 4,
+                    background: isDiff ? blueS : "transparent",
+                  }}>{r.source || "ann"}</span>
+                </div>
+              );
+            })}
+            {rows.length === 0 && (
+              <div style={{ padding: "12px 8px", fontSize: 11, color: muted, textAlign: "center" }}>No annotations extracted</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PageImageViewer({ b64, b64Clean, mimeType }) {
+  const [open, setOpen] = useState(false);
+  const [zoom, setZoom] = useState(null); // null | "orig" | "clean"
+
+  const mime = mimeType || "image/jpeg";
+
+  return (
+    <div style={{ borderTop: `1px solid ${bdr}`, background: `${bg}cc` }}>
+      {/* Toggle header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", background: "transparent", border: "none", cursor: "pointer",
+          padding: "10px 18px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          color: sub, fontFamily: sans,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", fontFamily: mono }}>
+            Page Images
+          </span>
+          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 8, background: blueS, color: blue, fontWeight: 700, fontFamily: mono }}>
+            {b64 && b64Clean ? "Original · Clean" : b64 ? "Original" : "Clean"}
+          </span>
+          <span style={{ fontSize: 9, color: muted, fontFamily: mono }}>click image to zoom</span>
+        </div>
+        <span style={{ fontSize: 13, transition: "transform .15s", display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 18px 16px", display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {/* Original */}
+          {b64 && (
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: red, letterSpacing: ".1em", textTransform: "uppercase", fontFamily: mono, marginBottom: 6 }}>
+                ● Original (with annotations)
+              </div>
+              <div
+                onClick={() => setZoom("orig")}
+                style={{ cursor: "zoom-in", borderRadius: 8, overflow: "hidden", border: `1.5px solid ${bdrB}`, lineHeight: 0, transition: "border-color .15s" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = red}
+                onMouseLeave={e => e.currentTarget.style.borderColor = bdrB}
+              >
+                <img
+                  src={`data:${mime};base64,${b64}`}
+                  alt="Original page"
+                  style={{ width: "100%", display: "block" }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Clean */}
+          {b64Clean && (
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: green, letterSpacing: ".1em", textTransform: "uppercase", fontFamily: mono, marginBottom: 6 }}>
+                ● Clean (annotations stripped)
+              </div>
+              <div
+                onClick={() => setZoom("clean")}
+                style={{ cursor: "zoom-in", borderRadius: 8, overflow: "hidden", border: `1.5px solid ${bdrB}`, lineHeight: 0, transition: "border-color .15s" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = green}
+                onMouseLeave={e => e.currentTarget.style.borderColor = bdrB}
+              >
+                <img
+                  src={`data:${mime};base64,${b64Clean}`}
+                  alt="Clean page"
+                  style={{ width: "100%", display: "block" }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Zoom lightbox */}
+      {zoom && (
+        <div
+          onClick={() => setZoom(null)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", zIndex: 200,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20, cursor: "zoom-out",
+          }}
+        >
+          <div style={{ position: "relative", maxWidth: "95vw", maxHeight: "92vh" }}>
+            {/* Label */}
+            <div style={{
+              position: "absolute", top: -28, left: 0,
+              fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase",
+              fontFamily: mono, color: zoom === "orig" ? red : green,
+            }}>
+              {zoom === "orig" ? "● Original (with annotations)" : "● Clean (annotations stripped)"}
+              <span style={{ color: muted, marginLeft: 16 }}>click anywhere to close</span>
+            </div>
+            <img
+              src={`data:${mime};base64,${zoom === "orig" ? b64 : b64Clean}`}
+              alt={zoom === "orig" ? "Original" : "Clean"}
+              style={{
+                maxWidth: "95vw", maxHeight: "88vh",
+                display: "block", borderRadius: 10,
+                border: `2px solid ${zoom === "orig" ? red : green}`,
+                boxShadow: "0 24px 80px rgba(0,0,0,.8)",
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CalloutReaderPanel({ rawResult }) {
+  const [open, setOpen] = useState(false);
+  if (!rawResult) return null;
+
+  // Parse raw result into lines for colour-coded display
+  const lines = rawResult.trim().split("\n").map(l => l.trim()).filter(Boolean);
+
+  function lineStyle(line) {
+    if (/^Sheet\s+/i.test(line))   return { color: gold,  fontWeight: 700 };
+    if (/^Callout\s+\d/i.test(line)) {
+      const m = line.match(/^Callout\s+([^:]+):\s*(.*)$/i);
+      if (m) return { color: txt };
+    }
+    if (/^NO_REDLINES$/i.test(line)) return { color: green, fontWeight: 700 };
+    return { color: sub };
+  }
+
+  function renderLine(line, i) {
+    const sheetM = line.match(/^(Sheet\s+)(.+?)(:\s*)$/i);
+    if (sheetM) return (
+      <div key={i} style={{ ...lineStyle(line), fontFamily: mono, fontSize: 12, lineHeight: 1.9 }}>
+        <span style={{ color: muted }}>{sheetM[1]}</span>
+        <span style={{ color: gold, fontWeight: 700 }}>{sheetM[2]}</span>
+        <span style={{ color: muted }}>{sheetM[3]}</span>
+      </div>
+    );
+
+    const calloutM = line.match(/^(Callout\s+)([^:]+)(:\s*)(.*)$/i);
+    if (calloutM) return (
+      <div key={i} style={{ fontFamily: mono, fontSize: 12, lineHeight: 1.9 }}>
+        <span style={{ color: muted }}>{calloutM[1]}</span>
+        <span style={{ color: blue, fontWeight: 700 }}>{calloutM[2]}</span>
+        <span style={{ color: muted }}>{calloutM[3]}</span>
+        <span style={{ color: red, fontWeight: 600 }}>{calloutM[4]}</span>
+      </div>
+    );
+
+    return (
+      <div key={i} style={{ fontFamily: mono, fontSize: 12, lineHeight: 1.9, color: sub }}>
+        {line}
+      </div>
+    );
+  }
+
+  const calloutCount = lines.filter(l => /^Callout\s+\d/i.test(l)).length;
+
+  return (
+    <div style={{ borderTop: `1px solid ${bdr}`, background: `${bg}cc` }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: "100%", background: "transparent", border: "none", cursor: "pointer",
+          padding: "10px 18px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          color: sub, fontFamily: sans,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", fontFamily: mono }}>
+            Callout Reader Output
+          </span>
+          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 8, background: blueS, color: blue, fontWeight: 700, fontFamily: mono }}>
+            {calloutCount} line{calloutCount !== 1 ? "s" : ""}
+          </span>
+          <span style={{ fontSize: 9, color: muted, fontFamily: mono }}>raw model response</span>
+        </div>
+        <span style={{ fontSize: 13, transition: "transform .15s", display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+      </button>
+
+      {open && (
+        <div style={{ padding: "4px 18px 16px" }}>
+          <div style={{
+            background: bg, border: `1px solid ${bdr}`, borderRadius: 8,
+            padding: "12px 14px", maxHeight: 400, overflowY: "auto",
+          }}>
+            {lines.length === 0
+              ? <span style={{ color: muted, fontFamily: mono, fontSize: 12 }}>No output</span>
+              : lines.map((line, i) => renderLine(line, i))
+            }
+          </div>
+          <div style={{ fontSize: 10, color: muted, marginTop: 6, fontFamily: mono }}>
+            This is the unfiltered response from the model before parsing and normalization.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

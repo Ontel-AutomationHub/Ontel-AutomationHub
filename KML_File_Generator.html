@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KML Generator — Fiber Construction</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
+    --accent:#58a6ff;--accent2:#3fb950;--warn:#f78166;--text:#e6edf3;
+    --text-muted:#8b949e;--green:#2ea043;--blue:#1f6feb;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+  header{border-bottom:1px solid var(--border);padding:18px 32px;display:flex;align-items:center;gap:14px;background:var(--surface)}
+  .logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--blue),var(--accent));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  header h1{font-family:'Space Mono',monospace;font-size:16px;color:var(--text);letter-spacing:-0.3px}
+  header span{font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text-muted);font-weight:300;margin-left:4px}
+  .main{flex:1;max-width:1100px;width:100%;margin:0 auto;padding:32px 24px;display:flex;flex-direction:column;gap:24px}
+  .upload-zone{border:2px dashed var(--border);border-radius:12px;padding:48px 32px;text-align:center;cursor:pointer;transition:all 0.2s ease;position:relative;background:var(--surface)}
+  .upload-zone:hover,.upload-zone.drag-over{border-color:var(--accent);background:rgba(88,166,255,0.05)}
+  .upload-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .upload-icon{font-size:40px;margin-bottom:16px;display:block}
+  .upload-zone h2{font-size:18px;font-weight:600;color:var(--text);margin-bottom:8px}
+  .upload-zone p{font-size:14px;color:var(--text-muted)}
+  .file-types{display:inline-block;margin-top:12px;padding:4px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--text-muted);font-family:'Space Mono',monospace}
+  .processing-bar{display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px 24px;align-items:center;gap:16px}
+  .processing-bar.active{display:flex}
+  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .processing-bar p{font-size:14px;color:var(--text-muted)}
+  .stats-row{display:none;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+  .stats-row.visible{display:grid}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;display:flex;flex-direction:column;gap:6px}
+  .stat-label{font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:500}
+  .stat-value{font-family:'Space Mono',monospace;font-size:28px;font-weight:700;line-height:1}
+  .stat-card.blue .stat-value{color:var(--accent)}
+  .stat-card.green .stat-value{color:var(--accent2)}
+  .stat-card.purple .stat-value{color:#bc8cff}
+  .stat-card.orange .stat-value{color:#ffa657}
+  .stat-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .table-section{display:none;flex-direction:column;gap:16px}
+  .table-section.visible{display:flex}
+  .section-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .section-title{font-family:'Space Mono',monospace;font-size:13px;color:var(--text-muted);letter-spacing:0.3px;text-transform:uppercase}
+  .filter-tabs{display:flex;gap:6px;flex-wrap:wrap}
+  .filter-tab{padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;transition:all 0.15s;font-family:'DM Sans',sans-serif;font-weight:500}
+  .filter-tab:hover{border-color:var(--accent);color:var(--text)}
+  .filter-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .filter-tab.gactive{background:var(--green);border-color:var(--green);color:#fff}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;overflow-x:auto}
+  table{width:100%;border-collapse:collapse}
+  thead tr{background:var(--surface2);border-bottom:1px solid var(--border)}
+  th{padding:11px 16px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);font-family:'Space Mono',monospace;white-space:nowrap}
+  tbody tr{border-bottom:1px solid var(--border);transition:background 0.1s}
+  tbody tr:last-child{border-bottom:none}
+  tbody tr:hover{background:rgba(255,255,255,0.03)}
+  td{padding:10px 16px;font-size:13px;color:var(--text)}
+  td.mono{font-family:'Space Mono',monospace;font-size:12px;color:var(--text-muted)}
+  .tag{display:inline-flex;align-items:center;padding:3px 9px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.3px;font-family:'Space Mono',monospace;white-space:nowrap}
+  .tag.blue{background:rgba(31,111,235,0.2);color:#79b8ff;border:1px solid rgba(31,111,235,0.3)}
+  .tag.green{background:rgba(46,160,67,0.2);color:#56d364;border:1px solid rgba(46,160,67,0.3)}
+  .tag.purple{background:rgba(137,87,229,0.2);color:#bc8cff;border:1px solid rgba(137,87,229,0.3)}
+  .num-badge{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--accent)}
+  .actions{display:none;gap:12px;align-items:center;flex-wrap:wrap}
+  .actions.visible{display:flex}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;transition:all 0.15s}
+  .btn-success{background:var(--green);color:#fff}
+  .btn-success:hover{background:#38b54a}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+  .btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+  .legend{display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;gap:24px;align-items:center;flex-wrap:wrap}
+  .legend.visible{display:flex}
+  .legend-label{font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px}
+  .legend-items{display:flex;gap:16px;flex-wrap:wrap}
+  .legend-item{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text)}
+  .pin-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+  .pin-dot.blue{background:#4d94ff}
+  .pin-dot.green{background:#3fb950}
+  .file-banner{display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 20px;align-items:center;gap:12px}
+  .file-banner.visible{display:flex}
+  .file-icon{width:34px;height:34px;background:rgba(46,160,67,0.15);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+  .file-info{flex:1}
+  .file-info strong{font-size:14px;color:var(--text);display:block}
+  .file-info small{font-size:12px;color:var(--text-muted)}
+  .clear-btn{background:none;border:1px solid var(--border);color:var(--text-muted);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;transition:all 0.15s}
+  .clear-btn:hover{border-color:var(--warn);color:var(--warn)}
+  .empty-state{text-align:center;padding:40px;color:var(--text-muted);font-size:14px}
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 20px;display:flex;align-items:center;gap:10px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.4);transform:translateY(80px);opacity:0;transition:all 0.3s ease;z-index:1000;max-width:320px}
+  .toast.show{transform:translateY(0);opacity:1}
+  .toast.success{border-color:var(--green)}
+  .toast.error{border-color:var(--warn)}
+  footer{border-top:1px solid var(--border);padding:16px 32px;text-align:center;font-size:12px;color:var(--text-muted)}
+  @media(max-width:600px){.main{padding:16px;gap:16px}header{padding:14px 16px}.upload-zone{padding:32px 16px}}
+
+  /* ── Site Name Modal ─────────────────────────────── */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);
+    display:none;align-items:center;justify-content:center;z-index:2000;padding:20px;
+  }
+  .modal-overlay.open{display:flex}
+  .modal{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:32px 28px;width:100%;max-width:440px;
+    box-shadow:0 24px 48px rgba(0,0,0,0.6);
+    animation:modalIn 0.2s ease;
+  }
+  @keyframes modalIn{from{opacity:0;transform:translateY(12px) scale(0.97)}to{opacity:1;transform:none}}
+  .modal-icon{font-size:32px;margin-bottom:12px;display:block}
+  .modal h2{font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px}
+  .modal p{font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.5}
+  .modal label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px}
+  .modal input[type="text"]{
+    width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+    padding:10px 14px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;
+    outline:none;transition:border-color 0.15s;
+  }
+  .modal input[type="text"]:focus{border-color:var(--accent)}
+  .modal-hint{font-size:11px;color:var(--text-muted);margin-top:6px;margin-bottom:20px}
+  .modal-hint span{font-family:'Space Mono',monospace;color:var(--accent);font-size:11px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+  .btn-cancel{background:none;border:1px solid var(--border);color:var(--text-muted);padding:9px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;transition:all 0.15s}
+  .btn-cancel:hover{border-color:var(--warn);color:var(--warn)}
+  .btn-confirm{background:var(--green);color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;transition:all 0.15s;display:flex;align-items:center;gap:6px}
+  .btn-confirm:hover{background:#38b54a}
+  .filename-preview{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-family:'Space Mono',monospace;font-size:12px;color:var(--accent);margin-top:0;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo-icon">📡</div>
+  <div>
+    <h1>KML Generator <span>/ Fiber Construction</span></h1>
+  </div>
+</header>
+
+<div class="main">
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+    <span class="upload-icon">📂</span>
+    <h2>Upload Excel File</h2>
+    <p>Drag &amp; drop your construction callout spreadsheet here, or click to browse</p>
+    <div class="file-types">.xlsx &nbsp;·&nbsp; .xls</div>
+  </div>
+
+  <div class="file-banner" id="fileBanner">
+    <div class="file-icon">✅</div>
+    <div class="file-info">
+      <strong id="fileNameLabel">—</strong>
+      <small id="fileInfoLabel">Processing...</small>
+    </div>
+    <button class="clear-btn" onclick="clearAll()">Clear</button>
+  </div>
+
+  <div class="processing-bar" id="processingBar">
+    <div class="spinner"></div>
+    <p id="processingMsg">Reading worksheets...</p>
+  </div>
+
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card blue">
+      <span class="stat-label"><span class="stat-dot" style="background:#4d94ff"></span>DAP / TB</span>
+      <span class="stat-value" id="statDAP">0</span>
+    </div>
+    <div class="stat-card green">
+      <span class="stat-label"><span class="stat-dot" style="background:#3fb950"></span>HH / FDH</span>
+      <span class="stat-value" id="statHH">0</span>
+    </div>
+    <div class="stat-card purple">
+      <span class="stat-label">📄 Sheets</span>
+      <span class="stat-value" id="statSheets">0</span>
+    </div>
+    <div class="stat-card orange">
+      <span class="stat-label">📌 Total Pins</span>
+      <span class="stat-value" id="statTotal">0</span>
+    </div>
+  </div>
+
+  <div class="legend" id="legend">
+    <span class="legend-label">Pin Color Guide</span>
+    <div class="legend-items">
+      <div class="legend-item"><div class="pin-dot blue"></div><span>Blue — DAP / TB (Distribution Access Point / Toby Box)</span></div>
+      <div class="legend-item"><div class="pin-dot green"></div><span>Green — HH / FDH (Handhole / Fiber Distribution Hub)</span></div>
+    </div>
+  </div>
+
+  <div class="table-section" id="tableSection">
+    <div class="section-header">
+      <span class="section-title">Extracted Callouts</span>
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="filterTable(this,'all')">All</button>
+        <button class="filter-tab" onclick="filterTable(this,'DAP')">DAP</button>
+        <button class="filter-tab" onclick="filterTable(this,'TB')">TB</button>
+        <button class="filter-tab" onclick="filterTable(this,'HH')">HH</button>
+        <button class="filter-tab" onclick="filterTable(this,'FDH')">FDH</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Label</th>
+            <th>Types</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Sheet</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="6"><div class="empty-state">Upload a file to see data</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="actions" id="actions">
+    <button class="btn btn-success" onclick="generateKML()">⬇ Download KML File</button>
+    <button class="btn btn-secondary" onclick="newUpload()">Upload New File</button>
+  </div>
+</div>
+
+<footer>Tillman FiberCo · Construction Documentation Tool · KML Generator</footer>
+<div class="toast" id="toast"></div>
+
+<!-- Site Name Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <span class="modal-icon">🗂️</span>
+    <h2>Name Your KML File</h2>
+    <p>Enter a site name to identify this file when imported into Google Maps or Google Earth.</p>
+    <label for="siteNameInput">Site Name</label>
+    <input type="text" id="siteNameInput" placeholder="e.g. D-HDT514 Camphor Lane" maxlength="80"
+           oninput="updatePreview()" onkeydown="if(event.key==='Enter')confirmDownload()" />
+    <div class="modal-hint">File will be saved as: <span id="previewName">construction_callouts.kml</span></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-confirm" onclick="confirmDownload()">&#x2B07; Download KML</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+var db = [];
+
+var uz = document.getElementById('uploadZone');
+var fi = document.getElementById('fileInput');
+
+uz.addEventListener('dragover', function(e){e.preventDefault();uz.classList.add('drag-over')});
+uz.addEventListener('dragleave', function(){uz.classList.remove('drag-over')});
+uz.addEventListener('drop', function(e){
+  e.preventDefault(); uz.classList.remove('drag-over');
+  if(e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+});
+fi.addEventListener('change', function(e){
+  if(e.target.files[0]) processFile(e.target.files[0]);
+});
+
+function processFile(file){
+  if(!file.name.match(/\.(xlsx|xls)$/i)){showToast('Please upload an Excel file (.xlsx or .xls)','error');return;}
+  showProc('Reading worksheets...');
+  hideResults();
+  document.getElementById('fileBanner').classList.add('visible');
+  document.getElementById('fileNameLabel').textContent = file.name;
+  document.getElementById('fileInfoLabel').textContent = 'Processing...';
+  uz.style.display = 'none';
+  var reader = new FileReader();
+  reader.onload = function(e){
+    setTimeout(function(){
+      try {
+        updateProc('Extracting coordinates...');
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data,{type:'array'});
+        var raw = extractCoords(wb);
+        updateProc('Labeling callouts & numbering DAPs...');
+        setTimeout(function(){
+          var labeled = labelAll(raw);
+          db = dedupe(labeled);
+          numberDAPs(db);
+          hideProc();
+          renderResults(db, wb.SheetNames.length, file.name);
+        },300);
+      } catch(err){
+        hideProc();
+        showToast('Error reading file: '+err.message,'error');
+      }
+    },200);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function extractCoords(wb){
+  var results = [];
+  wb.SheetNames.forEach(function(sheetName){
+    var ws = wb.Sheets[sheetName];
+    var rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    var hRow=null, hIdx=-1;
+    for(var i=0;i<Math.min(5,rows.length);i++){
+      var r = rows[i].map(function(c){return String(c).trim();});
+      if(r.some(function(c){return c.toLowerCase()==='coordinates';})){hRow=r;hIdx=i;break;}
+    }
+    if(!hRow) return;
+    var ci = hRow.findIndex(function(h){return h.toLowerCase()==='coordinates';});
+    var bi = hRow.findIndex(function(h){return h.toLowerCase()==='block type';});
+    for(var r2=hIdx+1;r2<rows.length;r2++){
+      var row = rows[r2];
+      var coord = String(row[ci]||'').trim();
+      var block = String(bi>=0?(row[bi]||''):'').trim();
+      if(!coord) continue;
+      var m = coord.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
+      if(!m) continue;
+      results.push({lat:parseFloat(m[1]),lon:parseFloat(m[2]),block:block,sheet:sheetName});
+    }
+  });
+  return results;
+}
+
+function labelAll(entries){
+  return entries.map(function(e){
+    var b = e.block.toUpperCase();
+    var types = [];
+    if(b.indexOf('FDH')>=0) types.push('FDH');
+    if(b.indexOf('HH')>=0) types.push('HH');
+    if(b.indexOf('DAP')>=0) types.push('DAP');
+    if(b.indexOf('TOBY')>=0||b.indexOf(' TB')>=0) types.push('TB');
+    if(!types.length) return null;
+    var hasBlue  = types.some(function(t){return t==='DAP'||t==='TB';});
+    var hasGreen = types.some(function(t){return t==='HH'||t==='FDH';});
+    var cc = (hasBlue&&hasGreen)?'purple':hasBlue?'blue':'green';
+    return {lat:e.lat,lon:e.lon,types:types,label:types.join('/'),colorClass:cc,sheet:e.sheet};
+  }).filter(Boolean);
+}
+
+function dedupe(entries){
+  var map = {};
+  entries.forEach(function(e){
+    var key = e.lat.toFixed(6)+','+e.lon.toFixed(6);
+    if(map[key]){
+      var ex = map[key];
+      var merged = ex.types.concat(e.types.filter(function(t){return ex.types.indexOf(t)<0;}));
+      var hasBlue  = merged.some(function(t){return t==='DAP'||t==='TB';});
+      var hasGreen = merged.some(function(t){return t==='HH'||t==='FDH';});
+      var cc = (hasBlue&&hasGreen)?'purple':hasBlue?'blue':'green';
+      map[key] = {lat:ex.lat,lon:ex.lon,types:merged,label:merged.join('/'),colorClass:cc,sheet:ex.sheet};
+    } else {
+      map[key] = Object.assign({},e);
+    }
+  });
+  return Object.values(map);
+}
+
+function numberDAPs(entries){
+  var dapN = 1, hhN = 1;
+  entries.forEach(function(e){
+    if(e.types.indexOf('DAP')>=0){
+      e.dapNum = String(dapN).padStart(2,'0'); dapN++;
+    }
+    if(e.types.indexOf('HH')>=0){
+      e.hhNum = hhN; hhN++;
+    }
+  });
+}
+
+function renderResults(entries, sheetCount, fname){
+  var blue   = entries.filter(function(e){return e.colorClass==='blue'||e.colorClass==='purple';}).length;
+  var green  = entries.filter(function(e){return e.colorClass==='green'||e.colorClass==='purple';}).length;
+  document.getElementById('statDAP').textContent = blue;
+  document.getElementById('statHH').textContent  = green;
+  document.getElementById('statSheets').textContent = sheetCount;
+  document.getElementById('statTotal').textContent  = entries.length;
+  document.getElementById('statsRow').classList.add('visible');
+  document.getElementById('legend').classList.add('visible');
+  document.getElementById('tableSection').classList.add('visible');
+  document.getElementById('actions').classList.add('visible');
+  document.getElementById('fileInfoLabel').textContent = entries.length+' callouts extracted from '+sheetCount+' sheets';
+  renderTable(entries,'all');
+}
+
+function renderTable(entries, filter){
+  var tbody = document.getElementById('tableBody');
+  var list = filter==='all'?entries:entries.filter(function(e){return e.types.indexOf(filter)>=0;});
+  if(!list.length){tbody.innerHTML='<tr><td colspan="6"><div class="empty-state">No entries match this filter</div></td></tr>';return;}
+  tbody.innerHTML = list.map(function(e,i){
+    var badge = e.dapNum?'<span class="num-badge">DAP'+e.dapNum+'</span> ':'';
+    if(e.hhNum) badge += '<span class="num-badge" style="color:var(--accent2)">HH#'+e.hhNum+'</span> ';
+    return '<tr>'
+      +'<td class="mono">'+(i+1)+'</td>'
+      +'<td>'+badge+'<span class="tag '+e.colorClass+'">'+e.label+'</span></td>'
+      +'<td style="font-size:12px;color:var(--text-muted)">'+e.types.join(', ')+'</td>'
+      +'<td class="mono">'+e.lat.toFixed(6)+'</td>'
+      +'<td class="mono">'+e.lon.toFixed(6)+'</td>'
+      +'<td style="font-size:12px;color:var(--text-muted)">'+e.sheet+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function filterTable(btn, filter){
+  document.querySelectorAll('.filter-tab').forEach(function(t){t.classList.remove('active','gactive');});
+  var isGreen = filter==='HH'||filter==='FDH';
+  btn.classList.add(isGreen?'gactive':'active');
+  renderTable(db, filter);
+}
+
+function generateKML(){
+  if(!db.length){showToast('No data to export. Upload a file first.','error');return;}
+  document.getElementById('siteNameInput').value = '';
+  updatePreview();
+  document.getElementById('modalOverlay').classList.add('open');
+  setTimeout(function(){ document.getElementById('siteNameInput').focus(); }, 120);
+}
+
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+function slugify(s){
+  return s.trim().replace(/[^a-zA-Z0-9_\-\s]/g,'').replace(/\s+/g,'_');
+}
+
+function updatePreview(){
+  var raw = document.getElementById('siteNameInput').value.trim();
+  var slug = raw ? slugify(raw) : 'construction_callouts';
+  document.getElementById('previewName').textContent = slug + '.kml';
+}
+
+function confirmDownload(){
+  var raw   = document.getElementById('siteNameInput').value.trim();
+  var slug  = raw ? slugify(raw) : 'construction_callouts';
+  var fname = slug + '.kml';
+  closeModal();
+  buildAndDownloadKML(raw || 'Fiber Construction Callouts', fname);
+}
+
+function buildAndDownloadKML(siteName, fname){
+  var pms = '';
+  db.forEach(function(e){
+    var name = e.dapNum?'DAP'+e.dapNum:(e.hhNum?'HH#'+e.hhNum:e.label);
+    pms += '\n      <Placemark>'
+         + '\n        <name>'+xmlEsc(name)+'</name>'
+         + '\n        <Point><coordinates>'+e.lon+','+e.lat+',0</coordinates></Point>'
+         + '\n      </Placemark>';
+  });
+  var kml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    +'<kml xmlns="http://www.opengis.net/kml/2.2">\n'
+    +'  <Document>\n'
+    +'    <name>'+xmlEsc(siteName)+'</name>\n'
+    +'    <description>Generated by KML Generator - Tillman FiberCo</description>\n'
+    +'    <Folder>\n'
+    +'      <name>'+xmlEsc(siteName)+'</name>\n'
+    +'      <open>1</open>'
+    +pms+'\n'
+    +'    </Folder>\n'
+    +'  </Document>\n'
+    +'</kml>';
+  dlText(kml, fname);
+  showToast('KML saved as '+fname+' ('+db.length+' pins)','success');
+}
+
+function xmlEsc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function dlText(content, fname){
+  var blob = new Blob([content],{type:'application/vnd.google-earth.kml+xml'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href=url; a.download=fname;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function showProc(m){document.getElementById('processingBar').classList.add('active');document.getElementById('processingMsg').textContent=m;}
+function updateProc(m){document.getElementById('processingMsg').textContent=m;}
+function hideProc(){document.getElementById('processingBar').classList.remove('active');}
+function hideResults(){
+  ['statsRow','legend','tableSection','actions'].forEach(function(id){
+    document.getElementById(id).classList.remove('visible');
+  });
+}
+function newUpload(){document.getElementById('fileInput').click();}
+function clearAll(){
+  db=[];
+  fi.value='';
+  document.getElementById('fileBanner').classList.remove('visible');
+  uz.style.display='';
+  hideResults();hideProc();
+  document.getElementById('tableBody').innerHTML='<tr><td colspan="6"><div class="empty-state">Upload a file to see data</div></td></tr>';
+}
+var _tt;
+function showToast(msg,type){
+  var t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+(type||'');
+  clearTimeout(_tt); _tt=setTimeout(function(){t.classList.remove('show');},3500);
+}
+</script>
+</body>
+</html>

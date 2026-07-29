@@ -1,0 +1,3075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FTTH Running Lines · Ontel QA</title>
+<style>
+  /*  ─────────────  TOKENS  ─────────────  */
+  :root {
+    --bg:           #0f1419;
+    --bg-panel:     #161b22;
+    --bg-input:     #0d1117;
+    --line:         #21262d;
+    --line-bright:  #30363d;
+    --text:         #c9d1d9;
+    --text-dim:     #7d8590;
+    --text-bright:  #f0f6fc;
+    --accent:       #ff5732;
+    --accent-soft:  #ff8060;
+    --warn:         #f0b34d;
+    --good:         #56d364;
+    --tick-color:   #e60d0d;
+    --font-mono:    "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+    --font-sans:    "Inter", -apple-system, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    overflow: hidden;
+  }
+
+  /*  ─────────────  LAYOUT  ─────────────  */
+  .app {
+    display: grid;
+    grid-template-columns: 320px 1fr 280px;
+    grid-template-rows: 48px 1fr 28px;
+    height: 100vh;
+    grid-template-areas:
+      "header header header"
+      "sidebar canvas inspector"
+      "footer footer footer";
+  }
+
+  /*  ─────────────  HEADER  ─────────────  */
+  header {
+    grid-area: header;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+  }
+
+  .brand {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text-bright);
+  }
+  .brand::before {
+    content: "▸ ";
+    color: var(--accent);
+  }
+  .brand-sub {
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-left: 6px;
+  }
+
+  .header-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+  }
+
+  button {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line-bright);
+    padding: 6px 14px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.12s;
+  }
+  button:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  button.primary {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  button.primary:hover:not(:disabled) {
+    background: var(--accent-soft);
+    border-color: var(--accent-soft);
+    color: var(--bg);
+  }
+
+  /*  ─────────────  SIDEBAR  ─────────────  */
+  .sidebar {
+    grid-area: sidebar;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel {
+    border-bottom: 1px solid var(--line);
+    padding: 16px;
+  }
+
+  .panel-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title .num {
+    font-size: 9px;
+    background: var(--line);
+    padding: 2px 6px;
+    border-radius: 2px;
+    color: var(--text);
+  }
+
+  .step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 8px 0;
+    color: var(--text-dim);
+  }
+  .step.active { color: var(--text-bright); }
+  .step.done   { color: var(--good); }
+  .step-num {
+    flex: 0 0 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    text-align: center;
+    line-height: 16px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+  }
+  .step.active .step-num { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .step.done .step-num   { background: var(--good); border-color: var(--good); color: var(--bg); }
+
+  .step-text { font-size: 12px; line-height: 1.5; }
+
+  .input-group { margin-bottom: 10px; }
+  .input-group label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .input-group input,
+  .input-group select {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--line-bright);
+    color: var(--text-bright);
+    padding: 7px 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    border-radius: 2px;
+    outline: none;
+  }
+  .input-group input:focus,
+  .input-group select:focus {
+    border-color: var(--accent);
+  }
+
+  .input-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .upload-zone {
+    border: 1px dashed var(--line-bright);
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+  }
+  .upload-zone:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .upload-zone.has-file {
+    border-style: solid;
+    border-color: var(--good);
+    color: var(--good);
+  }
+  .upload-zone .ico {
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  .upload-zone .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .upload-zone .hint {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  #fileInput { display: none; }
+
+  /*  ─────────────  CANVAS  ─────────────  */
+  .canvas-wrap {
+    grid-area: canvas;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(255, 87, 50, 0.04), transparent 50%),
+      var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  #canvasContainer {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    cursor: crosshair;
+  }
+  #canvasContainer.tool-pan { cursor: grab; }
+  #canvasContainer.tool-pan.panning { cursor: grabbing; }
+  #canvasContainer.tool-edit { cursor: pointer; }
+  #canvasContainer.tool-moveall { cursor: move; }
+  #canvasContainer.tool-moveall.moving-all { cursor: grabbing; }
+
+  #pdfCanvas {
+    display: block;
+    background: white;
+    margin: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  #overlayCanvas {
+    position: absolute;
+    pointer-events: none;
+    margin: 24px;
+  }
+
+  .canvas-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    pointer-events: none;
+  }
+  .canvas-empty .big {
+    font-size: 32px;
+    color: var(--line-bright);
+    margin-bottom: 8px;
+    letter-spacing: 4px;
+  }
+
+  /*  ─────────────  TOOLBAR  ─────────────  */
+  .toolbar {
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px;
+    display: flex;
+    gap: 2px;
+    z-index: 5;
+  }
+  .toolbar button {
+    border: none;
+    background: transparent;
+    padding: 6px 12px;
+    font-size: 10px;
+    border-radius: 2px;
+  }
+  .toolbar button.active {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .toolbar .divider {
+    width: 1px;
+    background: var(--line);
+    margin: 4px 2px;
+  }
+
+  /*  ─────────────  ZOOM CONTROL  ─────────────  */
+  .zoom-control {
+    position: absolute;
+    bottom: 24px;
+    left: 24px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 5;
+  }
+  .zoom-control button {
+    border: none;
+    background: transparent;
+    padding: 4px 10px;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .zoom-control .zoom-val {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    min-width: 50px;
+    text-align: center;
+    color: var(--text-bright);
+  }
+
+  /*  ─────────────  INSPECTOR  ─────────────  */
+  .inspector {
+    grid-area: inspector;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--line);
+    overflow-y: auto;
+  }
+
+  .run-list {
+    list-style: none;
+  }
+
+  .run-item {
+    border-bottom: 1px solid var(--line);
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .run-item:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .run-item.selected {
+    background: rgba(255, 87, 50, 0.08);
+    border-left: 2px solid var(--accent);
+    padding-left: 14px;
+  }
+  .run-item .run-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .run-item .run-meta {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .run-item .delete-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .run-item .delete-btn:hover {
+    color: var(--accent);
+  }
+  .run-item .flip-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 12px;
+    line-height: 1;
+    font-family: var(--font-mono);
+  }
+  .run-item .flip-btn:hover {
+    color: var(--good);
+  }
+  .run-item .row-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .empty-list {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  /*  ─────────────  FOOTER (status bar)  ─────────────  */
+  footer {
+    grid-area: footer;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    gap: 16px;
+  }
+  footer .status-item { display: flex; gap: 6px; }
+  footer .status-item .lbl { color: var(--text-dim); }
+  footer .status-item .val { color: var(--text); }
+  footer .right { margin-left: auto; }
+
+  /*  ─────────────  MODAL  ─────────────  */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal {
+    background: var(--bg-panel);
+    border: 1px solid var(--line-bright);
+    border-radius: 4px;
+    padding: 24px;
+    min-width: 360px;
+    max-width: 460px;
+  }
+  .modal h2 {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    margin-bottom: 16px;
+    color: var(--text-bright);
+  }
+  .modal h2::before {
+    content: "▸ ";
+    color: var(--accent);
+  }
+  .modal .actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  /*  ─────────────  KEYBOARD HINT  ─────────────  */
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    background: var(--line);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--text);
+    border-bottom: 1px solid var(--line-bright);
+  }
+
+  .help-text {
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-top: 6px;
+  }
+
+  /*  ─────────────  TOAST  ─────────────  */
+  .toast {
+    position: fixed;
+    bottom: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-panel);
+    border: 1px solid var(--accent);
+    color: var(--text-bright);
+    padding: 10px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    border-radius: 2px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .toast.show { opacity: 1; }
+
+  /* Right-click context menu (e.g. for tick deletion) */
+  .ctx-menu {
+    position: fixed;
+    background: var(--bg-panel);
+    border: 1px solid var(--line-bright);
+    border-radius: 3px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+    z-index: 300;
+    min-width: 130px;
+    padding: 4px 0;
+    display: none;
+    font-family: var(--font-sans);
+  }
+  .ctx-menu.show { display: block; }
+  .ctx-menu .ctx-item {
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    text-align: left;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .ctx-menu .ctx-item:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--line-bright); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ───────── HEADER ───────── -->
+  <header>
+    <div class="brand">RUNNING LINES <span class="brand-sub">/ FTTH QA</span></div>
+    <div class="header-actions">
+      <button id="btnHelp">Help</button>
+      <button id="btnUndo" disabled>Undo</button>
+      <button id="btnRedo" disabled>Redo</button>
+      <button id="btnReset">Reset</button>
+      <button class="primary" id="btnExport" disabled>Export PDF</button>
+    </div>
+  </header>
+
+  <!-- ───────── SIDEBAR ───────── -->
+  <aside class="sidebar">
+
+    <div class="panel">
+      <div class="panel-title">Source PDF <span class="num">01</span></div>
+      <div class="upload-zone" id="uploadZone">
+        <div class="ico">⬆</div>
+        <div class="label" id="uploadLabel">Drop CD PDF here</div>
+        <div class="hint">or click to browse</div>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf">
+      <div class="input-group" style="margin-top:12px" id="pageSelectGroup" hidden>
+        <label>Page</label>
+        <select id="pageSelect"></select>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Workflow <span class="num">02</span></div>
+      <div class="step" id="step1">
+        <div class="step-num">1</div>
+        <div class="step-text">Load a CD PDF and select the page (Sheet 05 typical)</div>
+      </div>
+      <div class="step" id="step2">
+        <div class="step-num">2</div>
+        <div class="step-text">Click <kbd>D</kbd>raw, then click guide points along the bore. Press <kbd>Enter</kbd> when done.</div>
+      </div>
+      <div class="step" id="step3">
+        <div class="step-num">3</div>
+        <div class="step-text">Enter start/end stations + depth + EOP</div>
+      </div>
+      <div class="step" id="step4">
+        <div class="step-num">4</div>
+        <div class="step-text">Tool generates running-line array</div>
+      </div>
+      <div class="step" id="step5">
+        <div class="step-num">5</div>
+        <div class="step-text">Repeat for additional segments, then export</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Defaults <span class="num">03</span></div>
+      <div class="input-row">
+        <div class="input-group">
+          <label>Depth (ft)</label>
+          <input type="text" id="defDepth" value="3.0">
+        </div>
+        <div class="input-group">
+          <label>EOP (ft)</label>
+          <input type="text" id="defEOP" value="6">
+        </div>
+      </div>
+      <div class="input-row">
+        <div class="input-group">
+          <label>Tick length</label>
+          <input type="number" id="defTickLen" value="60" min="20" max="200" step="1">
+        </div>
+        <div class="input-group">
+          <label>Font size</label>
+          <input type="number" id="defFontSize" value="12" min="6" max="24" step="0.5">
+        </div>
+      </div>
+      <div class="input-group">
+        <label>Tick stroke</label>
+        <input type="number" id="defStroke" value="1.6" min="0.5" max="5" step="0.1">
+      </div>
+      <div class="help-text">All measurements in PDF points (1 pt = 1/72 inch).</div>
+    </div>
+
+  </aside>
+
+  <!-- ───────── CANVAS ───────── -->
+  <main class="canvas-wrap">
+
+    <div class="toolbar">
+      <button class="active" id="toolDraw" data-tool="draw" title="Draw new run (D)">DRAW</button>
+      <button id="toolEdit" data-tool="edit" title="Edit existing run (E)">EDIT</button>
+      <button id="toolMoveAll" data-tool="moveall" title="Move all runs together (M)">MOVE ALL</button>
+      <button id="toolPan" data-tool="pan" title="Pan canvas (Space)">PAN</button>
+    </div>
+
+    <div class="canvas-empty" id="canvasEmpty">
+      <div class="big">∅</div>
+      <div>NO PDF LOADED</div>
+    </div>
+
+    <div id="canvasContainer">
+      <canvas id="pdfCanvas"></canvas>
+      <canvas id="overlayCanvas"></canvas>
+    </div>
+
+    <div class="zoom-control">
+      <button id="zoomOut">−</button>
+      <div class="zoom-val" id="zoomVal">100%</div>
+      <button id="zoomIn">+</button>
+      <button id="zoomFit" title="Fit to window">⊡</button>
+    </div>
+  </main>
+
+  <!-- ───────── INSPECTOR ───────── -->
+  <aside class="inspector">
+    <div class="panel-title" style="padding:16px 16px 8px">Runs <span class="num" id="runCount">0</span></div>
+    <ul class="run-list" id="runList">
+      <li class="empty-list">No runs yet.<br>Draw your first segment.</li>
+    </ul>
+  </aside>
+
+  <!-- ───────── FOOTER STATUS BAR ───────── -->
+  <footer>
+    <div class="status-item">
+      <span class="lbl">Status:</span>
+      <span class="val" id="status">Ready</span>
+    </div>
+    <div class="status-item">
+      <span class="lbl">Pos:</span>
+      <span class="val" id="cursorPos">—</span>
+    </div>
+    <div class="status-item right">
+      <span class="lbl">Tool:</span>
+      <span class="val" id="curTool">DRAW</span>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ───────── MODAL: Run config ───────── -->
+<div class="modal-backdrop" id="runModal">
+  <div class="modal">
+    <h2>Configure Run</h2>
+    <div class="input-row">
+      <div class="input-group">
+        <label>Start station</label>
+        <input type="text" id="modalStart" placeholder="0+00">
+      </div>
+      <div class="input-group">
+        <label>End station</label>
+        <input type="text" id="modalEnd" placeholder="1+00">
+      </div>
+    </div>
+    <div class="input-row">
+      <div class="input-group">
+        <label>Depth (ft)</label>
+        <input type="text" id="modalDepth" value="3.0">
+      </div>
+      <div class="input-group">
+        <label>EOP (ft)</label>
+        <input type="text" id="modalEOP" value="6">
+      </div>
+    </div>
+    <div class="input-group">
+      <label>Path style</label>
+      <select id="modalPathStyle">
+        <option value="straight">Straight line</option>
+        <option value="auto-bore">Follow orange bore (auto-trace)</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label>Tick side</label>
+      <select id="modalSide">
+        <option value="left">Left of bore (relative to direction)</option>
+        <option value="right">Right of bore (relative to direction)</option>
+      </select>
+    </div>
+    <div class="help-text">
+      "Auto-trace" attempts to follow the orange bore between your two clicks.
+      Use "Straight line" for short segments or when auto-trace fails.
+      "Tick side" decides which side of the bore the tick marks land on,
+      based on the direction the bore travels (start → end).
+    </div>
+    <div class="actions">
+      <button id="modalCancel">Cancel</button>
+      <button class="primary" id="modalConfirm">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── MODAL: Help ───────── -->
+<div class="modal-backdrop" id="helpModal">
+  <div class="modal">
+    <h2>Quick Help</h2>
+    <div style="font-size:12px; line-height:1.6; color:var(--text);">
+      <p style="margin-bottom:10px"><strong>1. Load CD</strong> — drop a Tillman CD PDF into the upload zone.</p>
+      <p style="margin-bottom:10px"><strong>2. Pick page</strong> — typically Sheet 05 (page 7).</p>
+      <p style="margin-bottom:10px"><strong>3. Draw mode</strong> — click along the bore to drop guide points (start at the first station, follow the curve, end at the last station). Use as many points as needed for curves like cul-de-sacs. Press <kbd>Enter</kbd> when done; <kbd>Esc</kbd> cancels.</p>
+      <p style="margin-bottom:10px"><strong>4. Configure</strong> — enter station numbers (e.g. 0+00 → 1+00), depth, EOP. Tool generates 10-ft tick array.</p>
+      <p style="margin-bottom:10px"><strong>5. Edit</strong> — switch to Edit tool. Click a run to select it. Drag the body to move it. Drag the big green ↻ handle (next to the blue pivot) to rotate the whole run, or drag a small green ↻ handle at the end of any tick to rotate just that one station. To delete a tick, right-click its small green ↻ handle (or its anchor dot) for the "Delete tick" menu — or click the anchor and press <kbd>Delete</kbd>. <kbd>Shift</kbd>+drag a tick anchor to nudge it sideways. Hold <kbd>Shift</kbd> while rotating to snap to 15° increments.</p>
+      <p style="margin-bottom:10px"><strong>6. Export</strong> — saves PDF with vector overlay (editable in Bluebeam).</p>
+      <p style="margin-top:14px; padding-top:10px; border-top:1px solid var(--line); color:var(--text-dim);">
+        Shortcuts: <kbd>D</kbd> draw · <kbd>E</kbd> edit · <kbd>M</kbd> move all · <kbd>Space</kbd> pan · <kbd>Enter</kbd> finish · <kbd>Ctrl/⌘ Z</kbd> undo · <kbd>Ctrl/⌘ Y</kbd> redo · <kbd>+/−</kbd> zoom · <kbd>Esc</kbd> cancel
+      </p>
+    </div>
+    <div class="actions">
+      <button class="primary" id="helpClose">Got it</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Right-click menu for tick deletion (Edit mode, on tick anchor) -->
+<div class="ctx-menu" id="tickContextMenu">
+  <button class="ctx-item" id="ctxDeleteTick">Delete tick</button>
+</div>
+
+<!-- ───────── EXTERNAL LIBS (CDN) ───────── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs" type="module"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
+<script type="module">
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const state = {
+  pdfFile: null,        // File object
+  pdfBytes: null,       // ArrayBuffer for pdf-lib
+  pdfDoc: null,         // pdf.js document
+  pageIndex: 0,
+  page: null,           // pdf.js page
+  viewport: null,       // current viewport
+  scale: 1.5,           // initial zoom
+  rotation: 0,          // page rotation
+  pageWidthPt: 0,       // PDF page width in points
+  pageHeightPt: 0,
+  tool: "draw",         // draw | edit | pan
+  drawPoints: [],       // [[x_canvas, y_canvas], ...]
+  hoverPoint: null,
+  runs: [],             // [{ id, start, end, depth, eop, style, points: [[x,y],...], stations: [...] }]
+  selectedRunId: null,
+  selectedTickIndex: -1,  // -1 = no tick selected; valid only when selectedRunId is set
+  defaults: {
+    depth: "3.0",
+    eop: "6",
+    tickLen: 60,
+    fontSize: 12,
+    stroke: 1.6,
+  },
+  imageData: null,      // ImageData for orange-bore detection
+  drag: null,           // { runId, kind: "run"|"tick"|"rotate"|"tick-rotate", tickIndex, ... }
+  pan: null,            // { startMouse: [x,y], startScroll: [x,y] } while panning
+  moveAll: null,        // { startMouse: [x,y], startOffsets: [{runId,dx,dy},...] } while bulk-moving
+  lastSide: "left",     // remembered between modal opens
+  undoStack: [],        // array of action patches for the CURRENT page
+  redoStack: [],        // array of redo patches for the CURRENT page
+  pageData: {},         // { [pageIndex]: { runs, undoStack, redoStack } } — persisted per page
+  tracePreview: null,   // [[x,y],...] cached BFS preview while drawing
+};
+
+/* ============================================================
+   DOM
+   ============================================================ */
+const $ = (id) => document.getElementById(id);
+const dom = {
+  fileInput: $("fileInput"),
+  uploadZone: $("uploadZone"),
+  uploadLabel: $("uploadLabel"),
+  pageSelect: $("pageSelect"),
+  pageSelectGroup: $("pageSelectGroup"),
+  pdfCanvas: $("pdfCanvas"),
+  overlayCanvas: $("overlayCanvas"),
+  canvasContainer: $("canvasContainer"),
+  canvasEmpty: $("canvasEmpty"),
+  status: $("status"),
+  cursorPos: $("cursorPos"),
+  curTool: $("curTool"),
+  zoomVal: $("zoomVal"),
+  runList: $("runList"),
+  runCount: $("runCount"),
+  btnExport: $("btnExport"),
+  btnReset: $("btnReset"),
+  btnUndo: $("btnUndo"),
+  btnRedo: $("btnRedo"),
+  btnHelp: $("btnHelp"),
+  toast: $("toast"),
+  tickContextMenu: $("tickContextMenu"),
+  ctxDeleteTick: $("ctxDeleteTick"),
+  // modal
+  runModal: $("runModal"),
+  modalStart: $("modalStart"),
+  modalEnd: $("modalEnd"),
+  modalDepth: $("modalDepth"),
+  modalEOP: $("modalEOP"),
+  modalPathStyle: $("modalPathStyle"),
+  modalSide: $("modalSide"),
+  modalCancel: $("modalCancel"),
+  modalConfirm: $("modalConfirm"),
+  helpModal: $("helpModal"),
+  helpClose: $("helpClose"),
+  // defaults
+  defDepth: $("defDepth"),
+  defEOP: $("defEOP"),
+  defTickLen: $("defTickLen"),
+  defFontSize: $("defFontSize"),
+  defStroke: $("defStroke"),
+};
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+function setStatus(s) { dom.status.textContent = s; }
+function showToast(msg, ms = 2400) {
+  dom.toast.textContent = msg;
+  dom.toast.classList.add("show");
+  setTimeout(() => dom.toast.classList.remove("show"), ms);
+}
+
+function feetFromStation(s) {
+  // "4+84" -> 484
+  const m = String(s).trim().match(/^(\d+)\+(\d+)$/);
+  if (!m) throw new Error(`Invalid station: "${s}"`);
+  return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+}
+function stationFromFeet(ft) {
+  const a = Math.floor(ft / 100);
+  const b = ft % 100;
+  return `${a}+${String(b).padStart(2, "0")}`;
+}
+function stationsBetween(startFt, endFt) {
+  // Returns array of feet values: start, all multiples of 10 between, end
+  const out = [startFt];
+  const dir = startFt < endFt ? 1 : -1;
+  let cur;
+  if (dir > 0) {
+    cur = (Math.floor(startFt / 10) + 1) * 10;
+    while (cur < endFt) { out.push(cur); cur += 10; }
+  } else {
+    cur = (Math.ceil(startFt / 10) - 1) * 10;
+    while (cur > endFt) { out.push(cur); cur -= 10; }
+  }
+  if (out[out.length - 1] !== endFt) out.push(endFt);
+  return out;
+}
+
+/* Geometry helpers */
+function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+function pathLength(pts) {
+  let L = 0;
+  for (let i = 1; i < pts.length; i++) L += dist(pts[i - 1], pts[i]);
+  return L;
+}
+function pointAtDistance(pts, target) {
+  // Walk path to position `target` from start
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const seg = dist(pts[i - 1], pts[i]);
+    if (acc + seg >= target) {
+      const t = seg > 0 ? (target - acc) / seg : 0;
+      const x = pts[i - 1][0] + t * (pts[i][0] - pts[i - 1][0]);
+      const y = pts[i - 1][1] + t * (pts[i][1] - pts[i - 1][1]);
+      // Tangent
+      const tx = (pts[i][0] - pts[i - 1][0]) / (seg || 1);
+      const ty = (pts[i][1] - pts[i - 1][1]) / (seg || 1);
+      return { p: [x, y], t: [tx, ty] };
+    }
+    acc += seg;
+  }
+  // End
+  const last = pts[pts.length - 1];
+  const prev = pts[pts.length - 2] || last;
+  const seg = dist(prev, last) || 1;
+  return {
+    p: last,
+    t: [(last[0] - prev[0]) / seg, (last[1] - prev[1]) / seg],
+  };
+}
+
+/* ============================================================
+   PDF RENDERING (PDF.js)
+   ============================================================ */
+async function loadPDF(file) {
+  state.pdfFile = file;
+  state.pdfBytes = await file.arrayBuffer();
+  // PDF.js needs a fresh copy because it can detach the buffer
+  state.pdfDoc = await pdfjsLib.getDocument({
+    data: state.pdfBytes.slice(0),
+  }).promise;
+  // Populate page select
+  dom.pageSelect.innerHTML = "";
+  for (let i = 0; i < state.pdfDoc.numPages; i++) {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = `Page ${i + 1}`;
+    dom.pageSelect.appendChild(opt);
+  }
+  dom.pageSelectGroup.hidden = false;
+  // Default to first page (or page 7 if many pages, since Tillman Sheet 05 = page 7)
+  state.pageIndex = state.pdfDoc.numPages >= 7 ? 6 : 0;
+  dom.pageSelect.value = state.pageIndex;
+  // Update UI
+  dom.uploadLabel.textContent = file.name;
+  dom.uploadZone.classList.add("has-file");
+  dom.canvasEmpty.style.display = "none";
+  setStatus("PDF loaded");
+  await renderPage();
+  setStep(2);
+}
+
+async function renderPage() {
+  state.page = await state.pdfDoc.getPage(state.pageIndex + 1);
+  state.rotation = state.page.rotate;
+  // Use scale: pdf.js viewport
+  state.viewport = state.page.getViewport({ scale: state.scale });
+  state.pageWidthPt = state.viewport.viewBox[2] - state.viewport.viewBox[0];
+  state.pageHeightPt = state.viewport.viewBox[3] - state.viewport.viewBox[1];
+
+  // Resize canvases
+  const cw = Math.floor(state.viewport.width);
+  const ch = Math.floor(state.viewport.height);
+  dom.pdfCanvas.width = cw;
+  dom.pdfCanvas.height = ch;
+  dom.overlayCanvas.width = cw;
+  dom.overlayCanvas.height = ch;
+  dom.overlayCanvas.style.width = cw + "px";
+  dom.overlayCanvas.style.height = ch + "px";
+  dom.overlayCanvas.style.left = dom.pdfCanvas.offsetLeft + "px";
+  dom.overlayCanvas.style.top = dom.pdfCanvas.offsetTop + "px";
+
+  const ctx = dom.pdfCanvas.getContext("2d");
+  await state.page.render({
+    canvasContext: ctx,
+    viewport: state.viewport,
+  }).promise;
+
+  // Cache image data for bore detection
+  state.imageData = ctx.getImageData(0, 0, cw, ch);
+  state.orangeMaskCache = null;   // force rebuild on next bfsTrace
+
+  // Position overlay
+  positionOverlay();
+  drawOverlay();
+}
+
+function positionOverlay() {
+  // Match the PDF canvas position (which has 24px margin via CSS)
+  dom.overlayCanvas.style.left = dom.pdfCanvas.offsetLeft + "px";
+  dom.overlayCanvas.style.top = dom.pdfCanvas.offsetTop + "px";
+}
+
+/* ============================================================
+   COORDINATE CONVERSIONS
+   ============================================================ */
+// Canvas coords (pixels on screen) ↔ PDF point coords
+// Canvas is rendered at scale `state.scale`. The viewport handles rotation.
+// To go canvas → PDF point: viewport.convertToPdfPoint(x, y)
+// To go PDF point → canvas: viewport.convertToViewportPoint(x, y)
+
+function canvasToPdfPt(cx, cy) {
+  const [x, y] = state.viewport.convertToPdfPoint(cx, cy);
+  return [x, y];
+}
+function pdfPtToCanvas(px, py) {
+  const [x, y] = state.viewport.convertToViewportPoint(px, py);
+  return [x, y];
+}
+
+/* ============================================================
+   ORANGE-BORE AUTO-TRACE (canvas-space)
+   ============================================================ */
+// Detect orange pixels and trace path between two canvas points.
+// Returns array of [cx, cy] points along the bore.
+
+function isOrangePixel(d, i) {
+  // d = ImageData.data (RGBA flat)
+  const r = d[i], g = d[i + 1], b = d[i + 2];
+  // Bore-path orange in FTTH CDs is ~RGB(255, 127, 0). Anti-aliasing pushes
+  // it across a band, but we MUST reject red callout text (R~220, G~30,
+  // B~30) and red leader arrows on the page. The reliable discriminator is
+  // green: orange has a substantial green channel (~80-160), red has very
+  // little green (<60). Tightened to fail-closed against reds.
+  if (r < 200) return false;            // not bright enough
+  if (b > 120) return false;            // too blue
+  if (g < 80) return false;             // RED — reject pure red callouts
+  if (g > 180) return false;            // too green (yellow)
+  if (r - b < 100) return false;        // red must clearly dominate blue
+  if (r - g < 50) return false;         // red must beat green by enough
+  return true;
+}
+
+function buildOrangeMask() {
+  // Cache the mask on state — multi-point auto-trace calls bfsTrace several
+  // times in a row and rebuilding the mask each time is wasted work. The
+  // cache is invalidated whenever a new page is rendered (renderPage clears
+  // state.orangeMaskCache).
+  if (state.orangeMaskCache) return state.orangeMaskCache;
+  if (!state.imageData) return null;
+  const { width: W, height: H, data } = state.imageData;
+  const mask = new Uint8Array(W * H);
+  let count = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (isOrangePixel(data, i)) { mask[y * W + x] = 1; count++; }
+    }
+  }
+  state.orangeMaskCache = { mask, W, H, count };
+  return state.orangeMaskCache;
+}
+
+// BFS path from start canvas point to end canvas point along orange mask
+function bfsTrace(startCanvas, endCanvas, maxRadius = 60) {
+  const orangeData = buildOrangeMask();
+  if (!orangeData) return null;
+  const { mask, W, H } = orangeData;
+
+  // Snap endpoints to nearest orange pixel within `maxRadius`
+  function snapToOrange(p) {
+    const [cx, cy] = p.map(Math.round);
+    let best = null, bestD2 = Infinity;
+    const r = maxRadius;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const x = cx + dx, y = cy + dy;
+        if (x < 0 || x >= W || y < 0 || y >= H) continue;
+        if (!mask[y * W + x]) continue;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD2) { bestD2 = d2; best = [x, y]; }
+      }
+    }
+    return best;
+  }
+
+  const start = snapToOrange(startCanvas);
+  const end = snapToOrange(endCanvas);
+  if (!start || !end) return null;
+
+  // BFS on orange mask (8-connected)
+  const visited = new Uint8Array(W * H);
+  const parent = new Int32Array(W * H);
+  parent.fill(-1);
+  const dirs = [-W-1,-W,-W+1,-1,1,W-1,W,W+1];
+  const q = [start[1] * W + start[0]];
+  let qi = 0;
+  visited[q[0]] = 1;
+  const endIdx = end[1] * W + end[0];
+  let found = false;
+  while (qi < q.length) {
+    const idx = q[qi++];
+    if (idx === endIdx) { found = true; break; }
+    for (const d of dirs) {
+      const ni = idx + d;
+      if (ni < 0 || ni >= W * H) continue;
+      // Wraparound check: ensure we didn't cross row boundary unexpectedly
+      const dRow = Math.abs(Math.floor(ni / W) - Math.floor(idx / W));
+      if (dRow > 1) continue;
+      if (!mask[ni] || visited[ni]) continue;
+      visited[ni] = 1;
+      parent[ni] = idx;
+      q.push(ni);
+    }
+  }
+  if (!found) return null;
+  // Reconstruct
+  const path = [];
+  let cur = endIdx;
+  while (cur !== -1) {
+    path.push([cur % W, Math.floor(cur / W)]);
+    cur = parent[cur];
+  }
+  path.reverse();
+
+  // Reject obviously-degenerate paths. If the BFS only found a tiny blob of
+  // orange pixels (e.g. it snapped to a callout dot, not the actual bore),
+  // the reconstructed path will be much shorter than the user's intent.
+  // Compare straight-line distance between the user's CLICKS to the BFS
+  // path's bounding box diagonal — if the path is way smaller than the
+  // clicks suggest, this trace is junk.
+  const clickDist = Math.hypot(
+    endCanvas[0] - startCanvas[0],
+    endCanvas[1] - startCanvas[1]
+  );
+  if (path.length < 4) return null;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of path) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const bboxDiag = Math.hypot(maxX - minX, maxY - minY);
+  // If the user's clicks were 200 px apart but the BFS path's bbox is 30 px,
+  // we found a smudge, not a bore. Bail.
+  if (clickDist > 50 && bboxDiag < clickDist * 0.4) return null;
+
+  // Force exact endpoints (replace first/last with actual user clicks)
+  path[0] = startCanvas;
+  path[path.length - 1] = endCanvas;
+  // Subsample to reduce density
+  const step = Math.max(1, Math.floor(path.length / 200));
+  const sub = [];
+  for (let i = 0; i < path.length; i += step) sub.push(path[i]);
+  if (sub[sub.length - 1] !== path[path.length - 1]) sub.push(path[path.length - 1]);
+  // Smooth (simple moving average, preserve endpoints)
+  return smoothPath(sub, 5);
+}
+
+function smoothPath(pts, win = 5) {
+  if (pts.length < win * 2) return pts;
+  const half = Math.floor(win / 2);
+  const out = pts.map((p, i) => {
+    if (i < half || i >= pts.length - half) return p;
+    let sx = 0, sy = 0;
+    for (let k = -half; k <= half; k++) {
+      sx += pts[i + k][0];
+      sy += pts[i + k][1];
+    }
+    return [sx / win, sy / win];
+  });
+  out[0] = pts[0];
+  out[out.length - 1] = pts[pts.length - 1];
+  return out;
+}
+
+/* ============================================================
+   RUN GENERATION
+   ============================================================ */
+function generateRun({ start, end, depth, eop, points, style, side }) {
+  const startFt = feetFromStation(start);
+  const endFt = feetFromStation(end);
+  const totalFt = Math.abs(endFt - startFt);
+  if (totalFt === 0) throw new Error("Start and end stations are the same.");
+
+  const stations = stationsBetween(startFt, endFt);
+  const totalLength = pathLength(points);
+  if (totalLength < 1) throw new Error("Path is too short.");
+
+  // For each station, find its position+tangent along the path
+  const ticks = stations.map((ft) => {
+    const offset = (ft - startFt) / (endFt - startFt) * totalLength;
+    const { p, t } = pointAtDistance(points, offset);
+    return {
+      ft,
+      label: `${stationFromFeet(ft)} @ ${depth} EOP ${eop}`,
+      p,
+      t,
+    };
+  });
+
+  // Apply the user-chosen side to every tick. Left/Right are defined
+  // relative to the bore travel direction (start → end), which matches
+  // how a person reads the drawing. The raw perpendicular [-t.y, t.x] is
+  // a 90° CCW rotation of the tangent — on a screen with Y-down that's
+  // visually to the LEFT of the direction of travel.
+  const sign = side === "right" ? -1 : 1;
+  ticks.forEach((tick) => {
+    const perp = [-tick.t[1] * sign, tick.t[0] * sign];
+    tick.perp = perp;
+  });
+
+  return {
+    id: `run_${Date.now()}_${Math.floor(Math.random() * 9999)}`,
+    start, end, depth, eop, style, side,
+    points, ticks,
+    offset: { dx: 0, dy: 0 },   // applied at draw time; user can drag run
+    rotation: 0,                // radians; rotates rigidly around path[0]
+  };
+}
+
+/* ============================================================
+   OVERLAY DRAWING
+   ============================================================ */
+function drawOverlay() {
+  const ctx = dom.overlayCanvas.getContext("2d");
+  ctx.clearRect(0, 0, dom.overlayCanvas.width, dom.overlayCanvas.height);
+
+  // Draw all completed runs
+  for (const run of state.runs) {
+    drawRun(ctx, run, run.id === state.selectedRunId);
+  }
+
+  // Draw the in-progress draw points
+  if (state.tool === "draw" && state.drawPoints.length > 0) {
+    drawDrawPreview(ctx);
+  }
+}
+
+function refreshTracePreview() {
+  // Build the same multi-segment BFS trace that generateRun will use,
+  // so the user can SEE the path before committing to it. If any leg
+  // fails or the result is degenerate, we set tracePreview to null so
+  // the dashed straight-line fallback shows instead.
+  state.tracePreview = null;
+  if (!state.imageData) return;
+  if (state.drawPoints.length < 2) return;
+
+  const stitched = [];
+  for (let i = 0; i < state.drawPoints.length - 1; i++) {
+    const seg = bfsTrace(state.drawPoints[i], state.drawPoints[i + 1]);
+    if (!seg || seg.length < 3) return;  // any failed leg → no preview
+    if (stitched.length && stitched[stitched.length - 1][0] === seg[0][0] &&
+        stitched[stitched.length - 1][1] === seg[0][1]) {
+      stitched.push(...seg.slice(1));
+    } else {
+      stitched.push(...seg);
+    }
+  }
+  // Sanity check: total path length must be at least proportional to the
+  // straight-line distance between user points. If BFS gave us a path
+  // 5x shorter than the chord, it's degenerate (snapped to a tight cluster).
+  const chord = state.drawPoints.reduce((acc, p, i, arr) => {
+    if (i === 0) return 0;
+    return acc + dist(arr[i - 1], p);
+  }, 0);
+  const traceLen = pathLength(stitched);
+  if (traceLen < chord * 0.5) return;  // suspiciously short → reject
+
+  state.tracePreview = stitched;
+}
+
+function drawDrawPreview(ctx) {
+  ctx.save();
+
+  // Solid GREEN line = BFS trace preview (what generateRun will use).
+  // Dashed orange line = straight-line connection of click points (fallback
+  // or just visual reference for the click order).
+  if (state.tracePreview) {
+    ctx.strokeStyle = "rgba(34, 197, 94, 0.85)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(state.tracePreview[0][0], state.tracePreview[0][1]);
+    for (let i = 1; i < state.tracePreview.length; i++) {
+      ctx.lineTo(state.tracePreview[i][0], state.tracePreview[i][1]);
+    }
+    ctx.stroke();
+  }
+
+  // User's click points (markers)
+  state.drawPoints.forEach((pt, i) => {
+    ctx.fillStyle = i === 0 ? "#56d364" : (i === state.drawPoints.length - 1 ? "#f0b34d" : "#7d8590");
+    ctx.beginPath();
+    ctx.arc(pt[0], pt[1], 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#000";
+    ctx.font = "11px JetBrains Mono, monospace";
+    ctx.fillText(i === 0 ? "A" : (i === state.drawPoints.length - 1 ? "B" : `${i+1}`), pt[0] - 3, pt[1] + 4);
+  });
+
+  // Dashed orange line connecting clicks (only shown when no trace preview,
+  // or when hovering for the next point)
+  if (state.drawPoints.length > 1 && !state.tracePreview) {
+    ctx.strokeStyle = "#ff5732";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(state.drawPoints[0][0], state.drawPoints[0][1]);
+    for (let i = 1; i < state.drawPoints.length; i++) {
+      ctx.lineTo(state.drawPoints[i][0], state.drawPoints[i][1]);
+    }
+    if (state.hoverPoint) ctx.lineTo(state.hoverPoint[0], state.hoverPoint[1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else if (state.hoverPoint && state.drawPoints.length >= 1) {
+    // Just show hover hint from last point
+    const last = state.drawPoints[state.drawPoints.length - 1];
+    ctx.strokeStyle = "rgba(255, 87, 50, 0.6)";
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(last[0], last[1]);
+    ctx.lineTo(state.hoverPoint[0], state.hoverPoint[1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.restore();
+}
+
+// Compute the rigid pivot (anchor) point for a run: first path point.
+// All rotations happen around this point; offset is added on top.
+function runPivot(run) {
+  return [run.points[0][0], run.points[0][1]];
+}
+
+// Apply a run's offset+rotation transform to a canvas-relative point
+// expressed in *original* (pre-transform) coords. Used for hit testing
+// of rendered geometry.
+function applyRunTransform(run, p) {
+  const ox = run.offset ? run.offset.dx : 0;
+  const oy = run.offset ? run.offset.dy : 0;
+  const rot = run.rotation || 0;
+  const [px, py] = runPivot(run);
+  const dx = p[0] - px;
+  const dy = p[1] - py;
+  const c = Math.cos(rot), s = Math.sin(rot);
+  return [
+    px + dx * c - dy * s + ox,
+    py + dx * s + dy * c + oy,
+  ];
+}
+
+// Inverse: given a screen-space canvas point, return its position in the
+// run's *original* (pre-transform) coordinate space. Useful when we need
+// to write back to a tick's `.p` after the user dragged it on screen.
+function inverseRunTransform(run, p) {
+  const ox = run.offset ? run.offset.dx : 0;
+  const oy = run.offset ? run.offset.dy : 0;
+  const rot = run.rotation || 0;
+  const [px, py] = runPivot(run);
+  const dx = p[0] - ox - px;
+  const dy = p[1] - oy - py;
+  const c = Math.cos(-rot), s = Math.sin(-rot);
+  return [
+    px + dx * c - dy * s,
+    py + dx * s + dy * c,
+  ];
+}
+
+// Where to draw the rotation handle for a selected run, in screen-space
+// canvas coords. Positioned a fixed distance perpendicular to the path
+// at its pivot, so it doesn't overlap the bore.
+function rotateHandlePos(run) {
+  // Use the path's first segment to figure out a perpendicular direction
+  const p0 = run.points[0];
+  const p1 = run.points[1] || [p0[0] + 1, p0[1]];
+  const tx = p1[0] - p0[0], ty = p1[1] - p0[1];
+  const tl = Math.hypot(tx, ty) || 1;
+  // Perpendicular pointing opposite of the side ticks went on, so the
+  // handle never sits on top of tick labels.
+  const sign = run.side === "right" ? 1 : -1;
+  const HANDLE_DIST = 30;
+  const hx = p0[0] + (-ty / tl) * sign * HANDLE_DIST;
+  const hy = p0[1] + (tx / tl) * sign * HANDLE_DIST;
+  return applyRunTransform(run, [hx, hy]);
+}
+
+// Per-tick rotation handle position (canvas-space, post-transform). Sits
+// at the END of the tick's underline, slightly past the label, on the
+// same side the ticks already point to. Drag rotates that one tick's perp
+// around its anchor (tick.p), independent of the rest of the run.
+function tickRotateHandlePos(run, tickIndex) {
+  const tick = run.ticks[tickIndex];
+  if (!tick) return null;
+  // Distance from tick anchor to handle: tick length + a small gap so the
+  // handle clears the label.
+  const TICK_HANDLE_OFFSET = state.defaults.tickLen + 14;
+  const localHandle = [
+    tick.p[0] + tick.perp[0] * TICK_HANDLE_OFFSET,
+    tick.p[1] + tick.perp[1] * TICK_HANDLE_OFFSET,
+  ];
+  return applyRunTransform(run, localHandle);
+}
+
+function drawRun(ctx, run, selected = false) {
+  ctx.save();
+
+  // Apply rigid transform: translate(offset) → translate(pivot) → rotate → translate(-pivot).
+  // We do this via setTransform-style nested translates so all geometry
+  // below is drawn in the run's *original* coordinate space, untouched.
+  const ox = run.offset ? run.offset.dx : 0;
+  const oy = run.offset ? run.offset.dy : 0;
+  const rot = run.rotation || 0;
+  const [px, py] = runPivot(run);
+  ctx.translate(ox + px, oy + py);
+  ctx.rotate(rot);
+  ctx.translate(-px, -py);
+
+  // Run path (faint guide line). When selected, show solid orange.
+  ctx.strokeStyle = selected ? "rgba(255,87,50,0.6)" : "rgba(0,0,0,0)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 4]);
+  ctx.beginPath();
+  ctx.moveTo(run.points[0][0], run.points[0][1]);
+  for (let i = 1; i < run.points.length; i++) {
+    ctx.lineTo(run.points[i][0], run.points[i][1]);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Tick + text per station
+  const tickLenPx = state.defaults.tickLen * state.scale;
+  const fontPx = state.defaults.fontSize * state.scale;
+  const strokePx = state.defaults.stroke * state.scale;
+  ctx.lineWidth = strokePx;
+  ctx.strokeStyle = "#e60d0d";
+  ctx.fillStyle = "#ff0000";
+
+  ctx.font = `${fontPx}px monospace`;
+  for (let ti = 0; ti < run.ticks.length; ti++) {
+    const tick = run.ticks[ti];
+    const textW = ctx.measureText(tick.label).width;
+    const ulLen = Math.max(textW + 4, tickLenPx);
+
+    const x0 = tick.p[0];
+    const y0 = tick.p[1];
+    const ex = x0 + tick.perp[0] * ulLen;
+    const ey = y0 + tick.perp[1] * ulLen;
+
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    // Text rotation. We want labels to always read left-to-right, never
+    // upside-down. After a side-flip the perp points the opposite way, so
+    // a naive rotation lands the text inverted. If the perp's natural
+    // angle puts text in the upside-down half (cos(ang) < 0, i.e. the
+    // text would read right-to-left), we rotate by 180° and start the
+    // baseline from the OTHER end of the underline so the label sits in
+    // the same visual position relative to the bore but reads correctly.
+    const rawAng = Math.atan2(tick.perp[1], tick.perp[0]);
+    const flipText = Math.cos(rawAng) < 0;
+    const ang = flipText ? rawAng + Math.PI : rawAng;
+    ctx.save();
+    if (flipText) {
+      // Text origin moves to the FAR end of the underline (since rotation
+      // flipped). Use the underline's other endpoint as the text anchor.
+      ctx.translate(ex, ey);
+    } else {
+      ctx.translate(x0, y0);
+    }
+    ctx.rotate(ang);
+    const descOff = -fontPx * 0.18;
+    ctx.translate(0, descOff);
+    ctx.fillText(tick.label, 4, 0);
+    ctx.restore();
+
+    if (selected) {
+      const isSelectedTick = (ti === state.selectedTickIndex);
+      ctx.save();
+      // Anchor dot — bigger and accent-bright when this tick is selected
+      ctx.fillStyle = isSelectedTick ? "#ff5732" : "rgba(255,87,50,0.85)";
+      ctx.beginPath();
+      ctx.arc(x0, y0, isSelectedTick ? 5 : 3, 0, Math.PI * 2);
+      ctx.fill();
+      // Outline ring around selected tick to make it unmistakable
+      if (isSelectedTick) {
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x0, y0, 8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Endpoint markers (still in pre-transform coords; the ctx transform
+  // takes care of placing them correctly).
+  ctx.fillStyle = selected ? "#ff5732" : "#56d364";
+  ctx.beginPath();
+  ctx.arc(run.points[0][0], run.points[0][1], 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = selected ? "#ff5732" : "#f0b34d";
+  ctx.beginPath();
+  ctx.arc(run.points[run.points.length - 1][0], run.points[run.points.length - 1][1], 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // Selection handles (drawn AFTER restore so they're in screen space and
+  // don't get rotated themselves - they're UI not content)
+  if (selected) {
+    // Pivot marker (blue dot) at the run's anchor point
+    const pivot = applyRunTransform(run, runPivot(run));
+    ctx.save();
+    ctx.fillStyle = "#3b82f6";
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(pivot[0], pivot[1], 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Rotation handle (green circle with dashed tether back to pivot)
+    const handle = rotateHandlePos(run);
+    ctx.strokeStyle = "rgba(34, 197, 94, 0.6)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(pivot[0], pivot[1]);
+    ctx.lineTo(handle[0], handle[1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#22c55e";
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(handle[0], handle[1], 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // ↻ glyph inside the rotation handle
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("↻", handle[0], handle[1] + 1);
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
+    ctx.restore();
+
+    // Per-tick rotation handles — one small ↻ button at the end of each
+    // tick's underline. Drag a tick handle to rotate just that tick around
+    // its own anchor (tick.p). Run-level rotation handle (above) still
+    // rotates the whole run as a stamp.
+    ctx.save();
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < run.ticks.length; i++) {
+      const h = tickRotateHandlePos(run, i);
+      if (!h) continue;
+      ctx.fillStyle = "#22c55e";
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(h[0], h[1], 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.fillText("↻", h[0], h[1] + 1);
+    }
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
+    ctx.restore();
+  }
+}
+
+/* ============================================================
+   TOOL HANDLING
+   ============================================================ */
+function setTool(t) {
+  state.tool = t;
+  document.querySelectorAll(".toolbar button[data-tool]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.tool === t);
+  });
+  dom.canvasContainer.className = `tool-${t}`;
+  dom.curTool.textContent = t.toUpperCase();
+  if (t !== "draw") {
+    state.drawPoints = [];
+    state.tracePreview = null;
+  }
+  drawOverlay();
+}
+
+function setStep(n) {
+  for (let i = 1; i <= 5; i++) {
+    const el = $(`step${i}`);
+    el.classList.remove("active", "done");
+    if (i < n) el.classList.add("done");
+    else if (i === n) el.classList.add("active");
+  }
+}
+
+/* ============================================================
+   EVENT WIRING
+   ============================================================ */
+// File upload
+dom.uploadZone.addEventListener("click", () => dom.fileInput.click());
+dom.uploadZone.addEventListener("dragover", (e) => { e.preventDefault(); });
+dom.uploadZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f && f.type === "application/pdf") loadPDF(f);
+});
+dom.fileInput.addEventListener("change", (e) => {
+  const f = e.target.files[0];
+  if (f) loadPDF(f);
+});
+dom.pageSelect.addEventListener("change", async (e) => {
+  // Save the current page's runs + undo/redo stacks before swapping
+  savePageData();
+  state.pageIndex = parseInt(e.target.value, 10);
+  // Load the new page's data (or initialize empty if first visit)
+  loadPageData(state.pageIndex);
+  await renderPage();
+  refreshRunList();
+  drawOverlay();
+});
+
+// Toolbar
+document.querySelectorAll(".toolbar button[data-tool]").forEach((b) => {
+  b.addEventListener("click", () => setTool(b.dataset.tool));
+});
+
+// Zoom
+$("zoomIn").addEventListener("click", () => zoomBy(1.2));
+$("zoomOut").addEventListener("click", () => zoomBy(1 / 1.2));
+$("zoomFit").addEventListener("click", fitToWindow);
+
+// Rescale every run's geometry (points, tick anchors, offsets) by `ratio`.
+// Walks the LIVE state.runs (current page) AND every other page stashed in
+// state.pageData, so that switching back to a different page after a zoom
+// finds its runs already at the new scale. Without this, runs on non-active
+// pages keep their old-scale coords and appear shifted/stretched relative
+// to the bore when the user returns to that page.
+function rescaleAllRuns(ratio) {
+  if (ratio === 1) return;
+  const apply = (runs) => {
+    for (const run of runs) {
+      run.points = run.points.map((p) => [p[0] * ratio, p[1] * ratio]);
+      run.ticks.forEach((tick) => {
+        tick.p = [tick.p[0] * ratio, tick.p[1] * ratio];
+      });
+      if (run.offset) {
+        run.offset = { dx: run.offset.dx * ratio, dy: run.offset.dy * ratio };
+      }
+    }
+  };
+  // Current page
+  apply(state.runs);
+  state.drawPoints = state.drawPoints.map((p) => [p[0] * ratio, p[1] * ratio]);
+  // All other pages stashed in pageData. Skip the current page since it's
+  // already represented by state.runs (savePageData is called on page-swap,
+  // not on every operation, so pageData[currentPage] may be stale or absent).
+  for (const [key, pd] of Object.entries(state.pageData)) {
+    if (parseInt(key, 10) === state.pageIndex) continue;
+    if (pd && pd.runs) apply(pd.runs);
+  }
+}
+
+function zoomBy(f) {
+  state.scale = Math.max(0.25, Math.min(4, state.scale * f));
+  dom.zoomVal.textContent = Math.round(state.scale * 100 / 1.5) + "%";
+  // Re-scale canvas-space points in runs and draw points across ALL pages
+  const oldScale = state.scaleSnapshot || state.scale / f;
+  const ratio = state.scale / oldScale;
+  rescaleAllRuns(ratio);
+  state.scaleSnapshot = state.scale;
+  if (state.pdfDoc) renderPage();
+}
+
+function fitToWindow() {
+  const wrap = dom.canvasContainer.getBoundingClientRect();
+  const pad = 48;
+  if (!state.viewport) return;
+  const targetScale = Math.min(
+    (wrap.width - pad) / (state.pageWidthPt),
+    (wrap.height - pad) / (state.pageHeightPt)
+  );
+  // Compute zoom ratio so we can rescale existing runs/draw points to match.
+  const oldScale = state.scaleSnapshot || state.scale;
+  const newScale = Math.max(0.25, Math.min(4, targetScale));
+  const ratio = newScale / oldScale;
+  state.scale = newScale;
+  dom.zoomVal.textContent = Math.round(state.scale * 100 / 1.5) + "%";
+  // Rescale every run's geometry across ALL pages, just like zoomBy does.
+  rescaleAllRuns(ratio);
+  state.scaleSnapshot = state.scale;
+  refreshRunList();
+  renderPage();
+}
+
+// Canvas mouse events
+dom.canvasContainer.addEventListener("mousemove", (e) => {
+  const rect = dom.overlayCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (x < 0 || y < 0 || x > dom.overlayCanvas.width || y > dom.overlayCanvas.height) {
+    dom.cursorPos.textContent = "—";
+    state.hoverPoint = null;
+    drawOverlay();
+    return;
+  }
+  if (state.viewport) {
+    const [pdfX, pdfY] = canvasToPdfPt(x, y);
+    dom.cursorPos.textContent = `${pdfX.toFixed(0)}, ${pdfY.toFixed(0)} pt`;
+  }
+  state.hoverPoint = [x, y];
+  if (state.tool === "draw" && state.drawPoints.length > 0) drawOverlay();
+});
+
+dom.canvasContainer.addEventListener("mouseleave", () => {
+  state.hoverPoint = null;
+  drawOverlay();
+});
+
+dom.canvasContainer.addEventListener("click", (e) => {
+  if (!state.viewport) return;
+  const rect = dom.overlayCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (x < 0 || y < 0 || x > dom.overlayCanvas.width || y > dom.overlayCanvas.height) return;
+
+  if (state.tool === "draw") {
+    state.drawPoints.push([x, y]);
+    refreshTracePreview();
+    drawOverlay();
+    const n = state.drawPoints.length;
+    if (n === 1) {
+      setStatus(`Point 1 set. Click to add more guide points along the bore. Press Enter when done.`);
+    } else {
+      const traceMsg = state.tracePreview
+        ? ` (preview: ${state.tracePreview.length} pts traced — green line)`
+        : ` (no orange found between points — will use straight line)`;
+      setStatus(`${n} points set${traceMsg}. Click for more, or press Enter to finish.`);
+    }
+  } else if (state.tool === "edit") {
+    // Find a tick or run near click — only used for selection here;
+    // actual dragging is handled by mousedown/mousemove/mouseup below.
+    const hit = findRunNearCanvas([x, y], 12);
+    if (hit) {
+      state.selectedRunId = hit.run.id;
+      // Highlight + jump to inspector
+      refreshRunList();
+      drawOverlay();
+    }
+  }
+});
+
+/* ============================================================
+   PAN TOOL — drag the canvas viewport
+   ============================================================ */
+// Pan works by directly driving the canvas container's scrollLeft/scrollTop.
+// The PAN button (and Space hold) sets state.tool = "pan", which triggers
+// the grab cursor; mousedown then captures the starting scroll position and
+// mouse position, mousemove applies the delta. mouseup ends the gesture.
+dom.canvasContainer.addEventListener("mousedown", (e) => {
+  if (state.tool !== "pan") return;
+  if (e.button !== 0) return;
+  state.pan = {
+    startMouse: [e.clientX, e.clientY],
+    startScroll: [dom.canvasContainer.scrollLeft, dom.canvasContainer.scrollTop],
+  };
+  dom.canvasContainer.classList.add("panning");
+  e.preventDefault();
+});
+
+window.addEventListener("mousemove", (e) => {
+  if (!state.pan) return;
+  const dx = e.clientX - state.pan.startMouse[0];
+  const dy = e.clientY - state.pan.startMouse[1];
+  // Scroll inverse to mouse direction so the content tracks the cursor
+  dom.canvasContainer.scrollLeft = state.pan.startScroll[0] - dx;
+  dom.canvasContainer.scrollTop = state.pan.startScroll[1] - dy;
+});
+
+window.addEventListener("mouseup", (e) => {
+  if (!state.pan) return;
+  state.pan = null;
+  dom.canvasContainer.classList.remove("panning");
+});
+
+/* ============================================================
+   MOVE ALL TOOL — drag every run on the page together
+   ============================================================ */
+// When state.tool === "moveall", a mousedown anywhere on the canvas starts
+// a bulk-move gesture: every run's offset is shifted by the same cursor
+// delta. On mouseup, a single bulk_offset undo patch captures every run's
+// PRIOR offset so a single Undo reverts the whole bulk move.
+dom.canvasContainer.addEventListener("mousedown", (e) => {
+  if (state.tool !== "moveall") return;
+  if (e.button !== 0) return;
+  if (state.runs.length === 0) return;
+  // Snapshot every run's current offset so we can apply absolute deltas
+  // (avoids floating-point drift across long drags) and so the undo patch
+  // has the exact prior values.
+  const startOffsets = state.runs.map((r) => ({
+    runId: r.id,
+    dx: r.offset ? r.offset.dx : 0,
+    dy: r.offset ? r.offset.dy : 0,
+  }));
+  state.moveAll = {
+    startMouse: [e.clientX, e.clientY],
+    startOffsets,
+  };
+  dom.canvasContainer.classList.add("moving-all");
+  e.preventDefault();
+});
+
+window.addEventListener("mousemove", (e) => {
+  if (!state.moveAll) return;
+  const dx = e.clientX - state.moveAll.startMouse[0];
+  const dy = e.clientY - state.moveAll.startMouse[1];
+  // Apply the same delta to every run's offset, anchored to the snapshot
+  // taken at mousedown so cumulative drift is impossible.
+  for (const snap of state.moveAll.startOffsets) {
+    const run = state.runs.find((r) => r.id === snap.runId);
+    if (run) run.offset = { dx: snap.dx + dx, dy: snap.dy + dy };
+  }
+  drawOverlay();
+});
+
+window.addEventListener("mouseup", (e) => {
+  if (!state.moveAll) return;
+  const ma = state.moveAll;
+  state.moveAll = null;
+  dom.canvasContainer.classList.remove("moving-all");
+  // Compute the final delta. If it's effectively zero (a click that didn't
+  // drag), don't push a no-op undo entry.
+  const dx = e.clientX - ma.startMouse[0];
+  const dy = e.clientY - ma.startMouse[1];
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+  // One bulk patch captures every run's PRIOR offset, so a single Undo
+  // reverts the entire move at once instead of one-run-at-a-time.
+  pushUndo({ type: "bulk_offset", prev: ma.startOffsets });
+  setStatus(`Moved ${ma.startOffsets.length} run${ma.startOffsets.length === 1 ? "" : "s"} by (${dx.toFixed(0)}, ${dy.toFixed(0)})`);
+});
+
+/* ============================================================
+   DRAG HANDLERS (Edit tool)
+   ============================================================ */
+// Edit tool gestures:
+//   • drag on path/run body  → move (translate) the entire run
+//   • drag on the green ↻ handle → rotate the run around its blue pivot
+//   • Shift+drag on a tick   → move that one tick only (free-floating)
+dom.canvasContainer.addEventListener("mousedown", (e) => {
+  if (state.tool !== "edit") return;
+  if (!state.viewport) return;
+  if (e.button !== 0) return;
+  const rect = dom.overlayCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (x < 0 || y < 0 || x > dom.overlayCanvas.width || y > dom.overlayCanvas.height) return;
+
+  const hit = findRunNearCanvas([x, y], 12);
+  if (!hit) return;
+
+  // Select the run we hit (so its handles render and subsequent mousedowns
+  // can find the rotate handle). If we just switched to a different run,
+  // clear any tick selection that was on the previous run.
+  if (state.selectedRunId !== hit.run.id) {
+    state.selectedRunId = hit.run.id;
+    state.selectedTickIndex = -1;
+  }
+
+  if (hit.kind === "rotate") {
+    // Rotation drag → rotate run around its pivot. Store the angle from
+    // pivot to mouse-down point as the baseline; later angles are deltas.
+    const pivot = applyRunTransform(hit.run, runPivot(hit.run));
+    const startAngle = Math.atan2(y - pivot[1], x - pivot[0]);
+    state.drag = {
+      runId: hit.run.id,
+      kind: "rotate",
+      startCanvas: [x, y],
+      original: { rotation: hit.run.rotation || 0, startAngle, pivot },
+    };
+  } else if (hit.kind === "tick-rotate") {
+    // Per-tick rotation drag → rotate that single tick's perp around its
+    // anchor (tick.p). We work in canvas space relative to the displayed
+    // anchor, then store the inverse-transformed anchor angle so the math
+    // accounts for any whole-run rotation already applied.
+    const tick = hit.run.ticks[hit.tickIndex];
+    const anchorCanvas = applyRunTransform(hit.run, tick.p);
+    const startAngle = Math.atan2(y - anchorCanvas[1], x - anchorCanvas[0]);
+    state.drag = {
+      runId: hit.run.id,
+      kind: "tick-rotate",
+      tickIndex: hit.tickIndex,
+      startCanvas: [x, y],
+      original: {
+        startAngle,
+        anchorCanvas,
+        perp: [tick.perp[0], tick.perp[1]],
+      },
+    };
+  } else if (e.shiftKey && hit.kind === "tick") {
+    // Shift+drag on a tick handle → move just that tick.
+    // Tick coords are in the run's pre-transform space, so we work
+    // in that space too — the cursor delta gets inverse-rotated to
+    // match the run's local axes.
+    const tick = hit.run.ticks[hit.tickIndex];
+    state.drag = {
+      runId: hit.run.id,
+      kind: "tick",
+      tickIndex: hit.tickIndex,
+      startCanvas: [x, y],
+      original: {
+        p: [tick.p[0], tick.p[1]],
+        startLocal: inverseRunTransform(hit.run, [x, y]),
+      },
+    };
+  } else if (hit.kind === "tick") {
+    // Plain click on a tick anchor (no Shift) → select that tick. Pressing
+    // Delete/Backspace then removes it. We deliberately do NOT start a drag
+    // here — the user has to Shift-drag if they want to nudge it. This
+    // separation keeps single-click cheap and discoverable for deletion.
+    state.selectedTickIndex = hit.tickIndex;
+    setStatus(`Tick ${hit.run.ticks[hit.tickIndex].label.split(" @")[0]} selected — press Delete to remove`);
+  } else {
+    // Default → whole-run drag (move offset).
+    const orig = hit.run.offset || { dx: 0, dy: 0 };
+    state.selectedTickIndex = -1;
+    state.drag = {
+      runId: hit.run.id,
+      kind: "run",
+      startCanvas: [x, y],
+      original: { dx: orig.dx, dy: orig.dy },
+    };
+  }
+  e.preventDefault();
+  refreshRunList();
+  drawOverlay();
+});
+
+dom.canvasContainer.addEventListener("mousemove", (e) => {
+  // Only the drag-active branch needs early exit; the cursor-hint branch
+  // wants to run on every mousemove so the cursor changes as you hover.
+  if (!state.drag) {
+    if (state.tool === "edit" && state.viewport) {
+      // Hover hint: change cursor when over a draggable element
+      const rect = dom.overlayCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const hit = findRunNearCanvas([x, y], 12);
+      if (hit) {
+        if (hit.kind === "rotate") dom.canvasContainer.style.cursor = "grab";
+        else if (hit.kind === "tick-rotate") dom.canvasContainer.style.cursor = "grab";
+        else if (hit.kind === "tick" && e.shiftKey) dom.canvasContainer.style.cursor = "move";
+        else dom.canvasContainer.style.cursor = "move";
+      } else {
+        dom.canvasContainer.style.cursor = "";
+      }
+    }
+    return;
+  }
+  const rect = dom.overlayCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const run = state.runs.find((r) => r.id === state.drag.runId);
+  if (!run) { state.drag = null; return; }
+
+  if (state.drag.kind === "run") {
+    const dx = x - state.drag.startCanvas[0];
+    const dy = y - state.drag.startCanvas[1];
+    run.offset = {
+      dx: state.drag.original.dx + dx,
+      dy: state.drag.original.dy + dy,
+    };
+  } else if (state.drag.kind === "tick") {
+    // Convert current cursor to local coords; delta in local coords goes
+    // straight to tick.p so the move feels right after rotation.
+    const localNow = inverseRunTransform(run, [x, y]);
+    const dxLocal = localNow[0] - state.drag.original.startLocal[0];
+    const dyLocal = localNow[1] - state.drag.original.startLocal[1];
+    const tick = run.ticks[state.drag.tickIndex];
+    if (tick) {
+      tick.p = [
+        state.drag.original.p[0] + dxLocal,
+        state.drag.original.p[1] + dyLocal,
+      ];
+    }
+  } else if (state.drag.kind === "rotate") {
+    const pivot = state.drag.original.pivot;
+    const a = Math.atan2(y - pivot[1], x - pivot[0]);
+    run.rotation = state.drag.original.rotation + (a - state.drag.original.startAngle);
+    // Optional: snap to 15° increments when shift is held
+    if (e.shiftKey) {
+      const SNAP = Math.PI / 12;  // 15°
+      run.rotation = Math.round(run.rotation / SNAP) * SNAP;
+    }
+  } else if (state.drag.kind === "tick-rotate") {
+    // Rotate the tick's perp by the angular delta around its anchor.
+    const anchor = state.drag.original.anchorCanvas;
+    const a = Math.atan2(y - anchor[1], x - anchor[0]);
+    let delta = a - state.drag.original.startAngle;
+    if (e.shiftKey) {
+      const SNAP = Math.PI / 12;
+      delta = Math.round(delta / SNAP) * SNAP;
+    }
+    const c = Math.cos(delta), s = Math.sin(delta);
+    const op = state.drag.original.perp;
+    const tick = run.ticks[state.drag.tickIndex];
+    if (tick) {
+      tick.perp = [op[0] * c - op[1] * s, op[0] * s + op[1] * c];
+    }
+  }
+  drawOverlay();
+});
+
+window.addEventListener("mouseup", (e) => {
+  if (!state.drag) return;
+  const drag = state.drag;
+  state.drag = null;
+  dom.canvasContainer.style.cursor = "";
+  // Push the appropriate undo patch based on what the user just did.
+  // We compare to the drag's stored "original" so a drag that ends back
+  // at the start position doesn't push a no-op undo entry.
+  const run = state.runs.find((r) => r.id === drag.runId);
+  if (run) {
+    if (drag.kind === "run") {
+      const o = drag.original;
+      const cur = run.offset || { dx: 0, dy: 0 };
+      if (o.dx !== cur.dx || o.dy !== cur.dy) {
+        pushUndo({ type: "set_offset", runId: run.id, prev: { dx: o.dx, dy: o.dy } });
+      }
+    } else if (drag.kind === "rotate") {
+      if ((run.rotation || 0) !== drag.original.rotation) {
+        pushUndo({ type: "set_rotation", runId: run.id, prev: drag.original.rotation });
+      }
+    } else if (drag.kind === "tick") {
+      const tick = run.ticks[drag.tickIndex];
+      const op = drag.original.p;
+      if (tick && (tick.p[0] !== op[0] || tick.p[1] !== op[1])) {
+        pushUndo({ type: "set_tick_p", runId: run.id, tickIndex: drag.tickIndex, prev: [op[0], op[1]] });
+      }
+    } else if (drag.kind === "tick-rotate") {
+      const tick = run.ticks[drag.tickIndex];
+      const op = drag.original.perp;
+      if (tick && (tick.perp[0] !== op[0] || tick.perp[1] !== op[1])) {
+        pushUndo({ type: "set_tick_perp", runId: run.id, tickIndex: drag.tickIndex, prev: [op[0], op[1]] });
+      }
+    }
+  }
+  let msg = "Run repositioned";
+  if (drag.kind === "tick") msg = "Tick repositioned";
+  else if (drag.kind === "rotate") msg = "Run rotated";
+  else if (drag.kind === "tick-rotate") msg = "Tick rotated";
+  setStatus(msg);
+});
+
+function findRunNearCanvas(pt, tol) {
+  // Returns { run, kind } where kind is "rotate" | "tick-rotate" | "tick" | "run".
+  // Order matters — check most specific (smallest visual target) first so a
+  // click that lands on a small handle isn't intercepted by the path body
+  // it's drawn on top of.
+  for (const run of state.runs) {
+    // Selected-run-only handles
+    if (run.id === state.selectedRunId) {
+      // Run-level rotation handle (whole-run stamp rotation)
+      const rh = rotateHandlePos(run);
+      if (dist(rh, pt) < 12) return { run, kind: "rotate" };
+      // Per-tick rotation handles (rotate one tick's perp around its anchor)
+      for (let i = 0; i < run.ticks.length; i++) {
+        const trh = tickRotateHandlePos(run, i);
+        if (trh && dist(trh, pt) < 10) {
+          return { run, kind: "tick-rotate", tickIndex: i };
+        }
+      }
+    }
+    // Tick handles (offset+rotation aware)
+    for (let i = 0; i < run.ticks.length; i++) {
+      const t = run.ticks[i];
+      if (dist(applyRunTransform(run, t.p), pt) < tol) {
+        return { run, kind: "tick", tickIndex: i };
+      }
+    }
+    // Run body (any path point)
+    for (const p of run.points) {
+      if (dist(applyRunTransform(run, p), pt) < tol) {
+        return { run, kind: "run", tickIndex: -1 };
+      }
+    }
+  }
+  return null;
+}
+
+// Modal
+function openRunModal() {
+  setStep(3);
+  dom.modalDepth.value = dom.defDepth.value || state.defaults.depth;
+  dom.modalEOP.value = dom.defEOP.value || state.defaults.eop;
+  dom.modalStart.value = "";
+  dom.modalEnd.value = "";
+  dom.modalPathStyle.value = "auto-bore";
+  dom.modalSide.value = state.lastSide || "left";
+  dom.runModal.classList.add("show");
+  setTimeout(() => dom.modalStart.focus(), 50);
+}
+function closeRunModal() {
+  dom.runModal.classList.remove("show");
+}
+dom.modalCancel.addEventListener("click", () => {
+  closeRunModal();
+  state.drawPoints = [];
+  state.tracePreview = null;
+  drawOverlay();
+  setStatus("Cancelled");
+});
+dom.modalConfirm.addEventListener("click", () => {
+  try {
+    const start = dom.modalStart.value.trim();
+    const end = dom.modalEnd.value.trim();
+    const depth = dom.modalDepth.value.trim() || "3.0";
+    const eop = dom.modalEOP.value.trim() || "6";
+    const style = dom.modalPathStyle.value;
+    const side = dom.modalSide.value;
+    state.lastSide = side;
+
+    // Verify stations parse
+    feetFromStation(start);
+    feetFromStation(end);
+
+    // Determine path - prefer the trace preview already computed during draw
+    let pathPoints;
+    if (style === "auto-bore" && state.tracePreview && state.tracePreview.length > 4) {
+      pathPoints = state.tracePreview;
+      showToast(`Using ${pathPoints.length}-point traced path`);
+    } else if (style === "auto-bore" && state.drawPoints.length >= 2) {
+      // Trace not cached or rejected - try one more time, fallback if it fails
+      const stitched = [];
+      let anyFailed = false;
+      for (let i = 0; i < state.drawPoints.length - 1; i++) {
+        const seg = bfsTrace(state.drawPoints[i], state.drawPoints[i + 1]);
+        if (seg && seg.length > 2) {
+          if (stitched.length && stitched[stitched.length - 1][0] === seg[0][0] &&
+              stitched[stitched.length - 1][1] === seg[0][1]) {
+            stitched.push(...seg.slice(1));
+          } else {
+            stitched.push(...seg);
+          }
+        } else {
+          if (!stitched.length) stitched.push(state.drawPoints[i]);
+          stitched.push(state.drawPoints[i + 1]);
+          anyFailed = true;
+        }
+      }
+      if (stitched.length > 4 && !anyFailed) {
+        pathPoints = stitched;
+      } else {
+        showToast("Auto-trace failed; using straight line through your points");
+        pathPoints = [...state.drawPoints];
+      }
+    } else {
+      pathPoints = [...state.drawPoints];
+    }
+
+    // Sanity check: don't generate 100+ ticks on a 50px path. The result is
+    // the starburst seen in image 3.
+    const pathLen = pathLength(pathPoints);
+    const startFt = feetFromStation(start);
+    const endFt = feetFromStation(end);
+    const stationCount = Math.abs(endFt - startFt) / 10 + 1;
+    if (pathLen < stationCount * 3) {
+      // path averages less than 3 pixels per station → ticks will overlap
+      throw new Error(`Path too short (${Math.round(pathLen)}px) for ${Math.round(stationCount)} stations. Re-draw with more guide points along the actual bore.`);
+    }
+
+    const run = generateRun({ start, end, depth, eop, points: pathPoints, style, side });
+    state.runs.push(run);
+    pushUndo({ type: "add_run", runId: run.id });
+    state.drawPoints = [];
+    state.tracePreview = null;
+    closeRunModal();
+    drawOverlay();
+    refreshRunList();
+    setStep(state.runs.length === 1 ? 4 : 5);
+    setStatus(`Generated run ${start} → ${end} (${run.ticks.length} stations)`);
+    dom.btnExport.disabled = false;
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+dom.modalStart.addEventListener("keydown", (e) => { if (e.key === "Enter") dom.modalEnd.focus(); });
+dom.modalEnd.addEventListener("keydown", (e) => { if (e.key === "Enter") dom.modalDepth.focus(); });
+dom.modalDepth.addEventListener("keydown", (e) => { if (e.key === "Enter") dom.modalEOP.focus(); });
+dom.modalEOP.addEventListener("keydown", (e) => { if (e.key === "Enter") dom.modalConfirm.click(); });
+
+// Help modal
+dom.btnHelp.addEventListener("click", () => dom.helpModal.classList.add("show"));
+dom.helpClose.addEventListener("click", () => dom.helpModal.classList.remove("show"));
+
+// Reset
+dom.btnReset.addEventListener("click", () => {
+  // Across all pages — Reset is the "blow it all up" action, so it nukes
+  // pageData too, not just the current page's runs.
+  const totalRuns = Object.values(state.pageData).reduce(
+    (acc, pd) => acc + (pd.runs ? pd.runs.length : 0), 0
+  ) + state.runs.length;
+  if (totalRuns === 0 && state.drawPoints.length === 0) return;
+  if (!confirm("Discard ALL runs across every page? This cannot be undone.")) return;
+  state.runs = [];
+  state.pageData = {};
+  state.drawPoints = [];
+  state.tracePreview = null;
+  state.selectedRunId = null;
+  state.selectedTickIndex = -1;
+  state.drag = null;
+  state.undoStack = [];
+  state.redoStack = [];
+  drawOverlay();
+  refreshRunList();
+  setStep(2);
+  setStatus("Reset all pages");
+  dom.btnExport.disabled = true;
+  refreshUndoRedoButtons();
+});
+
+/* ============================================================
+   UNDO / REDO STACKS
+   ============================================================ */
+// Each user action pushes a patch describing how to revert it onto the
+// undo stack. Undo pops the top patch, applies it, and pushes the inverse
+// patch onto the redo stack so Ctrl+Y / Redo button can reapply. Any new
+// (non-undo/redo) action clears the redo stack — once you branch off the
+// timeline, the redo future is no longer reachable.
+//
+// Patches are intentionally small and don't reference live objects: they
+// store ids + values so a deleted run can be re-inserted, a moved run's
+// offset can be restored, etc.
+//
+// Patch shapes (each one stores enough state to reverse the action):
+//   { type: "add_run", runId }                         → revert by deleting
+//   { type: "delete_run", index, run }                 → revert by inserting at index
+//   { type: "set_offset", runId, prev: {dx,dy} }       → revert by restoring offset
+//   { type: "set_rotation", runId, prev }              → revert by restoring rotation
+//   { type: "set_tick_p", runId, tickIndex, prev: [x,y] }
+//   { type: "set_tick_perp", runId, tickIndex, prev: [x,y] }
+//   { type: "delete_tick", runId, index, tick }
+//   { type: "flip_side", runId }
+
+// Build the inverse of a patch given the current state. Used to populate
+// the redo stack when undo runs (the patch we apply is the "go back" patch;
+// its inverse is the "redo this" patch). Returns null if no meaningful
+// inverse can be derived (e.g. the run no longer exists).
+function inversePatch(patch) {
+  if (patch.type === "add_run") {
+    // Inverse of "this run was added → undo deletes it" is "redo re-adds it"
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (!r) return null;
+    const idx = state.runs.indexOf(r);
+    return { type: "delete_run", index: idx, run: r };
+  } else if (patch.type === "delete_run") {
+    return { type: "add_run", runId: patch.run.id };
+  } else if (patch.type === "set_offset") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (!r) return null;
+    const cur = r.offset || { dx: 0, dy: 0 };
+    return { type: "set_offset", runId: patch.runId, prev: { dx: cur.dx, dy: cur.dy } };
+  } else if (patch.type === "set_rotation") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (!r) return null;
+    return { type: "set_rotation", runId: patch.runId, prev: r.rotation || 0 };
+  } else if (patch.type === "set_tick_p") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (!r || !r.ticks[patch.tickIndex]) return null;
+    const cur = r.ticks[patch.tickIndex].p;
+    return { type: "set_tick_p", runId: patch.runId, tickIndex: patch.tickIndex, prev: [cur[0], cur[1]] };
+  } else if (patch.type === "set_tick_perp") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (!r || !r.ticks[patch.tickIndex]) return null;
+    const cur = r.ticks[patch.tickIndex].perp;
+    return { type: "set_tick_perp", runId: patch.runId, tickIndex: patch.tickIndex, prev: [cur[0], cur[1]] };
+  } else if (patch.type === "delete_tick") {
+    return { type: "set_tick_index_delete", runId: patch.runId, tickIndex: patch.index };
+  } else if (patch.type === "set_tick_index_delete") {
+    // Inverse of redoing a deletion: restore the same tick. Capture it now
+    // (before the redo runs) since once it's removed we can't read it back.
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (!r || !r.ticks[patch.tickIndex]) return null;
+    return { type: "delete_tick", runId: patch.runId, index: patch.tickIndex, tick: r.ticks[patch.tickIndex] };
+  } else if (patch.type === "flip_side") {
+    return { type: "flip_side", runId: patch.runId };  // self-inverse
+  } else if (patch.type === "bulk_offset") {
+    // Inverse: capture every run's CURRENT offset so redoing the bulk move
+    // can restore the post-move state.
+    const cur = state.runs.map((r) => ({
+      runId: r.id,
+      dx: r.offset ? r.offset.dx : 0,
+      dy: r.offset ? r.offset.dy : 0,
+    }));
+    return { type: "bulk_offset", prev: cur };
+  }
+  return null;
+}
+
+// Apply a patch (used for both undo and redo). Returns true on success.
+function applyPatch(patch) {
+  if (!patch) return false;
+  if (patch.type === "add_run") {
+    state.runs = state.runs.filter((r) => r.id !== patch.runId);
+    if (state.selectedRunId === patch.runId) {
+      state.selectedRunId = null;
+      state.selectedTickIndex = -1;
+    }
+  } else if (patch.type === "delete_run") {
+    state.runs.splice(patch.index, 0, patch.run);
+  } else if (patch.type === "set_offset") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (r) r.offset = patch.prev ? { dx: patch.prev.dx, dy: patch.prev.dy } : { dx: 0, dy: 0 };
+  } else if (patch.type === "set_rotation") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (r) r.rotation = patch.prev || 0;
+  } else if (patch.type === "set_tick_p") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (r && r.ticks[patch.tickIndex]) r.ticks[patch.tickIndex].p = [patch.prev[0], patch.prev[1]];
+  } else if (patch.type === "set_tick_perp") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (r && r.ticks[patch.tickIndex]) r.ticks[patch.tickIndex].perp = [patch.prev[0], patch.prev[1]];
+  } else if (patch.type === "delete_tick") {
+    // Undo path of a deletion: restore the tick at its original index.
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (r) r.ticks.splice(patch.index, 0, patch.tick);
+  } else if (patch.type === "set_tick_index_delete") {
+    // Redo path of a deletion: re-delete the same index.
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (r && r.ticks[patch.tickIndex]) r.ticks.splice(patch.tickIndex, 1);
+  } else if (patch.type === "flip_side") {
+    const r = state.runs.find((r) => r.id === patch.runId);
+    if (r) {
+      r.ticks.forEach((t) => { t.perp = [-t.perp[0], -t.perp[1]]; });
+      r.side = r.side === "right" ? "left" : "right";
+    }
+  } else if (patch.type === "bulk_offset") {
+    // Restore each run's offset from the snapshot. Runs that no longer
+    // exist (deleted between the move and the undo) are silently skipped.
+    for (const snap of patch.prev) {
+      const r = state.runs.find((r) => r.id === snap.runId);
+      if (r) r.offset = { dx: snap.dx, dy: snap.dy };
+    }
+  }
+  return true;
+}
+
+function pushUndo(patch) {
+  state.undoStack.push(patch);
+  // Hard cap to keep memory bounded; 200 actions is generous for this app.
+  if (state.undoStack.length > 200) state.undoStack.shift();
+  // Any new action invalidates the redo timeline
+  state.redoStack = [];
+  refreshUndoRedoButtons();
+}
+
+function refreshUndoRedoButtons() {
+  dom.btnUndo.disabled = state.undoStack.length === 0;
+  dom.btnRedo.disabled = state.redoStack.length === 0;
+}
+
+const PATCH_MSGS = {
+  add_run: "run creation",
+  delete_run: "run deletion",
+  set_offset: "move",
+  set_rotation: "rotation",
+  set_tick_p: "tick move",
+  set_tick_perp: "tick rotation",
+  delete_tick: "tick deletion",
+  set_tick_index_delete: "tick deletion",
+  flip_side: "flip",
+  bulk_offset: "move-all",
+};
+
+// Undo - applies the inverse of the most recent action, recording a redo patch
+dom.btnUndo.addEventListener("click", () => {
+  if (state.undoStack.length === 0) return;
+  const patch = state.undoStack[state.undoStack.length - 1];
+  // Snapshot the inverse BEFORE applying the undo, since some inverses
+  // depend on current state (e.g. delete_tick captures the tick).
+  let redoPatch = inversePatch(patch);
+  // Special case: undoing a tick deletion needs the tick we restored
+  // captured for the redo — but inversePatch returns set_tick_index_delete
+  // which only references the tick by index, which is correct since the
+  // restored tick will be at that index again.
+  state.undoStack.pop();
+  applyPatch(patch);
+  if (redoPatch) state.redoStack.push(redoPatch);
+  drawOverlay();
+  refreshRunList();
+  if (state.runs.length === 0) {
+    dom.btnExport.disabled = true;
+    setStep(state.pdfDoc ? 2 : 1);
+  }
+  refreshUndoRedoButtons();
+  setStatus(`Undid ${PATCH_MSGS[patch.type] || "action"}`);
+});
+
+// Redo - reapplies the most recently undone action
+dom.btnRedo.addEventListener("click", () => {
+  if (state.redoStack.length === 0) return;
+  const patch = state.redoStack.pop();
+  // Push the inverse back onto undo so user can undo the redo
+  const undoPatch = inversePatch(patch);
+  applyPatch(patch);
+  if (undoPatch) state.undoStack.push(undoPatch);
+  drawOverlay();
+  refreshRunList();
+  if (state.runs.length > 0) dom.btnExport.disabled = false;
+  refreshUndoRedoButtons();
+  setStatus(`Redid ${PATCH_MSGS[patch.type] || "action"}`);
+});
+
+/* ============================================================
+   PER-PAGE DATA — save current page's runs + stacks, swap to another
+   ============================================================ */
+function savePageData() {
+  if (!state.pdfDoc) return;
+  state.pageData[state.pageIndex] = {
+    runs: state.runs,
+    undoStack: state.undoStack,
+    redoStack: state.redoStack,
+  };
+}
+
+function loadPageData(pageIdx) {
+  const stash = state.pageData[pageIdx];
+  if (stash) {
+    state.runs = stash.runs;
+    state.undoStack = stash.undoStack;
+    state.redoStack = stash.redoStack;
+  } else {
+    state.runs = [];
+    state.undoStack = [];
+    state.redoStack = [];
+  }
+  // Always reset transient selection / drawing on page swap
+  state.selectedRunId = null;
+  state.selectedTickIndex = -1;
+  state.drag = null;
+  state.drawPoints = [];
+  state.tracePreview = null;
+  refreshUndoRedoButtons();
+  dom.btnExport.disabled = state.runs.length === 0;
+}
+
+// Defaults
+[dom.defDepth, dom.defEOP, dom.defTickLen, dom.defFontSize, dom.defStroke].forEach((inp) => {
+  inp.addEventListener("change", () => {
+    state.defaults.depth = dom.defDepth.value;
+    state.defaults.eop = dom.defEOP.value;
+    state.defaults.tickLen = parseFloat(dom.defTickLen.value);
+    state.defaults.fontSize = parseFloat(dom.defFontSize.value);
+    state.defaults.stroke = parseFloat(dom.defStroke.value);
+    drawOverlay();
+  });
+});
+
+// Run list
+function refreshRunList() {
+  dom.runCount.textContent = state.runs.length;
+  if (state.runs.length === 0) {
+    dom.runList.innerHTML = `<li class="empty-list">No runs yet.<br>Draw your first segment.</li>`;
+    return;
+  }
+  dom.runList.innerHTML = "";
+  for (const run of state.runs) {
+    const li = document.createElement("li");
+    li.className = "run-item" + (run.id === state.selectedRunId ? " selected" : "");
+    // Flip button label shows the SIDE the run will end up on after flip,
+    // so the user can read it as "next state" rather than "current state".
+    const otherSide = run.side === "right" ? "L" : "R";
+    li.innerHTML = `
+      <div class="run-title">
+        <span>${run.start} → ${run.end}</span>
+        <div class="row-actions">
+          <button class="flip-btn" data-id="${run.id}" title="Flip ticks to other side of bore">↔ ${otherSide}</button>
+          <button class="delete-btn" data-id="${run.id}" title="Delete this run">×</button>
+        </div>
+      </div>
+      <div class="run-meta">${run.ticks.length} stations · D=${run.depth}' EOP=${run.eop}' · ${run.style} · ${run.side}</div>
+    `;
+    li.addEventListener("click", (e) => {
+      if (e.target.classList.contains("delete-btn")) return;
+      if (e.target.classList.contains("flip-btn")) return;
+      if (state.selectedRunId !== run.id) state.selectedTickIndex = -1;
+      state.selectedRunId = run.id;
+      refreshRunList();
+      drawOverlay();
+    });
+    li.querySelector(".flip-btn").addEventListener("click", () => {
+      // Negate every tick's perp to mirror it across the bore. Toggle the
+      // run.side label so subsequent generates of the same shape match.
+      run.ticks.forEach((t) => { t.perp = [-t.perp[0], -t.perp[1]]; });
+      run.side = run.side === "right" ? "left" : "right";
+      pushUndo({ type: "flip_side", runId: run.id });
+      drawOverlay();
+      refreshRunList();
+      setStatus(`Flipped run ${run.start} → ${run.end} to ${run.side}`);
+    });
+    li.querySelector(".delete-btn").addEventListener("click", () => {
+      const idx = state.runs.findIndex((r) => r.id === run.id);
+      if (idx < 0) return;
+      const removed = state.runs[idx];
+      state.runs.splice(idx, 1);
+      pushUndo({ type: "delete_run", index: idx, run: removed });
+      if (state.selectedRunId === run.id) {
+        state.selectedRunId = null;
+        state.selectedTickIndex = -1;
+      }
+      drawOverlay(); refreshRunList();
+      // Note: do NOT disable the Undo button here — the delete itself is
+      // undoable, so Undo must remain enabled until the user undoes the delete.
+      if (state.runs.length === 0) {
+        dom.btnExport.disabled = true;
+      }
+    });
+    dom.runList.appendChild(li);
+  }
+}
+
+// Keyboard
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  // Ctrl/Cmd+Shift+Z → Redo (Mac convention) — must be checked BEFORE the
+  // plain Ctrl+Z check, since shifted Z still has key === "z" or "Z"
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "z" || e.key === "Z")) {
+    if (!dom.btnRedo.disabled) {
+      e.preventDefault();
+      dom.btnRedo.click();
+    }
+    return;
+  }
+  // Ctrl/Cmd+Y → Redo (Windows convention)
+  if ((e.ctrlKey || e.metaKey) && (e.key === "y" || e.key === "Y")) {
+    if (!dom.btnRedo.disabled) {
+      e.preventDefault();
+      dom.btnRedo.click();
+    }
+    return;
+  }
+  // Ctrl/Cmd+Z → Undo
+  if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")) {
+    if (!dom.btnUndo.disabled) {
+      e.preventDefault();
+      dom.btnUndo.click();
+    }
+    return;
+  }
+  if (e.key === "d" || e.key === "D") setTool("draw");
+  if (e.key === "e" || e.key === "E") setTool("edit");
+  if (e.key === "m" || e.key === "M") setTool("moveall");
+  if (e.key === " ") { setTool("pan"); e.preventDefault(); }
+  if (e.key === "Enter") {
+    // Finish drawing → open run modal. Requires at least 2 guide points so
+    // we have something to trace between. Modal-already-open or wrong-tool
+    // states are no-ops.
+    if (state.tool === "draw" &&
+        state.drawPoints.length >= 2 &&
+        !dom.runModal.classList.contains("show")) {
+      e.preventDefault();
+      openRunModal();
+    }
+  }
+  if (e.key === "Escape") {
+    state.drawPoints = [];
+    state.tracePreview = null;
+    state.drag = null;
+    state.selectedTickIndex = -1;
+    drawOverlay();
+    closeRunModal();
+    dom.helpModal.classList.remove("show");
+  }
+  if (e.key === "Delete" || e.key === "Backspace") {
+    // Delete the selected tick (if any). The run itself stays; just one
+    // station is removed. Pushes a delete_tick patch so undo restores it.
+    if (state.selectedRunId !== null && state.selectedTickIndex >= 0) {
+      e.preventDefault();
+      deleteSelectedTick();
+    }
+  }
+  if (e.key === "+" || e.key === "=") zoomBy(1.2);
+  if (e.key === "-" || e.key === "_") zoomBy(1/1.2);
+});
+
+/* ============================================================
+   TICK DELETION + RIGHT-CLICK CONTEXT MENU
+   ============================================================ */
+// Shared helper: removes the currently selected tick (if any) and pushes
+// the corresponding undo patch. Used by both Delete-key and the right-click
+// "Delete tick" menu item.
+function deleteSelectedTick() {
+  if (state.selectedRunId === null || state.selectedTickIndex < 0) return;
+  const run = state.runs.find((r) => r.id === state.selectedRunId);
+  if (!run || !run.ticks[state.selectedTickIndex]) return;
+  const idx = state.selectedTickIndex;
+  const removed = run.ticks[idx];
+  run.ticks.splice(idx, 1);
+  pushUndo({ type: "delete_tick", runId: run.id, index: idx, tick: removed });
+  state.selectedTickIndex = -1;
+  drawOverlay();
+  refreshRunList();
+  setStatus(`Deleted station ${removed.label.split(" @")[0]}`);
+}
+
+function hideTickContextMenu() {
+  dom.tickContextMenu.classList.remove("show");
+}
+
+function showTickContextMenuAt(clientX, clientY) {
+  // Position the menu at the cursor, but keep it inside the viewport so it
+  // never gets clipped at the edges.
+  const menu = dom.tickContextMenu;
+  menu.classList.add("show");
+  // After display=block we can measure
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  const maxX = window.innerWidth - w - 4;
+  const maxY = window.innerHeight - h - 4;
+  menu.style.left = Math.min(clientX, maxX) + "px";
+  menu.style.top = Math.min(clientY, maxY) + "px";
+}
+
+// Right-click on the canvas: if we're in Edit mode AND a tick anchor is
+// under the cursor, intercept and show our menu. Otherwise let the browser's
+// default menu show (so non-canvas right-clicks still work normally).
+dom.canvasContainer.addEventListener("contextmenu", (e) => {
+  if (state.tool !== "edit") return;
+  if (!state.viewport) return;
+  const rect = dom.overlayCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (x < 0 || y < 0 || x > dom.overlayCanvas.width || y > dom.overlayCanvas.height) return;
+  const hit = findRunNearCanvas([x, y], 12);
+  // Accept right-click on either the per-tick rotation handle (preferred —
+  // bigger and clear of the bore line) or the tick anchor itself. Both
+  // resolve to the same tickIndex, so the delete action is unambiguous.
+  if (!hit) return;
+  if (hit.kind !== "tick" && hit.kind !== "tick-rotate") return;
+  e.preventDefault();
+  state.selectedRunId = hit.run.id;
+  state.selectedTickIndex = hit.tickIndex;
+  drawOverlay();
+  refreshRunList();
+  showTickContextMenuAt(e.clientX, e.clientY);
+});
+
+// Menu item click → delete the selected tick (already set by contextmenu)
+dom.ctxDeleteTick.addEventListener("click", () => {
+  deleteSelectedTick();
+  hideTickContextMenu();
+});
+
+// Click anywhere else dismisses the menu. Must be on mousedown (not click)
+// to avoid the menu intercepting its own item press.
+window.addEventListener("mousedown", (e) => {
+  if (!dom.tickContextMenu.classList.contains("show")) return;
+  if (dom.tickContextMenu.contains(e.target)) return;  // click inside menu
+  hideTickContextMenu();
+});
+// Also dismiss on Esc (already handled in the keydown Esc branch via the
+// drawOverlay call, but explicitly close the menu too)
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") hideTickContextMenu();
+});
+
+/* ============================================================
+   PDF EXPORT (pdf-lib)
+   ============================================================ */
+dom.btnExport.addEventListener("click", exportPDF);
+
+async function exportPDF() {
+  if (!state.pdfBytes) {
+    showToast("Nothing to export");
+    return;
+  }
+  // Snapshot the active page's runs into pageData so the export iteration
+  // sees a complete picture. savePageData stores a reference, so the array
+  // we render to PDF is the same array the user is editing.
+  savePageData();
+  // Count runs across every page; if none anywhere, nothing to do.
+  const totalRuns = Object.values(state.pageData)
+    .reduce((acc, pd) => acc + (pd && pd.runs ? pd.runs.length : 0), 0);
+  if (totalRuns === 0) {
+    showToast("Nothing to export");
+    return;
+  }
+  setStatus("Exporting…");
+  try {
+    const { PDFDocument, PDFName, PDFArray, PDFNumber, PDFString, PDFHexString, rgb, StandardFonts, degrees } = window.PDFLib;
+    const pdfDoc = await PDFDocument.load(state.pdfBytes.slice(0));
+    const helv = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helvFontRef = helv.ref;
+    const num = (n) => Number(n.toFixed(3)).toString();
+    // Iterate every page that has runs. The active page is also in pageData
+    // (we called savePageData above), so we visit it the same way as others.
+    const pageEntries = Object.entries(state.pageData)
+      .map(([k, v]) => [parseInt(k, 10), v])
+      .filter(([, pd]) => pd && pd.runs && pd.runs.length > 0)
+      .sort((a, b) => a[0] - b[0]);
+
+    let lastDiagnostic = "";
+    for (const [pageIdx, pageData] of pageEntries) {
+      const pageRuns = pageData.runs;
+      const page = pdfDoc.getPage(pageIdx);
+
+      // Page dimensions
+      const { width: pageW, height: pageH } = page.getSize();
+      const rot = page.getRotation().angle; // 0/90/180/270
+
+      // ─────────────────────────────────────────────────────────────────
+      // PER-PAGE VIEWPORT — fetch a pdf.js page object for this index and
+      // build a viewport at the same scale the runs were stored at. We
+      // need a fresh page object here because state.page is whatever the
+      // user is currently viewing; the export iterates ALL pages with
+      // runs, including ones we may have never rendered to canvas.
+      // ─────────────────────────────────────────────────────────────────
+      const pdfjsPage = await state.pdfDoc.getPage(pageIdx + 1);
+      const exportViewport = pdfjsPage.getViewport({ scale: state.scale });
+      // pdf.js's convertToPdfPoint already returns coordinates in the
+      // UNROTATED PDF user-space (MediaBox-relative). Its transformation
+      // matrix internally handles the canvas y-flip AND the page /Rotate
+      // entry — so for a /Rotate 90 page, viewport (100, 200) gets mapped
+      // to the correct unrotated MediaBox point automatically.
+      //
+      // We previously applied a swap here for non-zero rotation, which
+      // double-transformed the coordinates and caused exported stamps to
+      // land off the visual page (the symptom you saw with all redlines
+      // bunched in the top-right corner). Fix is to just trust pdf.js.
+      //
+      // For Stamp annotations, the viewer (Bluebeam/Acrobat) re-applies
+      // the page rotation visually to the appearance stream, so as long
+      // as both the Rect and the appearance-stream content are in
+      // unrotated MediaBox coords, everything stays aligned.
+      const exportConvert = (cx, cy) => exportViewport.convertToPdfPoint(cx, cy);
+
+      // ─────────────────────────────────────────────────────────────────
+      // COORDINATE OFFSET CORRECTION (currently DISABLED)
+      // I previously added a viewBox-vs-MediaBox correction here on the
+      // theory that PDFs with a CropBox offset would shift the export.
+      // After more testing it looks like pdf.js's `convertToPdfPoint`
+      // already returns MediaBox-absolute coordinates, which match what
+      // pdf-lib expects. Applying the correction made things worse, not
+      // better. Keeping the probe code below as a diagnostic so we can
+      // see what's happening on each user's PDF if a real offset issue
+      // ever shows up — but the correction itself is now zero.
+      let offsetCorrX = 0, offsetCorrY = 0;
+      let diagnosticMsg = "";
+      const pageRot = page.getRotation().angle;
+      try {
+        const vb = exportViewport.viewBox;
+        const mb = page.getMediaBox();
+        const cb = page.getCropBox();
+        const wouldBeCorrX = vb[0] - mb.x;
+        const wouldBeCorrY = vb[1] - mb.y;
+        diagnosticMsg = `page=${pageIdx + 1} runs=${pageRuns.length} ` +
+                        `scale=${state.scale.toFixed(2)} ` +
+                        `viewBox=[${vb.map(v => v.toFixed(0)).join(",")}] ` +
+                        `MediaBox=(${mb.x.toFixed(0)},${mb.y.toFixed(0)},${mb.width.toFixed(0)}×${mb.height.toFixed(0)}) ` +
+                        `wouldBeCorr=(${wouldBeCorrX.toFixed(1)},${wouldBeCorrY.toFixed(1)}) ` +
+                        `rot=${pageRot}`;
+        console.log("[EXPORT]", diagnosticMsg);
+        lastDiagnostic = diagnosticMsg;
+        // Surface non-zero page rotation as info — pdf.js's convertToPdfPoint
+        // handles the conversion automatically, so rotated pages should now
+        // export correctly. Logging it anyway as a diagnostic in case a
+        // viewer-specific issue ever shows up.
+        if (pageRot !== 0) {
+          console.info("[EXPORT] Page", pageIdx + 1, "has /Rotate", pageRot,
+                       "— using pdf.js convertToPdfPoint for unrotated MediaBox coords.");
+        }
+      } catch (probeErr) {
+        console.warn("Could not probe viewBox/MediaBox:", probeErr);
+      }
+
+      const RED = rgb(0.9, 0.05, 0.05);
+      const RED_TEXT = rgb(1, 0, 0);
+
+      // ─────────────────────────────────────────────────────────────────
+      // STAMP-ANNOTATION EXPORT (option 3 from chat)
+      // Each run becomes ONE Stamp annotation in the exported PDF. The
+      // annotation has a custom appearance stream (a FormXObject) that
+      // draws every tick + label in coordinates LOCAL to the annotation's
+      // bounding rectangle. When the user drags the stamp in Bluebeam or
+      // Acrobat, the rectangle moves and the appearance stream renders at
+      // the new position — so the whole run translates as one rigid unit.
+      // ─────────────────────────────────────────────────────────────────
+
+      for (const run of pageRuns) {
+      // ── PASS 1: collect every tick's geometry in PDF space ──
+      // We need both the underline endpoints (for the line draw) and the
+      // text anchor + rotation (for the label). All in absolute PDF coords
+      // first — we'll convert to local-coords-relative-to-bounding-rect
+      // once we know the rect.
+      const tickGeometry = [];
+      for (const tick of run.ticks) {
+        const tickCanvas = applyRunTransform(run, tick.p);
+        const tickPlusPerp = applyRunTransform(
+          run,
+          [tick.p[0] + tick.perp[0] * 10, tick.p[1] + tick.perp[1] * 10]
+        );
+        const [pX_raw, pY_raw] = exportConvert(tickCanvas[0], tickCanvas[1]);
+        const [pX2_raw, pY2_raw] = exportConvert(tickPlusPerp[0], tickPlusPerp[1]);
+        const pX = pX_raw - offsetCorrX;
+        const pY = pY_raw - offsetCorrY;
+        const pX2 = pX2_raw - offsetCorrX;
+        const pY2 = pY2_raw - offsetCorrY;
+        const perpPdfX = pX2 - pX;
+        const perpPdfY = pY2 - pY;
+        const perpLen = Math.hypot(perpPdfX, perpPdfY) || 1;
+        const upx = perpPdfX / perpLen;
+        const upy = perpPdfY / perpLen;
+
+        const tickLen = state.defaults.tickLen;
+        const fontSize = state.defaults.fontSize;
+        const strokeW = state.defaults.stroke;
+        const labelW = helv.widthOfTextAtSize(tick.label, fontSize);
+        const ulLen = Math.max(labelW + 4, tickLen);
+
+        // Right-reading text fix: if the perp's natural angle puts text
+        // upside-down (cos < 0), rotate by 180° and anchor at the far end
+        // of the underline so the label still sits visually beside the bore.
+        // After rotating by π, the text's local +X grows OPPOSITE to perp,
+        // so the "+4 inset" we want from the anchor is in the -perp direction
+        // in world coords → anchor = end - 4*perp.
+        const rawAng = Math.atan2(upy, upx);
+        const flipText = Math.cos(rawAng) < 0;
+        const finalAng = flipText ? rawAng + Math.PI : rawAng;
+        const finalAnchor = flipText
+          ? [pX + upx * ulLen - upx * 4, pY + upy * ulLen - upy * 4]
+          : [pX + upx * 4, pY + upy * 4];
+
+        tickGeometry.push({
+          start: [pX, pY],
+          end: [pX + upx * ulLen, pY + upy * ulLen],
+          textAnchor: finalAnchor,
+          textAngle: finalAng,
+          label: tick.label,
+          fontSize,
+          strokeW,
+          ulLen,
+          labelW,
+        });
+      }
+
+      if (tickGeometry.length === 0) continue;
+
+      // ── PASS 2: bounding rectangle that encloses every tick + label ──
+      // We over-estimate slightly to give the stamp some breathing room and
+      // make sure no glyphs get clipped. Padding is in PDF points.
+      const PAD = 6;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const g of tickGeometry) {
+        // Underline endpoints
+        for (const pt of [g.start, g.end]) {
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
+        }
+        // Label bounding corners — text starts at textAnchor and extends
+        // labelW along textAngle, ascending fontSize perpendicular.
+        const c = Math.cos(g.textAngle), s = Math.sin(g.textAngle);
+        const corners = [
+          [0, 0],
+          [g.labelW, 0],
+          [0, g.fontSize],
+          [g.labelW, g.fontSize],
+        ].map(([dx, dy]) => [
+          g.textAnchor[0] + dx * c - dy * s,
+          g.textAnchor[1] + dx * s + dy * c,
+        ]);
+        for (const pt of corners) {
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
+        }
+      }
+      const rectX = minX - PAD;
+      const rectY = minY - PAD;
+      const rectW = (maxX - minX) + PAD * 2;
+      const rectH = (maxY - minY) + PAD * 2;
+
+      // ── PASS 3: build the appearance-stream content ──
+      // PDF content stream operators: q/Q (save/restore state), RG/rg
+      // (stroke/fill color), w (line width), m/l/S (move/line/stroke),
+      // BT/ET (begin/end text), Tf (font), Tm (text matrix incl. rotation),
+      // Tj (show text). All coords are LOCAL to the FormXObject's BBox
+      // (which we set to [0, 0, rectW, rectH] below — origin at lower-left).
+      const cmds = [];
+      cmds.push("q");                                          // save state
+      cmds.push("0.9 0.05 0.05 RG");                            // stroke red
+      cmds.push("1 0 0 rg");                                    // fill red
+      for (const g of tickGeometry) {
+        const sx = g.start[0] - rectX;
+        const sy = g.start[1] - rectY;
+        const ex = g.end[0] - rectX;
+        const ey = g.end[1] - rectY;
+        const tx = g.textAnchor[0] - rectX;
+        const ty = g.textAnchor[1] - rectY;
+
+        // Underline
+        cmds.push(`${num(g.strokeW)} w`);
+        cmds.push(`${num(sx)} ${num(sy)} m`);
+        cmds.push(`${num(ex)} ${num(ey)} l`);
+        cmds.push("S");
+
+        // Label — Tm sets the text matrix [a b c d e f] = rotation + translation
+        // For rotation by angle θ at translation (tx, ty):
+        //   a = cos θ, b = sin θ, c = -sin θ, d = cos θ, e = tx, f = ty
+        const c = Math.cos(g.textAngle);
+        const s = Math.sin(g.textAngle);
+        // Escape parens and backslashes in the label per PDF string syntax.
+        const escaped = g.label
+          .replace(/\\/g, "\\\\")
+          .replace(/\(/g, "\\(")
+          .replace(/\)/g, "\\)");
+        cmds.push("BT");
+        cmds.push(`/F1 ${num(g.fontSize)} Tf`);
+        cmds.push(`${num(c)} ${num(s)} ${num(-s)} ${num(c)} ${num(tx)} ${num(ty)} Tm`);
+        cmds.push(`(${escaped}) Tj`);
+        cmds.push("ET");
+      }
+      cmds.push("Q");                                          // restore state
+      const contentStr = cmds.join("\n");
+
+      // ── PASS 4: register the FormXObject and build the Stamp annotation ──
+      const xobjDict = pdfDoc.context.obj({
+        Type: "XObject",
+        Subtype: "Form",
+        FormType: 1,
+        BBox: [0, 0, rectW, rectH],
+        Resources: {
+          Font: { F1: helvFontRef },
+        },
+      });
+      // Encode content as bytes
+      const contentBytes = new TextEncoder().encode(contentStr);
+      const formStream = window.PDFLib.PDFRawStream.of(xobjDict, contentBytes);
+      const formRef = pdfDoc.context.register(formStream);
+
+      // Build the annotation dictionary. Stamp subtype gives us draggable
+      // behavior across Bluebeam, Acrobat, Foxit, etc. F flag = 4 means
+      // "Print" (annotation is included when the PDF is printed). Setting
+      // /NM to a stable name lets Bluebeam group multiple stamps with the
+      // same name in its annotations panel — bonus organization.
+      const annotDict = pdfDoc.context.obj({
+        Type: "Annot",
+        Subtype: "Stamp",
+        Rect: [rectX, rectY, rectX + rectW, rectY + rectH],
+        Contents: PDFString.of(`Run ${run.start} → ${run.end}`),
+        NM: PDFString.of(`run-${run.id}`),
+        T: PDFString.of("FTTH Running Lines"),
+        F: 4,
+        AP: { N: formRef },
+        // CA = opacity (1.0 = fully opaque)
+        CA: 1,
+        // Name = built-in stamp icon. We override the appearance stream
+        // so the icon name doesn't matter visually, but viewers like a value.
+        Name: "Draft",
+      });
+      const annotRef = pdfDoc.context.register(annotDict);
+
+      // Append the annotation to the page's /Annots array.
+      let annots = page.node.lookup(PDFName.of("Annots"));
+      if (!annots) {
+        annots = pdfDoc.context.obj([]);
+        page.node.set(PDFName.of("Annots"), annots);
+      }
+      annots.push(annotRef);
+      }
+    }
+
+    const bytes = await pdfDoc.save();
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const filename = state.pdfFile.name.replace(/\.pdf$/i, "") + "_RunningLines.pdf";
+    const url = URL.createObjectURL(blob);
+
+    // Try the standard <a download> path first. The element MUST be in the
+    // DOM for the click to fire reliably in some sandboxed iframes (artifact
+    // preview, embedded webviews). We also defer revokeObjectURL so the
+    // download has time to start before the URL is invalidated.
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    let downloadFired = false;
+    try {
+      a.click();
+      downloadFired = true;
+    } catch (err) {
+      console.warn("a.click() failed, will fall back to window.open:", err);
+    }
+    document.body.removeChild(a);
+
+    // Fallback: if we're inside a sandboxed iframe that blocks <a download>,
+    // open the blob URL in a new tab so the user can save it manually. Some
+    // hosts will still block this and that's OK — we surface a clear msg.
+    if (!downloadFired) {
+      const w = window.open(url, "_blank");
+      if (!w) {
+        showToast("Download blocked. Use the link in the status bar below.");
+        // As a last resort, render a clickable link in the status bar so the
+        // user can right-click → Save As, or click to open in a new tab.
+        const safeName = filename.replace(/[<>"'&]/g, "");
+        dom.status.innerHTML = `Export ready: <a href="${url}" download="${safeName}" target="_blank" style="color:#ff5732;text-decoration:underline">click here to download</a>`;
+        // Let the user grab the link before revoking
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
+    }
+
+    // Successful download path — revoke after 10s to let the browser save the file
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    // Surface the export diagnostic prominently so the user can copy it.
+    // We also auto-copy to clipboard so they can paste straight into chat.
+    const fullDiag = "[EXPORT] " + lastDiagnostic;
+    setStatus("Exported · " + lastDiagnostic);
+    try {
+      await navigator.clipboard.writeText(fullDiag);
+      showToast("PDF exported · diagnostic copied to clipboard (paste in chat)");
+    } catch {
+      showToast("PDF exported · check status bar for diagnostic");
+    }
+  } catch (err) {
+    console.error(err);
+    setStatus("Export failed");
+    showToast("Export failed: " + err.message);
+  }
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+setStep(1);
+setTool("draw");
+setStatus("Ready · Load a CD PDF to begin");
+state.scaleSnapshot = state.scale;
+
+window.addEventListener("resize", () => {
+  if (state.pdfDoc) positionOverlay();
+});
+</script>
+</body>
+</html>
