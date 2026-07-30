@@ -175,6 +175,29 @@
             box-shadow: 0 5px 15px rgba(0, 180, 216, 0.3);
         }
 
+        .artifact-link {
+            display: block;
+            width: 100%;
+            margin-top: 10px;
+            padding: 11px 25px;
+            border: 2px solid #0077B6;
+            border-radius: 25px;
+            background: transparent;
+            color: #0077B6;
+            font-size: 0.9em;
+            font-weight: 600;
+            text-align: center;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .artifact-link:hover {
+            background: #f0f9ff;
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(0, 119, 182, 0.2);
+        }
+
         .tool-count {
             background: rgba(0, 119, 182, 0.1);
             color: #0077B6;
@@ -220,6 +243,7 @@
                 </div>
                 <span class="tool-status status-active">Active</span>
                 <button class="launch-button" onclick="event.stopPropagation(); window.location.href='OFS_Extractor__M09_M10_.html'">Launch Tool</button>
+                <a class="artifact-link" href="https://claude.ai/artifacts/latest/48f7d8ab-acbf-4883-b6b2-1f1b1ff3f8f4" target="_blank" rel="noopener" onclick="event.stopPropagation();">&#128279; Open via Artifact Link</a>
             </div>
 
             <!-- Tool 2: Daisy Chain Diagram vs Fulcrum Table -->
