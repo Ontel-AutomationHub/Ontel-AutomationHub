@@ -27,6 +27,8 @@
         .status-ongoing { background: #cce5ff; color: #004085; }
         .launch-button { background: linear-gradient(135deg, #E20074 0%, #FF007A 100%); color: white; border: none; padding: 12px 25px; border-radius: 25px; font-size: 0.95em; font-weight: 600; cursor: pointer; margin-top: 15px; width: 100%; transition: all 0.3s; }
         .launch-button:hover { transform: scale(1.02); box-shadow: 0 5px 15px rgba(226, 0, 116, 0.3); }
+        .artifact-link { display: block; width: 100%; margin-top: 10px; padding: 11px 25px; border: 2px solid #E20074; border-radius: 25px; background: transparent; color: #E20074; font-size: 0.9em; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; transition: all 0.3s; }
+        .artifact-link:hover { background: #fff0f7; transform: scale(1.02); box-shadow: 0 5px 15px rgba(226, 0, 116, 0.2); }
         .tool-count { background: rgba(226, 0, 116, 0.1); color: #E20074; padding: 4px 12px; border-radius: 12px; font-size: 0.85em; font-weight: 600; margin-left: 10px; }
         .footer { text-align: center; color: white; padding: 20px; margin-top: 30px; }
     </style>
@@ -57,6 +59,8 @@
                 <div class="tool-description">Complete reference for the national color coding standard. Look up fiber strand colors, buffer tube sequences, and cable identification.</div>
                 <span class="tool-status status-active">Active</span>
                 <button class="launch-button" onclick="event.stopPropagation(); window.location.href='National_Color_Coding_Standard.html'">Launch Tool</button>
+                <a class="artifact-link" href="https://claude.ai/artifacts/latest/13b83b34-315f-42d0-9b67-4093b6ef7145" target="_blank" rel="noopener" onclick="event.stopPropagation();">&#128279; Open via Legacy Artifact Link</a>
+                <a class="artifact-link" href="https://claude.ai/artifacts/latest/96d31441-5642-4962-90a9-bfe5f0692eea" target="_blank" rel="noopener" onclick="event.stopPropagation();">&#10024; Open via New Claude Artifact Link</a>
             </div>
             <div class="tool-card" onclick="window.location.href='Fiber_OPM_Test_Fraud_Detector.html'">
                 <div class="tool-icon">&#128269;</div>
