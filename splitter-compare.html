@@ -89,6 +89,8 @@
       For the Daisy Chain Diagram, enter port ranges (e.g. <code>40-41</code>) or whole numbers,
       separating multiple values with commas — <code>40-41, 45-50</code>. Its splitters are summed
       automatically. For Fulcrum Value, enter the splice count directly. The two totals are then compared.
+      The note uses the Daisy Chain count for billing: <code>12</code> splices are included per FDH, and
+      <code>TCSS1 = Daisy Chain splices &minus; (12 &times; FDH)</code>.
     </p>
   </header>
 
@@ -96,6 +98,12 @@
     <label class="field">
       <span class="field-label">Site name</span>
       <input type="text" id="site" placeholder="e.g. D-HCS520" />
+    </label>
+
+    <label class="field">
+      <span class="field-label">Number of FDH</span>
+      <input type="text" id="fdh" class="mono" placeholder="e.g. 1 (blank = 1)" />
+      <span id="fdhSum" class="hint"></span>
     </label>
 
     <div class="grid2">
@@ -178,11 +186,48 @@ function parseFulcrum(input) {
   return { count: null, invalid: true };
 }
 
+// 12 splices are included per FDH (covered by TCSS11).
+const SPLICES_PER_FDH = 12;
+
+function parseWhole(input) {
+  const s = String(input || "").trim();
+  if (!s) return { count: null, empty: true };
+  const num = s.match(/^\s*(\d+)\s*$/);
+  if (num) return { count: parseInt(num[1], 10) };
+  return { count: null, invalid: true };
+}
+
+// capacity = 12 x FDH ; TCSS1 = Daisy Chain splices - capacity (never below 0)
+function billing(dcdTotal, fdhCount) {
+  const fdh = fdhCount == null ? 1 : fdhCount;
+  const capacity = fdh * SPLICES_PER_FDH;
+  return { fdh: fdh, capacity: capacity, tcss1: Math.max(0, dcdTotal - capacity) };
+}
+
 function buildNote(data) {
-  if (data.match) {
-    return "Splice count from Daisy Chain Diagram matches the Fulcrum Value.";
+  const cap = data.capacity;
+  const t = data.tcss1;
+  const head = data.match
+    ? "Splice count from Daisy Chain Diagram matches the Fulcrum Value."
+    : `Splice count from Daisy Chain Diagram (${data.dcd.total}) do not match the Splice Count in Fulcrum (${data.fulcrum.count}).`;
+
+  // No FDH on site — nothing is included, so every splice is TCSS1.
+  if (data.fdh === 0) {
+    if (t <= 0) return `${head} No splices are billed.`;
+    return data.match
+      ? `${head} ${t} TCSS1 is billed for all Daisy Chain Diagram splices, as no FDH splice capacity applies.`
+      : `${head} ${t} TCSS1 is billed for all Daisy Chain Diagram splices, as no FDH splice capacity applies, based on the Daisy Chain Diagram splice count.`;
   }
-  return `Splice count from Daisy Chain Diagram (${data.dcd.total}) do not match the Splice Count in Fulcrum (${data.fulcrum.count}). Fulcrum value is utilized.`;
+
+  if (t <= 0) {
+    return data.match
+      ? `${head} Only TCSS11 is billed, as all splices are included within the ${cap}-splice capacity.`
+      : `${head} Daisy Chain value is utilized and only TCSS11 is billed, as all splices are included within the ${cap}-splice capacity.`;
+  }
+
+  return data.match
+    ? `${head} ${t} TCSS1 is billed for splices in excess of the included ${cap}-splice capacity.`
+    : `${head} ${t} TCSS1 is billed for splices in excess of the included ${cap}-splice capacity, based on the Daisy Chain Diagram splice count.`;
 }
 
 // --- canvas rendering for image export ---------------------------------------
@@ -360,12 +405,31 @@ function flash(msg) {
   toastTimer = setTimeout(() => { t.textContent = ""; }, 4000);
 }
 
+function updateFdhHint() {
+  const el = document.getElementById("fdhSum");
+  const raw = document.getElementById("fdh").value;
+  const p = parseWhole(raw);
+  if (p.invalid) { el.textContent = "enter a whole number"; el.classList.add("bad"); return; }
+  el.classList.remove("bad");
+  const d = summarize(document.getElementById("dcd").value);
+  const b = billing(d.hasInvalid ? 0 : d.total, p.count);
+  const assumed = p.empty ? " (assumed)" : "";
+  if (d.items.length === 0 || d.hasInvalid) {
+    el.innerHTML = `${b.fdh} FDH${assumed} &rarr; <b>${b.capacity}</b> splices included`;
+  } else {
+    el.innerHTML = `${b.fdh} FDH${assumed} &rarr; <b>${b.capacity}</b> included &middot; TCSS1 = <b>${b.tcss1}</b>`;
+  }
+}
+
+document.getElementById("fdh").addEventListener("input", updateFdhHint);
+
 document.getElementById("dcd").addEventListener("input", (e) => {
   const sum = summarize(e.target.value);
   const el = document.getElementById("dcdSum");
-  if (sum.items.length === 0) { el.textContent = ""; el.classList.remove("bad"); return; }
-  if (sum.hasInvalid) { el.textContent = "check the values"; el.classList.add("bad"); }
+  if (sum.items.length === 0) { el.textContent = ""; el.classList.remove("bad"); }
+  else if (sum.hasInvalid) { el.textContent = "check the values"; el.classList.add("bad"); }
   else { el.innerHTML = `splitter total = <b>${sum.total}</b>`; el.classList.remove("bad"); }
+  updateFdhHint();
 });
 
 document.getElementById("fulcrum").addEventListener("input", (e) => {
@@ -378,12 +442,15 @@ document.getElementById("fulcrum").addEventListener("input", (e) => {
 
 document.getElementById("extractBtn").addEventListener("click", () => {
   const site = document.getElementById("site").value;
+  const fdhRaw = document.getElementById("fdh").value;
   const dcd = document.getElementById("dcd").value;
   const fulcrum = document.getElementById("fulcrum").value;
   const errEl = document.getElementById("error");
   document.getElementById("outputWrap").style.display = "none";
 
   if (!site.trim()) { errEl.textContent = "Enter a site name."; return; }
+  const fdhP = parseWhole(fdhRaw);
+  if (fdhP.invalid) { errEl.textContent = "Number of FDH must be a whole number (leave blank for 1)."; return; }
   const d = summarize(dcd);
   const f = parseFulcrum(fulcrum);
   if (d.items.length === 0 || f.empty) {
@@ -400,7 +467,11 @@ document.getElementById("extractBtn").addEventListener("click", () => {
   }
   errEl.textContent = "";
 
-  result = { site: site.trim(), dcd: d, fulcrum: f, match: d.total === f.count };
+  const b = billing(d.total, fdhP.count);
+  result = {
+    site: site.trim(), dcd: d, fulcrum: f, match: d.total === f.count,
+    fdh: b.fdh, capacity: b.capacity, tcss1: b.tcss1,
+  };
   const url = buildCanvas(result).toDataURL("image/png");
   document.getElementById("preview").src = url;
   document.getElementById("noteText").textContent = buildNote(result);
