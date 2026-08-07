@@ -9,6 +9,52 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+/* ── CDN FALLBACK LOADER ────────────────────────────────────────────────────
+   Some sandboxes only whitelist certain CDNs. Any library that failed to load
+   above gets retried from an alternate host so the tool degrades gracefully
+   instead of throwing ReferenceErrors. */
+(function(){
+  function loadScript(url){
+    return new Promise(function(res,rej){
+      var s=document.createElement('script'); s.src=url; s.async=false;
+      s.onload=function(){ res(true); }; s.onerror=function(){ rej(new Error(url)); };
+      document.head.appendChild(s);
+    });
+  }
+  function ensure(globalName, urls){
+    if(window[globalName]) return Promise.resolve(true);
+    var i=0;
+    function next(){
+      if(i>=urls.length) return Promise.resolve(false);
+      var u=urls[i++];
+      return loadScript(u).then(function(){ return window[globalName]?true:next(); },
+                                function(){ return next(); });
+    }
+    return next();
+  }
+  window.ensureLib = ensure;
+  window.libsReady = Promise.all([
+    ensure('piexif', ['https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.min.js',
+                      'https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.js']),
+    ensure('XLSX',   ['https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+                      'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js']),
+    ensure('JSZip',  ['https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js']),
+    ensure('EXIF',   ['https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js'])
+  ]);
+  // Declare placeholders so bare references never throw if a lib is unavailable
+  ['piexif','XLSX','JSZip','Tesseract','EXIF','heic2any'].forEach(function(g){
+    if(typeof window[g]==='undefined') window[g]=null;
+  });
+})();
+function ensureHeicDecoder(){
+  return window.ensureLib('heic2any', [
+    'https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js',
+    'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js',
+    'https://cdn.jsdelivr.net/npm/heic2any/dist/heic2any.min.js'
+  ]);
+}
+</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=Roboto+Mono:wght@400;700&family=Share+Tech+Mono&family=IBM+Plex+Mono&family=Oswald:wght@400;600&family=Anton&family=Bebas+Neue&family=Rajdhani:wght@500;700&display=swap');
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -284,12 +330,14 @@ label input[type="checkbox"] { accent-color:#d97706; width:12px; height:12px; }
       <span class="topbar-tag">GPS</span>
       <span class="topbar-tag">Address</span>
       <span class="topbar-tag">Date &amp; Time</span>
+      <span class="topbar-tag">HEIC</span>
+      <span class="topbar-tag">MP4</span>
     </div>
   </div>
   <div class="topbar-btns">
     <button class="btn outline" id="btnHelp" title="User Guide">? Guide</button>
     <button class="btn outline" id="btnToggleGeo" title="Toggle automatic geocoding on/off">⚡ Geocoding: ON</button>
-    <button class="btn outline" id="btnDL" disabled>⬇ This image</button>
+    <button class="btn outline" id="btnDL" disabled>⬇ This file</button>
     <button class="btn" id="btnAll" disabled title="Waiting for geocoding to complete…">⬇ Download all stamped</button>
   </div>
 </div>
@@ -313,7 +361,7 @@ label input[type="checkbox"] { accent-color:#d97706; width:12px; height:12px; }
       <div class="drop-text-merged">Drop photos or ZIP here</div>
       <div class="drop-sub-merged">click to browse or drag & drop</div>
       <div class="status" id="status" style="font-size:0.55rem;margin-top:0.3rem;"></div>
-      <input type="file" id="fileInput" accept="image/*,.zip,application/zip,application/x-zip-compressed" multiple style="display:none;">
+      <input type="file" id="fileInput" accept="image/*,video/*,.heic,.heif,.mp4,.mov,.m4v,.webm,.zip,application/zip,application/x-zip-compressed" multiple style="display:none;">
       <input type="file" id="zipInput" accept=".zip,application/zip,application/x-zip-compressed" style="display:none;">
     </div>
   </div>
@@ -348,6 +396,7 @@ label input[type="checkbox"] { accent-color:#d97706; width:12px; height:12px; }
         <div class="sz-ctrl">
           <input type="range" id="slSize" min="12" max="120" step="1" value="24">
           <span class="rval" id="valSize">36px</span>
+          <button class="btn outline" id="btnSizeAll" style="padding:0.15rem 0.4rem;font-size:0.55rem;" title="Apply this size to every file">ALL</button>
         </div>
       </div>
       <div class="sz-row">
@@ -800,7 +849,7 @@ $dz.addEventListener('drop', function(e){
   for(var i=0; i<droppedFiles.length; i++){
     var f = droppedFiles[i];
     if(f.name.match(/\.zip$/i) || (f.type && f.type.match(/zip/))){ handleZip(f); }
-    else if(isImageFile(f)){ imgs.push(f); }
+    else if(isMediaFile(f)){ imgs.push(f); }
   }
   if(imgs.length) ingest(imgs, null);
 });
@@ -810,7 +859,7 @@ $fi.addEventListener('change', function(){
   for(var i=0; i<$fi.files.length; i++){
     var f = $fi.files[i];
     if(f.name.match(/\.zip$/i) || (f.type && f.type.match(/zip/))){ handleZip(f); }
-    else if(isImageFile(f)){ imgs.push(f); }
+    else if(isMediaFile(f)){ imgs.push(f); }
   }
   if(imgs.length) ingest(imgs, null);
   $fi.value='';
@@ -821,6 +870,16 @@ function isImageFile(f){
   return /\.(jpe?g|png|webp|heic|heif|tiff?|bmp|gif|avif|svg)$/i.test(f.name);
 }
 function isImagePath(path){ return /\.(jpe?g|png|webp|heic|heif|tiff?|bmp|gif|avif|svg)$/i.test(path); }
+function isVideoFile(f){
+  if(f.type && f.type.match(/^video\//)) return true;
+  return /\.(mp4|mov|m4v|webm|3gp|3gpp|avi|mkv)$/i.test(f.name);
+}
+function isVideoPath(path){ return /\.(mp4|mov|m4v|webm|3gp|3gpp|avi|mkv)$/i.test(path); }
+function isHeicFile(f){
+  return /\.(heic|heif)$/i.test(f.name||'') || /image\/hei[cf]/i.test(f.type||'');
+}
+function isMediaFile(f){ return isImageFile(f) || isVideoFile(f); }
+function isMediaPath(p){ return isImagePath(p) || isVideoPath(p); }
 
 var $zipInput = id('zipInput');
 $zipInput.addEventListener('change', function(){
@@ -844,6 +903,19 @@ function ingest(fileList, groupName){
   for(var i=0; i<fileList.length; i++){
     (function(f){
       readOne(f, function(entry){
+        if(!entry){            // unreadable file — skip without breaking the batch
+          pending--;
+          renderFileList();
+          if(pending === 0){
+            if(activeIdx === -1){
+              for(var q=0;q<files.length;q++){ if(files[q]){ activate(q); break; } }
+            }
+            if(geoPending === 0 && files.filter(function(x){ return x !== null; }).length > 0){
+              $btnAll.disabled = false; $btnAll.title = '';
+            }
+          }
+          return;
+        }
         var idx = files.length;
         files.push(entry);
         grp.indices.push(idx);
@@ -880,30 +952,351 @@ function ingest(fileList, groupName){
   }
 }
 
+// ─── ENTRY FACTORY ────────────────────────────────────────────────────────────
+function newEntry(file, extra){
+  var e = {
+    file:file, outName:(file&&file.name)||'file', b64:null, exif:{}, rawExifB64:null,
+    isVideo:false, videoUrl:null, duration:0, vw:0, vh:0, wasHeic:false,
+    address:null, manualLat:null, manualLon:null, manualAddr:null,
+    manualDate:null, manualTime:null, manualSite:null, manualEquip:null,
+    stamped:true, stampX:null, stampY:null, stampSize:null
+  };
+  if(extra){ for(var k in extra){ if(Object.prototype.hasOwnProperty.call(extra,k)) e[k]=extra[k]; } }
+  return e;
+}
+
+// ─── EXIF FROM RAW TIFF BLOCK (HEIC / HEIF / TIFF) ────────────────────────────
+// exif-js only understands JPEG APP1 segments. HEIC stores the same TIFF/EXIF
+// block inside an ISOBMFF item, so we locate the "Exif\0\0" marker and parse
+// the TIFF directories directly. Output is shaped like exif-js output so the
+// rest of the app (dms(), buildLines(), renderExifTable()) needs no changes.
+function parseTiffAt(dv, base){
+  var bo = dv.getUint16(base);
+  if(bo !== 0x4949 && bo !== 0x4D4D) return null;
+  var le = (bo === 0x4949);
+  if(dv.getUint16(base+2, le) !== 0x002A) return null;
+  var out = {};
+  var T0 = {0x010F:'Make',0x0110:'Model',0x0112:'Orientation',0x011A:'XResolution',
+            0x011B:'YResolution',0x0131:'Software',0x0132:'DateTime',
+            0x8769:'_exifIFD',0x8825:'_gpsIFD'};
+  var TE = {0x829A:'ExposureTime',0x829D:'FNumber',0x8827:'ISOSpeedRatings',
+            0x9003:'DateTimeOriginal',0x9004:'DateTimeDigitized',0x9201:'ShutterSpeedValue',
+            0x9202:'ApertureValue',0x9209:'Flash',0x920A:'FocalLength',
+            0xA002:'PixelXDimension',0xA003:'PixelYDimension',0xA433:'LensMake',0xA434:'LensModel'};
+  var TG = {0x0000:'GPSVersionID',0x0001:'GPSLatitudeRef',0x0002:'GPSLatitude',
+            0x0003:'GPSLongitudeRef',0x0004:'GPSLongitude',0x0005:'GPSAltitudeRef',
+            0x0006:'GPSAltitude',0x0007:'GPSTimeStamp',0x0010:'GPSImgDirectionRef',
+            0x0011:'GPSImgDirection',0x001D:'GPSDateStamp'};
+  var SIZES = {1:1,2:1,3:2,4:4,5:8,6:1,7:1,8:2,9:4,10:8,11:4,12:8};
+
+  function readVal(type, cnt, off){
+    var i, a = [];
+    if(off < 0 || off >= dv.byteLength) return null;
+    if(type === 2){
+      var str = '';
+      for(i=0;i<cnt;i++){
+        if(off+i >= dv.byteLength) break;
+        var ch = dv.getUint8(off+i);
+        if(ch === 0) break;
+        str += String.fromCharCode(ch);
+      }
+      return str;
+    }
+    for(i=0;i<cnt;i++){
+      try{
+        if(type===1||type===7) a.push(dv.getUint8(off+i));
+        else if(type===6) a.push(dv.getInt8(off+i));
+        else if(type===3) a.push(dv.getUint16(off+i*2, le));
+        else if(type===8) a.push(dv.getInt16(off+i*2, le));
+        else if(type===4) a.push(dv.getUint32(off+i*4, le));
+        else if(type===9) a.push(dv.getInt32(off+i*4, le));
+        else if(type===5){ var n=dv.getUint32(off+i*8, le), d=dv.getUint32(off+i*8+4, le); a.push(d?n/d:0); }
+        else if(type===10){ var n2=dv.getInt32(off+i*8, le), d2=dv.getInt32(off+i*8+4, le); a.push(d2?n2/d2:0); }
+      }catch(e){ break; }
+    }
+    return cnt === 1 ? a[0] : a;
+  }
+
+  function readIFD(off, map, depth){
+    if(depth > 3 || off < base || off+2 > dv.byteLength) return;
+    var n = dv.getUint16(off, le);
+    if(n > 512) return;
+    for(var i=0;i<n;i++){
+      var e = off + 2 + i*12;
+      if(e + 12 > dv.byteLength) return;
+      var tag = dv.getUint16(e, le);
+      var type = dv.getUint16(e+2, le);
+      var cnt = dv.getUint32(e+4, le);
+      var name = map[tag];
+      if(!name) continue;
+      var byteLen = (SIZES[type]||1) * cnt;
+      var vo = byteLen > 4 ? base + dv.getUint32(e+8, le) : e + 8;
+      var val = readVal(type, cnt, vo);
+      if(val === null) continue;
+      if(name === '_exifIFD') readIFD(base + (Array.isArray(val)?val[0]:val), TE, depth+1);
+      else if(name === '_gpsIFD') readIFD(base + (Array.isArray(val)?val[0]:val), TG, depth+1);
+      else out[name] = val;
+    }
+  }
+  readIFD(base + dv.getUint32(base+4, le), T0, 0);
+  return out;
+}
+
+function parseExifFromBuffer(buf){
+  try{
+    var u8 = new Uint8Array(buf);
+    var lim = Math.min(u8.length - 8, 40 * 1024 * 1024);
+    for(var i=0;i<lim;i++){
+      if(u8[i]===0x45 && u8[i+1]===0x78 && u8[i+2]===0x69 && u8[i+3]===0x66 &&
+         u8[i+4]===0x00 && u8[i+5]===0x00){
+        var res = parseTiffAt(new DataView(buf), i+6);
+        if(res && Object.keys(res).length) return res;
+      }
+    }
+  }catch(e){}
+  return null;
+}
+
+// ─── MP4 / MOV METADATA (ISOBMFF box walk) ────────────────────────────────────
+// Pulls creation time from mvhd and GPS from the Apple/Android "\u00A9xyz"
+// atom (ISO 6709), returned in exif-js shape so stamping works identically.
+function parseVideoMeta(buf){
+  var dv = new DataView(buf), u8 = new Uint8Array(buf);
+  var found = {};
+  var CONTAINERS = ['moov','udta','trak','mdia','minf','stbl','edts','meta','ilst','mvex'];
+
+  function walk(start, end, depth){
+    if(depth > 6) return;
+    var p = start;
+    while(p + 8 <= end){
+      var size = dv.getUint32(p);
+      var t0=u8[p+4], t1=u8[p+5], t2=u8[p+6], t3=u8[p+7];
+      var type = String.fromCharCode(t0,t1,t2,t3);
+      var hdr = 8;
+      if(size === 1){
+        if(p+16 > end) return;
+        size = dv.getUint32(p+8) * 4294967296 + dv.getUint32(p+12);
+        hdr = 16;
+      } else if(size === 0){
+        size = end - p;
+      }
+      if(size < hdr || p + size > end + 8) return;
+      var cs = p + hdr, ce = Math.min(p + size, end);
+
+      if(type === 'mvhd' && !found.created){
+        try{
+          var ver = u8[cs];
+          found.created = (ver === 1)
+            ? dv.getUint32(cs+4) * 4294967296 + dv.getUint32(cs+8)
+            : dv.getUint32(cs+4);
+        }catch(e){}
+      } else if(t0 === 0xA9 && type.slice(1) === 'xyz' && !found.iso6709){
+        try{
+          var len = dv.getUint16(cs);
+          var s = '';
+          for(var i=0;i<len && cs+4+i<ce;i++) s += String.fromCharCode(u8[cs+4+i]);
+          found.iso6709 = s;
+        }catch(e){}
+      } else if(type === 'keys' || type === 'data'){
+        // Apple metadata payload — scan for an ISO 6709 string
+        if(!found.iso6709){
+          try{
+            var txt = '';
+            for(var j=cs;j<ce && j-cs<256;j++){ var c=u8[j]; txt += (c>=32&&c<127)?String.fromCharCode(c):' '; }
+            var mm = txt.match(/[+-]\d{1,3}\.\d+[+-]\d{1,3}\.\d+/);
+            if(mm) found.iso6709 = mm[0];
+          }catch(e){}
+        }
+      } else if(CONTAINERS.indexOf(type) >= 0){
+        walk(type === 'meta' ? cs + 4 : cs, ce, depth+1);
+      }
+      if(size <= 0) return;
+      p += size;
+    }
+  }
+  try{ walk(0, u8.length, 0); }catch(e){}
+
+  // Fallback: buffer may start mid-box (large file read in slices) or mdat may
+  // declare a size past the end. Scan for the 'moov' signature and walk from it.
+  if(!found.created && !found.iso6709){
+    try{
+      for(var k=0;k<u8.length-8;k++){
+        if(u8[k]===0x6D && u8[k+1]===0x6F && u8[k+2]===0x6F && u8[k+3]===0x76){
+          if(k >= 4) walk(k-4, u8.length, 0);
+          if(found.created || found.iso6709) break;
+        }
+      }
+    }catch(e){}
+  }
+
+  var exif = {};
+  if(found.created && found.created > 2082844800){
+    var d = new Date((found.created - 2082844800) * 1000);
+    if(!isNaN(d.getTime()) && d.getUTCFullYear() > 1990 && d.getUTCFullYear() < 2100){
+      function p2(n){ return (n<10?'0':'') + n; }
+      // Cameras generally write wall-clock time here, so read it back as-is.
+      var str = d.getUTCFullYear()+':'+p2(d.getUTCMonth()+1)+':'+p2(d.getUTCDate())+' '+
+                p2(d.getUTCHours())+':'+p2(d.getUTCMinutes())+':'+p2(d.getUTCSeconds());
+      exif.DateTimeOriginal = str;
+      exif.DateTime = str;
+    }
+  }
+  if(found.iso6709){
+    var m = String(found.iso6709).match(/([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)/);
+    if(m){
+      var la = parseFloat(m[1]), lo = parseFloat(m[2]);
+      function toDMS(v){
+        var a=Math.abs(v), dd=Math.floor(a), mi=Math.floor((a-dd)*60), se=((a-dd)*60-mi)*60;
+        return [dd, mi, Math.round(se*100)/100];
+      }
+      if(!isNaN(la) && !isNaN(lo)){
+        exif.GPSLatitude = toDMS(la);  exif.GPSLatitudeRef  = la >= 0 ? 'N' : 'S';
+        exif.GPSLongitude = toDMS(lo); exif.GPSLongitudeRef = lo >= 0 ? 'E' : 'W';
+      }
+    }
+  }
+  return exif;
+}
+
+// ─── READ DISPATCH ────────────────────────────────────────────────────────────
 function readOne(file, cb){
+  if(isVideoFile(file)) return readVideoFile(file, cb);
+  if(isHeicFile(file))  return readHeicFile(file, cb);
+  return readImageFile(file, cb);
+}
+
+function readImageFile(file, cb){
   var r = new FileReader();
   r.onload = function(e){
     var exif = {}, rawExifB64 = null;
-    try{ var x=EXIF.readFromBinaryFile(e.target.result); if(x&&typeof x==='object') exif=x; }catch(ex){}
+    try{ if(window.EXIF){ var x=EXIF.readFromBinaryFile(e.target.result); if(x&&typeof x==='object') exif=x; } }catch(ex){}
+    if(!exif || !Object.keys(exif).length){
+      var alt = parseExifFromBuffer(e.target.result);
+      if(alt) exif = alt;
+    }
     var r2 = new FileReader();
     r2.onload = function(e2){
       var dataUrl = e2.target.result;
       // Store the data URL so piexif.load() can extract EXIF verbatim on download
       var ext=(file.name||'').split('.').pop().toLowerCase();
-      if((ext==='jpg'||ext==='jpeg') && piexif && dataUrl){
+      if((ext==='jpg'||ext==='jpeg') && window.piexif && dataUrl){
         try{ piexif.load(dataUrl); rawExifB64 = dataUrl; }catch(ex2){}
       }
-      cb({file:file, b64:dataUrl, exif:exif, rawExifB64:rawExifB64, address:null, manualLat:null, manualLon:null, manualAddr:null, manualDate:null, manualTime:null, manualSite:null, manualEquip:null, stamped:true, stampX:null, stampY:null});
+      cb(newEntry(file, {b64:dataUrl, exif:exif, rawExifB64:rawExifB64}));
     };
-    r2.onerror = function(){ cb({file:file, b64:null, exif:exif, rawExifB64:null, address:null, manualLat:null, manualLon:null, manualAddr:null, manualDate:null, manualTime:null, manualSite:null, manualEquip:null, stamped:true, stampX:null, stampY:null}); };
+    r2.onerror = function(){ cb(newEntry(file, {b64:null, exif:exif})); };
     r2.readAsDataURL(file);
   };
   r.onerror = function(){
     var r2 = new FileReader();
-    r2.onload = function(e2){ cb({file:file, b64:e2.target.result, exif:{}, rawExifB64:null, address:null, manualLat:null, manualLon:null, manualAddr:null, manualDate:null, manualTime:null, manualSite:null, manualEquip:null, stamped:true, stampX:null, stampY:null}); };
+    r2.onload = function(e2){ cb(newEntry(file, {b64:e2.target.result})); };
+    r2.onerror = function(){ cb(null); };
     r2.readAsDataURL(file);
   };
   r.readAsArrayBuffer(file);
+}
+
+// ─── HEIC / HEIF ──────────────────────────────────────────────────────────────
+function readHeicFile(file, cb){
+  st('Converting '+file.name+' (HEIC → JPG)…','w');
+  var r = new FileReader();
+  r.onload = function(e){
+    var exif = parseExifFromBuffer(e.target.result) || {};
+    ensureHeicDecoder().then(function(ok){
+      if(!ok || !window.heic2any){
+        st('HEIC decoder could not load — '+file.name+' skipped.','e');
+        cb(null); return;
+      }
+      window.heic2any({ blob:file, toType:'image/jpeg', quality:0.92 }).then(function(out){
+        var blob = Array.isArray(out) ? out[0] : out;
+        var r2 = new FileReader();
+        r2.onload = function(e2){
+          cb(newEntry(file, {
+            b64: e2.target.result,
+            exif: exif,
+            wasHeic: true,
+            outName: (file.name||'photo').replace(/\.(heic|heif)$/i,'') + '.jpg'
+          }));
+        };
+        r2.onerror = function(){ cb(null); };
+        r2.readAsDataURL(blob);
+      }).catch(function(err){
+        st('HEIC conversion failed for '+file.name+': '+((err&&err.message)||err),'e');
+        cb(null);
+      });
+    });
+  };
+  r.onerror = function(){ cb(null); };
+  r.readAsArrayBuffer(file);
+}
+
+// ─── VIDEO ────────────────────────────────────────────────────────────────────
+function readVideoFile(file, cb){
+  st('Reading '+file.name+'…','w');
+  var META_CAP = 24 * 1024 * 1024; // metadata lives near the head/tail; cap the read
+  var slice = file.size > META_CAP ? file.slice(0, META_CAP) : file;
+  function empty(x){ return !x || (!x.DateTimeOriginal && !x.GPSLatitude); }
+
+  var r = new FileReader();
+  r.onload = function(e){
+    var exif = {};
+    try{ exif = parseVideoMeta(e.target.result) || {}; }catch(ex){}
+    // moov often sits at the end of iPhone .mov files — retry from the tail
+    if(empty(exif) && file.size > META_CAP){
+      var r3 = new FileReader();
+      r3.onload = function(e3){
+        var tail = {};
+        try{ tail = parseVideoMeta(e3.target.result) || {}; }catch(ex3){}
+        finishVideo(file, empty(tail) ? exif : tail, cb);
+      };
+      r3.onerror = function(){ finishVideo(file, exif, cb); };
+      try{ r3.readAsArrayBuffer(file.slice(Math.max(0, file.size - META_CAP))); }
+      catch(ex2){ finishVideo(file, exif, cb); }
+      return;
+    }
+    finishVideo(file, exif, cb);
+  };
+  r.onerror = function(){ finishVideo(file, {}, cb); };
+  try{ r.readAsArrayBuffer(slice); }catch(ex){ finishVideo(file, {}, cb); }
+}
+
+function finishVideo(file, exif, cb){
+  var url = URL.createObjectURL(file);
+  var v = document.createElement('video');
+  v.preload = 'auto'; v.muted = true; v.playsInline = true;
+  var done = false;
+  function fail(){
+    if(done) return; done = true;
+    st('Could not decode video: '+file.name,'e');
+    try{ URL.revokeObjectURL(url); }catch(e){}
+    cb(null);
+  }
+  function grab(){
+    if(done) return; done = true;
+    var vw = v.videoWidth || 640, vh = v.videoHeight || 480;
+    var dims = scaledDims(vw, vh);
+    var c = document.createElement('canvas'); c.width = dims.w; c.height = dims.h;
+    var poster = null;
+    try{
+      c.getContext('2d').drawImage(v, 0, 0, dims.w, dims.h);
+      poster = c.toDataURL('image/jpeg', 0.88);
+    }catch(e){}
+    cb(newEntry(file, {
+      isVideo:true, videoUrl:url, b64:poster, exif:exif,
+      duration: v.duration || 0, vw:vw, vh:vh, outName:file.name
+    }));
+  }
+  v.addEventListener('error', fail);
+  v.addEventListener('loadeddata', function(){
+    // Nudge past frame 0 — the very first frame is often black
+    var t = Math.min(0.2, Math.max(0, (v.duration || 1) * 0.02));
+    var seeked = false;
+    v.addEventListener('seeked', function(){ if(!seeked){ seeked = true; grab(); } });
+    setTimeout(function(){ if(!seeked){ seeked = true; grab(); } }, 1200);
+    try{ v.currentTime = t; }catch(e){ if(!seeked){ seeked = true; grab(); } }
+  }, {once:true});
+  setTimeout(function(){ if(!done && v.readyState < 2) fail(); }, 15000);
+  v.src = url;
 }
 
 // ─── ZIP HANDLING ─────────────────────────────────────────────────────────────
@@ -913,9 +1306,9 @@ function handleZip(zipFile){
   JSZip.loadAsync(zipFile).then(function(zip){
     var imageEntries = [];
     zip.forEach(function(relPath, zipEntry){
-      if(!zipEntry.dir && isImagePath(relPath)) imageEntries.push(zipEntry);
+      if(!zipEntry.dir && isMediaPath(relPath)) imageEntries.push(zipEntry);
     });
-    if(!imageEntries.length){ st('No images found in ZIP.','w'); return; }
+    if(!imageEntries.length){ st('No photos or videos found in ZIP.','w'); return; }
     var pending = imageEntries.length;
     var folderMap = {};
     imageEntries.forEach(function(zipEntry){
@@ -924,7 +1317,9 @@ function handleZip(zipFile){
         var parts = relPath.split('/');
         var fname = parts[parts.length-1];
         var folderKey = parts.length <= 1 ? zipName : (parts[parts.length-2] || zipName);
-        var mimeMap = {jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif',bmp:'image/bmp',tiff:'image/tiff',tif:'image/tiff'};
+        var mimeMap = {jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif',
+                       bmp:'image/bmp',tiff:'image/tiff',tif:'image/tiff',heic:'image/heic',heif:'image/heif',
+                       mp4:'video/mp4',m4v:'video/mp4',mov:'video/quicktime',webm:'video/webm','3gp':'video/3gpp'};
         var ext = fname.split('.').pop().toLowerCase();
         var file = new File([blob], fname, {type: mimeMap[ext] || 'image/jpeg'});
         if(!folderMap[folderKey]) folderMap[folderKey] = [];
@@ -1038,7 +1433,10 @@ function makeFileItem(fi, entry, inGroup){
   el.draggable = true;
   el.dataset.fi = fi;
   if(!inGroup) el.style.paddingLeft = '8px';
-  var thumb = entry.b64 ? '<img class="file-item-thumb" src="'+entry.b64+'" alt="">' : '<div class="file-item-thumb" style="background:#1a1a1a;"></div>';
+  var badge = entry.isVideo ? '<span style="position:absolute;left:2px;bottom:2px;font-size:0.5rem;background:#d97706;color:#fff;padding:0 2px;line-height:1.3;">▶</span>'
+            : (entry.wasHeic ? '<span style="position:absolute;left:2px;bottom:2px;font-size:0.45rem;background:#0077b6;color:#fff;padding:0 2px;line-height:1.3;">JPG</span>' : '');
+  var thumbInner = entry.b64 ? '<img class="file-item-thumb" src="'+entry.b64+'" alt="">' : '<div class="file-item-thumb" style="background:#1a1a1a;"></div>';
+  var thumb = badge ? '<span style="position:relative;display:inline-block;">'+thumbInner+badge+'</span>' : thumbInner;
   el.innerHTML = '<span class="drag-handle" title="Drag to reorder">⠿</span>'+
     thumb+
     '<input type="checkbox" class="file-stamp-chk" '+(isStamped?'checked':'')+' title="Stamp this photo" >'+
@@ -1276,6 +1674,9 @@ function removeFile(fileIdx){
   groups = groups.filter(function(g){ return g.indices.length > 0; });
   var ui = ungrouped.indexOf(fileIdx); if(ui !== -1) ungrouped.splice(ui, 1);
   if(files[fileIdx] && files[fileIdx].address === null){ geoDecrement(); }
+  if(files[fileIdx] && files[fileIdx].videoUrl){
+    try{ URL.revokeObjectURL(files[fileIdx].videoUrl); }catch(e){}
+  }
   files[fileIdx] = null;
   if(activeIdx === fileIdx){
     var next = -1;
@@ -1306,9 +1707,8 @@ function removeGroup(gi){
 
 function downloadGroup(gi){
   var grp=groups[gi]; if(!grp||!grp.indices.length) return;
-  var zip=new JSZip();
   var folder=grp.name;
-  var total=grp.indices.filter(function(fi){ return files[fi]&&files[fi].b64; }).length;
+  var total=grp.indices.filter(function(fi){ return files[fi] && (files[fi].b64 || files[fi].isVideo); }).length;
   if(!total) return;
 
   // Find the group download button and show progress
@@ -1321,44 +1721,20 @@ function downloadGroup(gi){
   });
   if(dlBtn){ dlBtn.disabled=true; dlBtn.textContent='⏳'; }
 
-  var processed=0;
-  grp.indices.forEach(function(fi){
-    var entry=files[fi]; if(!entry||!entry.b64){ checkDone(); return; }
-    var path=folder+'/'+entry.file.name;
-    if(entry.stamped===false){
-      zip.file(path, entry.b64.split(',')[1], {base64:true});
-      checkDone();
-      return;
-    }
-    var img=new Image();
-    img.onload=function(){
-      var dims=scaledDims(img.naturalWidth,img.naturalHeight);
-      var c=document.createElement('canvas'); c.width=dims.w; c.height=dims.h;
-      var ctx=c.getContext('2d'); ctx.drawImage(img,0,0,dims.w,dims.h);
-      if(entry.stampX!==null&&entry.stampY!==null){ cfg.customX=entry.stampX; cfg.customY=entry.stampY; }
-      stampForEntry(ctx,c.width,c.height,entry);
-      var dataUrl=applyExifToDataUrl(c.toDataURL('image/jpeg',0.93), entry);
-      zip.file(path, dataUrl.split(',')[1], {base64:true});
-      checkDone();
-    };
-    img.onerror=function(){ checkDone(); };
-    img.src=entry.b64;
-  });
+  var items = grp.indices.map(function(fi){ return files[fi]; })
+    .filter(function(e){ return e && (e.b64 || e.isVideo); })
+    .map(function(e){ return {entry:e, folder:folder}; });
 
-  function checkDone(){
-    processed++;
-    if(dlBtn) dlBtn.textContent='⏳'+processed+'/'+total;
-    if(processed>=total){
-      zip.generateAsync({type:'blob'}).then(function(blob){
-        var a=document.createElement('a');
-        a.download=folder+'.zip';
-        a.href=URL.createObjectURL(blob);
-        a.click();
-        setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
-        if(dlBtn){ dlBtn.disabled=false; dlBtn.textContent='⬇'; }
-      });
-    }
-  }
+  runZipExport(items, folder + '.zip', function(i, tot, entry, frac){
+    if(!dlBtn) return;
+    dlBtn.textContent = entry && entry.isVideo
+      ? '⏳'+Math.round(frac*100)+'%'
+      : '⏳'+(i+1)+'/'+tot;
+  }).then(function(){
+    if(dlBtn){ dlBtn.disabled=false; dlBtn.textContent='⬇'; }
+  }).catch(function(){
+    if(dlBtn){ dlBtn.disabled=false; dlBtn.textContent='⬇'; }
+  });
 }
 
 // ─── ACTIVATE ─────────────────────────────────────────────────────────────────
@@ -1401,16 +1777,23 @@ function activate(idx){
 
   updateManualPanel(entry, idx);
 
-  if(!entry.b64){ st('No image data.','e'); return; }
-  st('Loading…','w');
+  if(!entry.b64){ st(entry.isVideo ? 'Could not build a preview frame for this video.' : 'No image data.','e'); return; }
+  st(entry.isVideo ? 'Video — position the stamp on this frame; it burns into every frame on export.' : 'Loading…','w');
   if(entry.stampX !== null && entry.stampY !== null){
     cfg.customX = entry.stampX;
     cfg.customY = entry.stampY;
   }
+  // ── Per-photo stamp size ──
+  // A photo with no size of its own inherits whatever size was last in use,
+  // then keeps it independently from that point on.
+  if(entry.stampSize === null || entry.stampSize === undefined) entry.stampSize = cfg.size;
+  cfg.size = entry.stampSize;
+  var _sl = id('slSize'); if(_sl) _sl.value = cfg.size;
+  var _sv = id('valSize'); if(_sv) _sv.textContent = cfg.size + 'px';
   var img=new Image();
   img.onload=function(){
     activeImg=img; $btnDL.disabled=false;
-    st('Ready.','');
+    if(!entry.isVideo) st('Ready.','');
     redraw();
   };
   img.onerror=function(){ st('Image decode failed.','e'); };
@@ -1794,17 +2177,30 @@ function stamp(ctx, w, h, ls){
 }
 
 function stampForEntry(ctx, w, h, entry){
-  stampDraw(ctx, w, h, buildLines(entry.exif, entry.file.name, entry.address, entry));
+  // Apply this entry's own saved position + size, then restore globals.
+  var sX=cfg.customX, sY=cfg.customY, sSize=cfg.size, sWB=_noStampWriteback;
+  if(entry.stampX !== null && entry.stampX !== undefined &&
+     entry.stampY !== null && entry.stampY !== undefined){
+    cfg.customX = entry.stampX; cfg.customY = entry.stampY;
+  }
+  if(entry.stampSize !== null && entry.stampSize !== undefined) cfg.size = entry.stampSize;
+  _noStampWriteback = true;
+  try{
+    stampDraw(ctx, w, h, buildLines(entry.exif, entry.file.name, entry.address, entry));
+  } finally {
+    cfg.customX=sX; cfg.customY=sY; cfg.size=sSize; _noStampWriteback=sWB;
+  }
 }
 
 function ratioToXY(w, h){
   return { x: cfg.customX * w, y: cfg.customY * h };
 }
 
+var _noStampWriteback = false;
 function xyToRatio(x, y, w, h){
   cfg.customX = x / w;
   cfg.customY = y / h;
-  if(activeIdx >= 0 && files[activeIdx]){
+  if(!_noStampWriteback && activeIdx >= 0 && files[activeIdx]){
     files[activeIdx].stampX = cfg.customX;
     files[activeIdx].stampY = cfg.customY;
   }
@@ -2163,7 +2559,19 @@ function setCwCursor(){ $cw.style.cursor=canvas?'crosshair':''; }
 })();
 
 // ─── CONTROLS ─────────────────────────────────────────────────────────────────
-(function(){ var el=id('slSize'); if(!el) return; el.addEventListener('input', function(){ cfg.size=+this.value; var vEl=id('valSize'); if(vEl) vEl.textContent=this.value+'px'; redraw(); }); })();
+(function(){ var el=id('slSize'); if(!el) return; el.addEventListener('input', function(){
+  cfg.size=+this.value;
+  var vEl=id('valSize'); if(vEl) vEl.textContent=this.value+'px';
+  if(activeIdx>=0 && files[activeIdx]) files[activeIdx].stampSize = cfg.size; // remember per photo
+  redraw();
+}); })();
+// Apply the current size to every loaded file
+(function(){ var b=id('btnSizeAll'); if(!b) return; b.addEventListener('click', function(){
+  var n=0;
+  files.forEach(function(f){ if(f){ f.stampSize=cfg.size; n++; } });
+  st('Size '+cfg.size+'px applied to '+n+' file'+(n===1?'':'s')+'.','');
+  redraw();
+}); })();
 // ─── CUSTOM FONT PICKER ───────────────────────────────────────────────────────
 (function(){
   var fonts = [
@@ -2973,13 +3381,45 @@ id('btnScanPhoto').addEventListener('click', function(){
 })();
 
 // ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
+// Build a piexif dictionary from a parsed exif-js style object. Used for HEIC
+// (and any source without a JPEG APP1 block) so metadata survives the export.
+function exifToPiexifDict(exif){
+  var d = {'0th':{},'Exif':{},'GPS':{},'1st':{}};
+  if(!window.piexif || !exif) return d;
+  try{
+    var dt = exif.DateTimeOriginal || exif.DateTime;
+    if(dt){
+      d['Exif'][piexif.ExifIFD.DateTimeOriginal] = String(dt);
+      d['0th'][piexif.ImageIFD.DateTime] = String(dt);
+    }
+    if(exif.Make)  d['0th'][piexif.ImageIFD.Make]  = String(exif.Make);
+    if(exif.Model) d['0th'][piexif.ImageIFD.Model] = String(exif.Model);
+    var la = dms(exif.GPSLatitude,  exif.GPSLatitudeRef);
+    var lo = dms(exif.GPSLongitude, exif.GPSLongitudeRef);
+    if(la !== null && lo !== null && !isNaN(la) && !isNaN(lo)){
+      function _rat(deg){
+        var a=Math.abs(deg), dd=Math.floor(a), mi=Math.floor((a-dd)*60);
+        var se=Math.round((((a-dd)*60)-mi)*60*100);
+        return [[dd,1],[mi,1],[se,100]];
+      }
+      d['GPS'][piexif.GPSIFD.GPSLatitudeRef]  = la >= 0 ? 'N' : 'S';
+      d['GPS'][piexif.GPSIFD.GPSLatitude]     = _rat(la);
+      d['GPS'][piexif.GPSIFD.GPSLongitudeRef] = lo >= 0 ? 'E' : 'W';
+      d['GPS'][piexif.GPSIFD.GPSLongitude]    = _rat(lo);
+    }
+  }catch(e){}
+  return d;
+}
+
 function applyExifToDataUrl(dataUrl, entry){
-  var filename   = entry ? entry.file.name : '';
+  var filename   = entry ? (entry.outName || entry.file.name) : '';
   var rawExifB64 = entry ? entry.rawExifB64 : null;
   var ext = (filename||'').split('.').pop().toLowerCase();
-  if((ext==='jpg'||ext==='jpeg') && piexif){
+  if((ext==='jpg'||ext==='jpeg') && window.piexif){
     try{
-      var origExif = rawExifB64 ? piexif.load(rawExifB64) : {'0th':{},'Exif':{},'GPS':{},'1st':{}};
+      var origExif = null;
+      if(rawExifB64){ try{ origExif = piexif.load(rawExifB64); }catch(eL){ origExif = null; } }
+      if(!origExif) origExif = exifToPiexifDict(entry ? entry.exif : {});
       // Patch manual date/time
       var manDate = entry && entry.manualDate;
       var manTime = entry && entry.manualTime;
@@ -3014,73 +3454,290 @@ function applyExifToDataUrl(dataUrl, entry){
   return dataUrl;
 }
 
+// ─── VIDEO STAMPING ───────────────────────────────────────────────────────────
+// Draws each frame to a canvas with the stamp burned in and records the canvas
+// stream. Recording runs at playback speed, so a 30s clip takes ~30s.
+function pickVideoMime(){
+  var c = ['video/mp4;codecs="avc1.42E01E,mp4a.40.2"','video/mp4;codecs=avc1.42E01E',
+           'video/mp4;codecs=avc1','video/mp4',
+           'video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  for(var i=0;i<c.length;i++){
+    try{ if(window.MediaRecorder && MediaRecorder.isTypeSupported(c[i])) return c[i]; }catch(e){}
+  }
+  return '';
+}
+
+function stampVideo(entry, onProgress){
+  return new Promise(function(resolve, reject){
+    if(!window.MediaRecorder) return reject(new Error('This browser cannot re-encode video (no MediaRecorder).'));
+    var mime = pickVideoMime();
+    if(!mime) return reject(new Error('No supported video encoder in this browser.'));
+
+    var v = document.createElement('video');
+    v.playsInline = true; v.preload = 'auto';
+    var ownUrl = null;
+    if(entry.videoUrl){ v.src = entry.videoUrl; }
+    else { ownUrl = URL.createObjectURL(entry.file); v.src = ownUrl; }
+
+    var settled = false;
+    function done(fn, arg){
+      if(settled) return; settled = true;
+      if(ownUrl) try{ URL.revokeObjectURL(ownUrl); }catch(e){}
+      fn(arg);
+    }
+
+    v.addEventListener('error', function(){ done(reject, new Error('Video load failed.')); }, {once:true});
+
+    v.addEventListener('loadedmetadata', function(){
+      var dims = scaledDims(v.videoWidth || entry.vw || 640, v.videoHeight || entry.vh || 480);
+      var c = document.createElement('canvas');
+      c.width = dims.w; c.height = dims.h;
+      var ctx = c.getContext('2d');
+
+      var fps = 30;
+      var stream;
+      try{ stream = c.captureStream(fps); }
+      catch(e){ return done(reject, new Error('Canvas capture unsupported.')); }
+
+      // Route audio through an AudioContext so it is recorded but stays silent
+      var ac = null;
+      try{
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if(AC){
+          ac = new AC();
+          var srcNode = ac.createMediaElementSource(v);
+          var dest = ac.createMediaStreamDestination();
+          srcNode.connect(dest);
+          dest.stream.getAudioTracks().forEach(function(t){ stream.addTrack(t); });
+          if(ac.state === 'suspended') ac.resume();
+        }
+      }catch(e){ ac = null; }
+      if(!ac) v.muted = true;   // no audio graph → keep playback silent
+
+      var bitrate = Math.min(16000000, Math.max(2500000, Math.round(dims.w * dims.h * 5)));
+      var rec;
+      try{ rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:bitrate}); }
+      catch(e){
+        try{ rec = new MediaRecorder(stream, {mimeType:mime}); }
+        catch(e2){ return done(reject, e2); }
+      }
+
+      var chunks = [];
+      rec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
+      rec.onerror = function(e){ done(reject, (e && e.error) || new Error('Recorder error.')); };
+      rec.onstop = function(){
+        try{ if(ac) ac.close(); }catch(e){}
+        try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+        var base = mime.split(';')[0];
+        var blob = new Blob(chunks, {type: base});
+        if(!blob.size) return done(reject, new Error('Recording produced no data.'));
+        done(resolve, {blob:blob, ext: base.indexOf('mp4') >= 0 ? 'mp4' : 'webm', mime:base});
+      };
+
+      var running = true;
+      function frame(){
+        if(!running) return;
+        try{
+          ctx.drawImage(v, 0, 0, dims.w, dims.h);
+          stampForEntry(ctx, c.width, c.height, entry);
+        }catch(e){}
+        if(onProgress && v.duration) onProgress(Math.min(1, v.currentTime / v.duration));
+        requestAnimationFrame(frame);
+      }
+
+      v.addEventListener('ended', function(){
+        // Let the recorder flush the tail before stopping
+        setTimeout(function(){
+          running = false;
+          try{ rec.stop(); }catch(e){}
+        }, 260);
+      }, {once:true});
+
+      // Hard ceiling so a stalled element can never hang the batch
+      var cap = ((v.duration && isFinite(v.duration)) ? v.duration : 60) * 1000 + 8000;
+      setTimeout(function(){
+        if(!settled && rec.state !== 'inactive'){ running = false; try{ rec.stop(); }catch(e){} }
+      }, cap);
+
+      try{ v.currentTime = 0; }catch(e){}
+      function begin(){ rec.start(1000); requestAnimationFrame(frame); }
+      var p = v.play();
+      if(p && p.then){
+        p.then(begin).catch(function(){
+          // Autoplay policy can block unmuted playback — retry silently
+          v.muted = true;
+          var p2 = v.play();
+          if(p2 && p2.then) p2.then(begin).catch(function(err2){ done(reject, err2); });
+          else begin();
+        });
+      } else {
+        begin();
+      }
+    }, {once:true});
+  });
+}
+
+// ─── SHARED EXPORT PIPELINE ───────────────────────────────────────────────────
+// One code path for single, group and all-file exports so images, HEIC and
+// video behave identically everywhere.
+function stampedNameFor(entry, ext){
+  var n = entry.outName || entry.file.name || 'file';
+  if(!ext) return n;
+  return n.replace(/\.[^.]+$/, '') + '.' + ext;
+}
+
+function processEntryToZip(zip, entry, folder, onProgress){
+  return new Promise(function(resolve){
+    if(!entry){ resolve(); return; }
+    function put(name, payload, opts){
+      zip.file(folder ? folder + '/' + name : name, payload, opts);
+    }
+    // Unstamped — pass the original bytes straight through
+    if(entry.stamped === false){
+      if(entry.isVideo){
+        (entry.file.arrayBuffer ? entry.file.arrayBuffer() : Promise.reject())
+          .then(function(ab){ put(entry.file.name, ab); resolve(); })
+          .catch(function(){ resolve(); });
+      } else if(entry.b64){
+        put(entry.outName || entry.file.name, entry.b64.split(',')[1], {base64:true});
+        resolve();
+      } else resolve();
+      return;
+    }
+    if(entry.isVideo){
+      stampVideo(entry, onProgress).then(function(res){
+        (res.blob.arrayBuffer ? res.blob.arrayBuffer() : Promise.reject())
+          .then(function(ab){ put(stampedNameFor(entry, res.ext), ab); resolve(); })
+          .catch(function(){ resolve(); });
+      }).catch(function(err){
+        st('Video skipped ('+entry.file.name+'): '+((err&&err.message)||err),'e');
+        resolve();
+      });
+      return;
+    }
+    if(!entry.b64){ resolve(); return; }
+    var img = new Image();
+    img.onload = function(){
+      var dims = scaledDims(img.naturalWidth, img.naturalHeight);
+      var c = document.createElement('canvas'); c.width = dims.w; c.height = dims.h;
+      var ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, dims.w, dims.h);
+      stampForEntry(ctx, c.width, c.height, entry);
+      var dataUrl = applyExifToDataUrl(c.toDataURL('image/jpeg', 0.93), entry);
+      put(stampedNameFor(entry, 'jpg'), dataUrl.split(',')[1], {base64:true});
+      resolve();
+    };
+    img.onerror = function(){ resolve(); };
+    img.src = entry.b64;
+  });
+}
+
+// Sequential so videos (which record in real time) never overlap
+function runZipExport(items, zipName, onStep){
+  var zip = new JSZip();
+  var i = 0;
+  function step(){
+    if(i >= items.length){
+      return zip.generateAsync({type:'blob'}).then(function(blob){
+        var a = document.createElement('a');
+        a.download = zipName;
+        a.href = URL.createObjectURL(blob);
+        a.click();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
+      });
+    }
+    var it = items[i];
+    if(onStep) onStep(i, items.length, it.entry, 0);
+    return processEntryToZip(zip, it.entry, it.folder, function(frac){
+      if(onStep) onStep(i, items.length, it.entry, frac);
+    }).then(function(){ i++; return step(); });
+  }
+  return step();
+}
+
+function saveBlob(blob, filename){
+  var a = document.createElement('a');
+  a.download = filename;
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
+}
+
 function downloadWithExif(canvasEl, entry, filename){
   var dataUrl = applyExifToDataUrl(canvasEl.toDataURL('image/jpeg', 0.93), entry);
   var a = document.createElement('a');
-  a.download = filename||'stamped.jpg';
+  a.download = filename || stampedNameFor(entry, 'jpg');
   a.href = dataUrl; a.click();
 }
 
 $btnDL.addEventListener('click', function(){
   var entry = files[activeIdx];
-  if(!entry||!entry.b64) return;
+  if(!entry) return;
+
+  // ── Video: re-encode with the stamp burned into every frame ──
+  if(entry.isVideo){
+    if(entry.stamped === false){
+      saveBlob(entry.file, entry.file.name);
+      return;
+    }
+    var label = $btnDL.textContent;
+    $btnDL.disabled = true;
+    st('Stamping video — plays through once in real time, please leave this tab open.','w');
+    stampVideo(entry, function(frac){
+      $btnDL.textContent = '⏳ ' + Math.round(frac*100) + '%';
+    }).then(function(res){
+      saveBlob(res.blob, stampedNameFor(entry, res.ext));
+      $btnDL.textContent = label; $btnDL.disabled = false;
+      st(res.ext === 'mp4'
+        ? 'Video stamped and saved as MP4.'
+        : 'Video stamped. This browser only encodes WebM, so the file was saved as .webm.', '');
+    }).catch(function(err){
+      $btnDL.textContent = label; $btnDL.disabled = false;
+      st('Video stamping failed: ' + ((err&&err.message)||err), 'e');
+    });
+    return;
+  }
+
+  if(!entry.b64) return;
   if(entry.stamped === false){
-    var a=document.createElement('a'); a.download=entry.file.name; a.href=entry.b64; a.click();
+    var a=document.createElement('a'); a.download=entry.outName||entry.file.name; a.href=entry.b64; a.click();
     return;
   }
   if(!canvas) return;
-  downloadWithExif(canvas, entry, entry.file.name);
+  downloadWithExif(canvas, entry, stampedNameFor(entry, 'jpg'));
 });
 
 $btnAll.addEventListener('click', function(){
   $btnAll.disabled=true; $btnAll.textContent='⏳ Processing…';
-  var zip = new JSZip();
   var allEntries = [];
 
   groups.forEach(function(grp){
     grp.indices.forEach(function(fi){
-      var entry=files[fi]; if(!entry||!entry.b64) return;
+      var entry=files[fi]; if(!entry || (!entry.b64 && !entry.isVideo)) return;
       allEntries.push({entry:entry, folder:grp.name});
     });
   });
   ungrouped.forEach(function(fi){
-    var entry=files[fi]; if(!entry||!entry.b64) return;
+    var entry=files[fi]; if(!entry || (!entry.b64 && !entry.isVideo)) return;
     allEntries.push({entry:entry, folder:''});
   });
 
   if(!allEntries.length){ $btnAll.textContent='⬇ Download all stamped'; $btnAll.disabled=false; return; }
 
-  var processed=0;
-  allEntries.forEach(function(item){
-    var img=new Image();
-    img.onload=function(){
-      var path=item.folder?item.folder+'/'+item.entry.file.name:item.entry.file.name;
-      if(item.entry.stamped===false){
-        zip.file(path, item.entry.b64.split(',')[1], {base64:true});
-      } else {
-        var dims=scaledDims(img.naturalWidth,img.naturalHeight);
-        var c=document.createElement('canvas'); c.width=dims.w; c.height=dims.h;
-        var ctx=c.getContext('2d'); ctx.drawImage(img,0,0,dims.w,dims.h);
-        if(item.entry.stampX!==null&&item.entry.stampY!==null){ cfg.customX=item.entry.stampX; cfg.customY=item.entry.stampY; }
-        stampForEntry(ctx,c.width,c.height,item.entry);
-        var dataUrl=applyExifToDataUrl(c.toDataURL('image/jpeg',0.93),item.entry);
-        zip.file(path, dataUrl.split(',')[1], {base64:true});
-      }
-      processed++;
-      $btnAll.textContent='⏳ '+processed+'/'+allEntries.length+'…';
-      if(processed===allEntries.length){
-        zip.generateAsync({type:'blob'}).then(function(blob){
-          var a=document.createElement('a');
-          a.download='stamped_photos.zip';
-          a.href=URL.createObjectURL(blob);
-          a.click();
-          setTimeout(function(){ URL.revokeObjectURL(a.href); },1000);
-          $btnAll.textContent='⬇ Download all stamped';
-          $btnAll.disabled=false;
-        });
-      }
-    };
-    img.src=item.entry.b64;
+  var vids = allEntries.filter(function(i){ return i.entry.isVideo && i.entry.stamped !== false; }).length;
+  if(vids) st(vids+' video'+(vids===1?'':'s')+' will each play through once in real time — keep this tab open.','w');
+
+  runZipExport(allEntries, 'stamped_photos.zip', function(i, total, entry, frac){
+    $btnAll.textContent = entry && entry.isVideo
+      ? '⏳ '+(i+1)+'/'+total+' video '+Math.round(frac*100)+'%'
+      : '⏳ '+(i+1)+'/'+total+'…';
+  }).then(function(){
+    $btnAll.textContent='⬇ Download all stamped';
+    $btnAll.disabled=false;
+    st('Export complete.','');
+  }).catch(function(err){
+    $btnAll.textContent='⬇ Download all stamped';
+    $btnAll.disabled=false;
+    st('Export failed: '+((err&&err.message)||err),'e');
   });
 });
 
