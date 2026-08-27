@@ -1,11 +1,11 @@
 {
-  "generated": "2026-08-27T13:59:07.362Z",
+  "generated": "2026-08-27T21:17:09.649Z",
   "folderName": "Crew Certificates",
   "stats": {
     "markets": 13,
     "companies": 84,
     "crews": 198,
-    "files": 487,
+    "files": 488,
     "expired": 84,
     "expiringSoon": 8
   },
@@ -3817,6 +3817,22 @@
       "size": 85872,
       "createdDate": "2026-02-11",
       "modifiedDate": "2026-02-11"
+    },
+    {
+      "market": "Other Markets",
+      "company": "Nova Tower Experts",
+      "crewName": "Jonattan Garcia",
+      "fileName": "Rigging Capstan_1302028.pdf",
+      "certificateType": "Other Certification",
+      "expirationDate": null,
+      "daysUntilExpiration": null,
+      "expired": false,
+      "fileUrl": "https://drive.google.com/file/d/1i3Xnce2rxAhWn-q7bXwuxLYVCdADim3J/view",
+      "fileId": "1i3Xnce2rxAhWn-q7bXwuxLYVCdADim3J",
+      "mimeType": "application/pdf",
+      "size": 597737,
+      "createdDate": "2026-08-27",
+      "modifiedDate": "2026-08-27"
     },
     {
       "market": "Other Markets",
