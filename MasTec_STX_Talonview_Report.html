@@ -55,12 +55,21 @@
     .btn.success{background:var(--green);border-color:var(--green);color:#000;}
     .btn.view-btn{border-color:var(--border);color:var(--text-muted);}
     .btn.view-btn.active{background:var(--accent-blue);border-color:var(--accent-blue);color:#000;font-weight:500;}
+    .btn.reset-btn{background:rgba(255,77,77,.12);border-color:rgba(255,77,77,.3);color:var(--accent-f);}
+    .btn.reset-btn:hover{background:rgba(255,77,77,.2);border-color:var(--accent-f);color:var(--accent-f);}
     /* Notes bar */
     .notes-bar{display:none;align-items:center;gap:20px;padding:12px 18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:20px;font-size:11px;flex-wrap:wrap;}
     .notes-bar.show{display:flex;}
     .notes-label{color:var(--text-muted);letter-spacing:.5px;flex-shrink:0;}
     .notes-check{display:flex;align-items:center;gap:8px;color:var(--text-dim);cursor:pointer;letter-spacing:.5px;}
     .notes-check input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent-blue);cursor:pointer;}
+    .fr-bar{display:none;align-items:center;gap:10px;padding:12px 18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:20px;font-size:11px;flex-wrap:wrap;}
+    .fr-bar.show{display:flex;}
+    .fr-bar label{color:var(--text-muted);letter-spacing:.5px;flex-shrink:0;}
+    .fr-bar input[type=text]{font-family:'DM Mono',monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;outline:none;min-width:140px;}
+    .fr-bar input[type=text]:focus{border-color:var(--accent-blue);}
+    .fr-bar .notes-check{margin-left:2px;}
+    .fr-status{color:var(--text-muted);letter-spacing:.5px;font-size:10px;margin-left:auto;}
     /* Views */
     .view-panel{display:none;}
     .view-panel.active{display:block;}
@@ -136,10 +145,10 @@
   </div>
   <div class="toolbar" id="toolbar">
     <div class="toolbar-left">
+      <button class="btn reset-btn" id="btnReset">↩ New File</button>
       <button class="btn primary" id="btnCopy">Copy Text</button>
       <button class="btn docx-btn" id="btnDocx">⬇ Download Word (.docx)</button>
       <button class="btn xlsx-btn" id="btnXlsx">⬇ Download Excel (.xlsx)</button>
-      <button class="btn" id="btnReset">↩ New File</button>
     </div>
     <div class="toolbar-right">
       <button class="btn view-btn active" id="btnViewReport" onclick="switchView('report')">Report</button>
@@ -151,6 +160,17 @@
     <span class="notes-label">Do you want to add the notes in:</span>
     <label class="notes-check"><input type="checkbox" id="chkDocx"> Word doc (.docx)</label>
     <label class="notes-check"><input type="checkbox" id="chkXlsx"> Excel (.xlsx)</label>
+  </div>
+
+  <!-- Find & Replace bar — shown only in Edited view -->
+  <div class="fr-bar" id="frBar">
+    <label>Find:</label>
+    <input type="text" id="frFind" placeholder="text to find">
+    <label>Replace:</label>
+    <input type="text" id="frReplace" placeholder="replacement">
+    <label class="notes-check"><input type="checkbox" id="frCase"> Match case</label>
+    <button class="btn" id="btnFrReplace" onclick="findReplaceAll()">Replace All</button>
+    <span class="fr-status" id="frStatus"></span>
   </div>
 
   <div class="view-panel active" id="panelReport"><div id="output"></div></div>
@@ -175,6 +195,7 @@ let currentView = 'report';
 
 // ── Saved notes cache (persists across tab switches) ─────────────────────────
 let savedNotesMap = {}; // label → { html, added }
+let frReplacedLabels = new Set(); // original labels/form-names overwritten via Find & Replace
 
 function saveCurrentNotes() {
   document.querySelectorAll('#editedWrap .edited-item-content').forEach(el => {
@@ -194,6 +215,8 @@ function switchView(v) {
   document.getElementById('btnViewReport').classList.toggle('active', v === 'report');
   document.getElementById('btnViewEdited').classList.toggle('active', v === 'edited');
   document.getElementById('notesBar').classList.toggle('show', v === 'edited');
+  document.getElementById('frBar').classList.toggle('show', v === 'edited');
+  if (v !== 'edited') document.getElementById('frStatus').textContent = '';
   if (v === 'edited' && reportData) {
     const wrap = document.getElementById('editedWrap');
     // Only rebuild if empty (first time); otherwise restore saved notes
@@ -272,6 +295,49 @@ function makeEditable(container, originalText, cssClass) {
 }
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Find & Replace (Edited tab) ────────────────────────────────────────────────
+function escRegExp(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+
+function findReplaceAll() {
+  const statusEl = document.getElementById('frStatus');
+  const findVal  = document.getElementById('frFind').value;
+  const replVal  = document.getElementById('frReplace').value;
+  if (!findVal) { statusEl.textContent = 'Enter text to find.'; return; }
+
+  const matchCase = document.getElementById('frCase').checked;
+  let regex;
+  try { regex = new RegExp(escRegExp(findVal), matchCase ? 'g' : 'gi'); }
+  catch(e) { statusEl.textContent = 'Invalid search text.'; return; }
+
+  let totalMatches = 0, fieldsChanged = 0;
+
+  document.querySelectorAll('#editedWrap .edited-item-content, #editedWrap .edited-form-name').forEach(el => {
+    const text = el.textContent;
+    regex.lastIndex = 0;
+    if (!regex.test(text)) return;
+    regex.lastIndex = 0;
+
+    let html = '', lastIndex = 0, m, fieldCount = 0;
+    while ((m = regex.exec(text)) !== null) {
+      fieldCount++;
+      html += esc(text.slice(lastIndex, m.index));
+      html += '<span class="added">' + esc(replVal) + '</span>';
+      lastIndex = m.index + m[0].length;
+      if (m[0].length === 0) { regex.lastIndex++; }
+    }
+    html += esc(text.slice(lastIndex));
+
+    el.innerHTML = html;
+    totalMatches += fieldCount;
+    fieldsChanged++;
+    if (fieldCount > 0) frReplacedLabels.add(el.dataset.original);
+  });
+
+  statusEl.textContent = totalMatches > 0
+    ? `Replaced ${totalMatches} match${totalMatches === 1 ? '' : 'es'} across ${fieldsChanged} field${fieldsChanged === 1 ? '' : 's'}.`
+    : 'No matches found.';
+}
 
 function buildEditedView({ formOrder, rejected, pending, submitted }) {
   const wrap = document.getElementById('editedWrap');
@@ -377,6 +443,9 @@ btnReset.addEventListener('click', () => {
   statsEl.classList.remove('show'); toolbar.classList.remove('show'); sessionBar.classList.remove('show');
   dropZone.style.display = ''; fileInput.value = '';
   rawText = ''; reportData = null; savedNotesMap = {};
+  frReplacedLabels.clear();
+  document.getElementById('frFind').value = ''; document.getElementById('frReplace').value = '';
+  document.getElementById('frStatus').textContent = '';
   switchView('report');
 });
 
@@ -412,11 +481,12 @@ function parseRow(line) {
 
 function colEFilter(title, cf) {
   const isH = cf.toUpperCase().includes('HOUSTON');
+  const isMW = cf.toUpperCase().includes('MICROWAVE');
   const tu  = title.toUpperCase();
   const isPhoto = tu.startsWith('PHOTO REQUIREMENT')||tu.startsWith('UPLOAD PHOTO')||tu.startsWith('RESUBMIT PHOTO')||tu.startsWith('PHOTO UPLOAD');
   const isDoc   = tu.startsWith('DOCUMENT UPLOAD');
   const docSkip = ['TMO COP QUESTIONNAIRE','PERMITS AND INSPECTIONS','TOWER VALIDATION','SITE VALIDATION'].some(s=>cf.toUpperCase().includes(s));
-  return isH || isPhoto || (isDoc && !docSkip);
+  return isH || isMW || isPhoto || (isDoc && !docSkip);
 }
 
 function initForm(r,p,s,name,order) { if(!r[name]){r[name]=[];p[name]=[];s[name]=[];order.push(name);} }
@@ -570,18 +640,37 @@ function getNotesMap() {
   return map;
 }
 
+// Full replaced text for fields touched by Find & Replace — used to OVERWRITE
+// (not append) the label/form-name in exports when the notes checkbox is on.
+function getOverrideMap() {
+  if (currentView === 'edited') saveCurrentNotes();
+  const map = {};
+  frReplacedLabels.forEach(label => {
+    const data = savedNotesMap[label];
+    if (!data) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = data.innerHTML;
+    const full = tmp.textContent.trim();
+    if (full) map[label] = full;
+  });
+  return map;
+}
+
 // ── Excel ─────────────────────────────────────────────────────────────────────
 function generateXlsx({sessionName,formOrder,rejected,pending,submitted}){
   const includeNotes = document.getElementById('chkXlsx').checked;
   const notesMap = includeNotes ? getNotesMap() : {};
+  const overrideMap = includeNotes ? getOverrideMap() : {};
+  const lbl  = l => overrideMap[l] || l;
+  const note = l => overrideMap[l] ? '' : (notesMap[l] || ''); // overwritten items don't also get an appended note
 
   const wb=XLSX.utils.book_new();
   const rr=[['Status','Form','Item','Notes']];
   for(const f of formOrder){
     const px=getFormPrefix(f);
-    for(const it of rejected[f])        rr.push(['F',px,it.label,notesMap[it.label]||'']);
-    for(const it of pending[f])         rr.push(['P',px,it.label,notesMap[it.label]||'']);
-    for(const it of(submitted[f]||[]))  rr.push(['S',px,it.label,notesMap[it.label]||'']);
+    for(const it of rejected[f])        rr.push(['F',px,lbl(it.label),note(it.label)]);
+    for(const it of pending[f])         rr.push(['P',px,lbl(it.label),note(it.label)]);
+    for(const it of(submitted[f]||[]))  rr.push(['S',px,lbl(it.label),note(it.label)]);
   }
   const wsR=XLSX.utils.aoa_to_sheet(rr);
   wsR['!cols']=[{wch:8},{wch:30},{wch:100},{wch:60}];
@@ -590,9 +679,10 @@ function generateXlsx({sessionName,formOrder,rejected,pending,submitted}){
   const ih=['milestone_name','milestone_description','task_name','task_description','task_scheduled','task_use_time','task_duration','task_duration_unit','task_assignment','task_scheduled_comment','task_status','requirement_name','requirement_description','requirement_type','requirement_status','file_requirement_max','file_requirement_min','file_requirement_enforced'];
   const ir=[ih];
   const mkR=(px,it)=>{
-    const note = notesMap[it.label] || '';
+    const label = lbl(it.label);
+    const n = note(it.label);
     // Col L = prefix - label (note) if note exists, else prefix - label
-    const rn = (px ? px+' - '+it.label : it.label) + (note ? ' '+note : '');
+    const rn = (px ? px+' - '+label : label) + (n ? ' '+n : '');
     return['3. Crew COP Requirements',null,'4. COP Punch Items','(MasTec) Place any materials from a return visit here. If no return visit is required, Ontel will move the status of this task to "Cancelled".',null,false,null,'hours',null,null,'pending',rn,'','file','pending',1,1,false];
   };
   // Submitted items go to Report tab only — excluded from Import tab
@@ -611,17 +701,26 @@ function mkPara(runs,opts={}){const{numId,ilvl,spacing}=opts;let pPr='';if(numId
 function generateDocx({sessionName,formOrder,rejected,pending,submitted}){
   const includeNotes = document.getElementById('chkDocx').checked;
   const notesMap = includeNotes ? getNotesMap() : {};
+  const overrideMap = includeNotes ? getOverrideMap() : {};
 
   const numXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xB7;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr></w:lvl><w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="o"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
   let body='';
   body+=mkPara([{text:'Talonview Photo Report',bold:true,size:36,color:'1F3864'}],{spacing:{before:0,after:200}});
   if(sessionName)body+=mkPara([{text:'Session: ',bold:true,size:20,color:'444444'},{text:sessionName,size:20,color:'444444'}],{spacing:{before:0,after:160}});
   body+=mkPara([{text:'Generated: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),size:18,color:'888888'}],{spacing:{before:0,after:400}});
-  const blt=f=>`<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F3864"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xmlEsc(f.replace(/"/g,'').trim())}</w:t></w:r></w:p>`;
+  const blt=f=>{
+    const fc=f.replace(/"/g,'').trim();
+    const name=overrideMap[fc]||fc;
+    return `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F3864"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xmlEsc(name)}</w:t></w:r></w:p>`;
+  };
 
-  // Sub: original text normal, added note bold+italic appended
+  // Sub: overwritten (via Find & Replace) label, OR original text normal + added note bold+italic appended
   const sub=(lbl,col)=>{
+    const overwritten = overrideMap[lbl];
     const note = notesMap[lbl];
+    if (overwritten) {
+      return `<w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr><w:color w:val="${col}"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">${xmlEsc(overwritten)}</w:t></w:r></w:p>`;
+    }
     if(includeNotes && note) {
       return `<w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr><w:color w:val="${col}"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">${xmlEsc(lbl)} </w:t></w:r><w:r><w:rPr><w:b/><w:i/><w:color w:val="${col}"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">${xmlEsc(note)}</w:t></w:r></w:p>`;
     }
