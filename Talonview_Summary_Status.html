@@ -265,13 +265,24 @@
         const status = row[12];
         const eVal = (row[4] || '').toString().toUpperCase().trim();
         const jVal = (row[9] || '').toString().trim();
-        
+
         if (!formName) continue;
-        
+
         let eCat = 'OTHERS';
         if (eVal.includes('DOCUMENT')) {
           eCat = 'DOCUMENT UPLOAD';
         } else if (eVal.includes('PHOTO')) {
+          eCat = 'PHOTO REQUIREMENT';
+        }
+
+        // COVP / Houston override: these forms use inconsistent Title (Column E)
+        // labeling — some rows omit the "PHOTO REQUIREMENT" prefix entirely — so
+        // match on the Form name (H) or Title (E) containing COVP/HOUSTON instead,
+        // and always treat them as PHOTO REQUIREMENT.
+        const formNameUpperCovp = formName.toUpperCase();
+        if (formNameUpperCovp.includes('COVP') || eVal.includes('COVP') ||
+            formNameUpperCovp.includes('HOUSTON') || eVal.includes('HOUSTON') ||
+            formNameUpperCovp.includes('MICROWAVE')) {
           eCat = 'PHOTO REQUIREMENT';
         }
         
