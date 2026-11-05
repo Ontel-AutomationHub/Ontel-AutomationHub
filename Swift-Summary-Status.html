@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SWIFT REJECTIONS TMO STX MASTEC</title>
+  <title>TMO Swift Requirement List</title>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
-    :root{--bg:#eef1f7;--surface:#ffffff;--border:#dde2ec;--accent-ip:#2f6fed;--accent-p:#c97a00;--accent-b:#7c3aed;--accent-s:#1f9d63;--text:#1c2130;--text-muted:#9096a8;--text-dim:#4c5266;--green:#1f9d63;--card:#ffffff;}
+    :root{--bg:#eef1f7;--surface:#ffffff;--border:#dde2ec;--accent-ip:#2f6fed;--accent-p:#c97a00;--accent-s:#1f9d63;--text:#1c2130;--text-muted:#9096a8;--text-dim:#4c5266;--green:#1f9d63;--card:#ffffff;}
     *{box-sizing:border-box;margin:0;padding:0;}
     body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-height:100vh;overflow-x:hidden;}
     body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(47,111,237,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(47,111,237,.04) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
@@ -33,7 +33,6 @@
     .stat-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);}
     .stat.ip .stat-val{color:var(--accent-ip);}
     .stat.pending .stat-val{color:var(--accent-p);}
-    .stat.blank .stat-val{color:var(--accent-b);}
     .stat.submitted .stat-val{color:var(--accent-s);}
     .stat.forms .stat-val{color:var(--text-dim);}
     .session-bar{display:none;align-items:center;gap:12px;padding:12px 18px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:24px;font-size:11px;}
@@ -81,7 +80,6 @@
     .section-badge{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:4px;flex-shrink:0;}
     .badge-ip{background:rgba(47,111,237,.10);color:var(--accent-ip);border:1px solid rgba(47,111,237,.3);}
     .badge-p{background:rgba(201,122,0,.10);color:var(--accent-p);border:1px solid rgba(201,122,0,.3);}
-    .badge-b{background:rgba(124,58,237,.10);color:var(--accent-b);border:1px solid rgba(124,58,237,.3);}
     .badge-s{background:rgba(31,157,99,.10);color:var(--accent-s);border:1px solid rgba(31,157,99,.3);}
     .section-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:600;color:var(--text);flex:1;}
     .section-count{font-size:10px;color:var(--text-muted);letter-spacing:1px;}
@@ -95,7 +93,6 @@
     .item::before{content:'○';position:absolute;left:16px;font-size:8px;top:11px;color:var(--text-muted);}
     .item.ip::before{color:var(--accent-ip);content:'●';}
     .item.pending::before{color:var(--accent-p);content:'○';}
-    .item.blank::before{color:var(--accent-b);content:'◇';}
     .item.submitted::before{color:var(--accent-s);content:'◈';}
     .empty{text-align:center;padding:48px;color:var(--text-muted);font-size:12px;}
     /* Edited view */
@@ -111,7 +108,6 @@
     .edited-item::before{content:'○';position:absolute;left:16px;font-size:8px;top:11px;color:var(--text-muted);pointer-events:none;}
     .edited-item.ip::before{color:var(--accent-ip);content:'●';}
     .edited-item.pending::before{color:var(--accent-p);content:'○';}
-    .edited-item.blank::before{color:var(--accent-b);content:'◇';}
     .edited-item.submitted::before{color:var(--accent-s);content:'◈';}
     .added{color:#b8860b;background:rgba(245,230,66,.35);}
     ::-webkit-scrollbar{width:4px;}
@@ -145,7 +141,6 @@
   <div class="stats" id="stats">
     <div class="stat ip"><span class="stat-val" id="cntIP">0</span><span class="stat-label">In Progress</span></div>
     <div class="stat pending"><span class="stat-val" id="cntP">0</span><span class="stat-label">Pending</span></div>
-    <div class="stat blank"><span class="stat-val" id="cntB">0</span><span class="stat-label">Blank</span></div>
     <div class="stat submitted"><span class="stat-val" id="cntS">0</span><span class="stat-label">Submitted</span></div>
     <div class="stat forms"><span class="stat-val" id="cntForms">0</span><span class="stat-label">Tasks Affected</span></div>
   </div>
@@ -294,13 +289,13 @@ function makeEditable(container, originalText, cssClass) {
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-function buildEditedView({ formOrder, ip, pending, blank, submitted }) {
+function buildEditedView({ formOrder, ip, pending, submitted }) {
   const wrap = document.getElementById('editedWrap');
   wrap.innerHTML = '';
 
   function addSection(formList, bucket, badgeClass, heading, itemClass) {
     if (!formList.length) return;
-    const lbl = badgeClass === 'badge-ip' ? 'P' : (badgeClass === 'badge-p' ? 'P' : (badgeClass === 'badge-s' ? 'S' : 'B'));
+    const lbl = badgeClass === 'badge-s' ? 'S' : 'P';
     const sec = document.createElement('div');
     sec.className = 'edited-section';
     const hdr = document.createElement('div');
@@ -334,7 +329,6 @@ function buildEditedView({ formOrder, ip, pending, blank, submitted }) {
 
   addSection(formOrder.filter(f => ip[f].length > 0),      ip,      'badge-ip', 'The following photos need corrections and/or additional photos', 'ip');
   addSection(formOrder.filter(f => pending[f].length > 0), pending, 'badge-p',  'The following photos are not yet received as of this review', 'pending');
-  addSection(formOrder.filter(f => blank[f].length > 0),   blank,   'badge-b',  'The following photos have no status set in Swift', 'blank');
   addSection(formOrder.filter(f => submitted[f].length > 0), submitted, 'badge-s', 'The following photos were submitted and are pending approval', 'submitted');
   restoreSavedNotes();
 }
@@ -477,7 +471,7 @@ function parseRow(line) {
   cols.push(cur); return cols;
 }
 
-function initGroup(ip,pending,blank,submitted,name,order) { if(!ip[name]){ip[name]=[];pending[name]=[];blank[name]=[];submitted[name]=[];order.push(name);} }
+function initGroup(ip,pending,submitted,name,order) { if(!ip[name]){ip[name]=[];pending[name]=[];submitted[name]=[];order.push(name);} }
 
 // Sort tasks by the leading number in column C (task_name), e.g. "1.", "2.", "10." — numeric, not alphabetical
 function sortFormOrder(order) {
@@ -492,7 +486,7 @@ function sortFormOrder(order) {
 }
 
 // Column A (idx 0) = milestone_name (must be "2. Site Photos"), Column C (idx 2) = task_name, Column L (idx 11) = requirement_name, Column O (idx 14) = requirement_status
-function classifyRow(cols, ip, pending, blank, submitted, order) {
+function classifyRow(cols, ip, pending, submitted, order) {
   if (cols.length < 15) return;
   const milestoneName = (cols[0]  || '').trim();
   if (milestoneName !== '2. Site Photos') return;
@@ -500,52 +494,49 @@ function classifyRow(cols, ip, pending, blank, submitted, order) {
   const reqName   = (cols[11] || '').trim();
   const reqStatus = (cols[14] || '').trim().toLowerCase();
   if (!reqName) return;
-  if (reqStatus !== 'in_progress' && reqStatus !== 'pending' && reqStatus !== 'submitted' && reqStatus !== '') return;
-  initGroup(ip, pending, blank, submitted, taskName, order);
+  if (reqStatus !== 'in_progress' && reqStatus !== 'pending' && reqStatus !== 'submitted') return;
+  initGroup(ip, pending, submitted, taskName, order);
   if (reqStatus === 'in_progress') ip[taskName].push({label: reqName});
   else if (reqStatus === 'pending') pending[taskName].push({label: reqName});
-  else if (reqStatus === 'submitted') submitted[taskName].push({label: reqName});
-  else blank[taskName].push({label: reqName});
+  else submitted[taskName].push({label: reqName});
 }
 
 // ── XLSX (already-parsed rows) parser ──────────────────────────────────────────
 function parseSwiftRows(rows, baseName) {
-  const ip={},pending={},blank={},submitted={},fo=[];
+  const ip={},pending={},submitted={},fo=[];
   for (let i=1;i<rows.length;i++) { // skip header row
     const row = rows[i];
-    classifyRow(row.map(v=>String(v)), ip, pending, blank, submitted, fo);
+    classifyRow(row.map(v=>String(v)), ip, pending, submitted, fo);
   }
-  reportData={sessionName:baseName,formOrder:sortFormOrder(fo),ip,pending,blank,submitted};
+  reportData={sessionName:baseName,formOrder:sortFormOrder(fo),ip,pending,submitted};
   renderResults(reportData);
 }
 
 // ── CSV parser ──────────────────────────────────────────────────────────────────
 function parseSwiftCsv(csvText, baseName) {
   const lines=csvText.split(/\r\n|\n/).filter(l=>l.length>0);
-  const ip={},pending={},blank={},submitted={},fo=[];
+  const ip={},pending={},submitted={},fo=[];
   for (let i=1;i<lines.length;i++) { // skip header row
     const cols = parseRow(lines[i]);
-    classifyRow(cols, ip, pending, blank, submitted, fo);
+    classifyRow(cols, ip, pending, submitted, fo);
   }
-  reportData={sessionName:baseName,formOrder:sortFormOrder(fo),ip,pending,blank,submitted};
+  reportData={sessionName:baseName,formOrder:sortFormOrder(fo),ip,pending,submitted};
   renderResults(reportData);
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-function renderResults({sessionName,formOrder,ip,pending,blank,submitted}) {
-  let tIP=0,tP=0,tB=0,tS=0; const aff=new Set();
+function renderResults({sessionName,formOrder,ip,pending,submitted}) {
+  let tIP=0,tP=0,tS=0; const aff=new Set();
   for(const f of formOrder){
     if(ip[f].length){tIP+=ip[f].length;aff.add(f);}
     if(pending[f].length){tP+=pending[f].length;aff.add(f);}
-    if(blank[f].length){tB+=blank[f].length;aff.add(f);}
     if(submitted[f].length){tS+=submitted[f].length;aff.add(f);}
   }
   if(sessionName){document.getElementById('sessionName').textContent=sessionName;sessionBar.classList.add('show');}
   document.getElementById('cntIP').textContent=tIP;
   document.getElementById('cntP').textContent=tP;
-  document.getElementById('cntB').textContent=tB;
   document.getElementById('cntS').textContent=tS;
   document.getElementById('cntForms').textContent=aff.size;
   statsEl.classList.add('show'); toolbar.classList.add('show');
@@ -553,7 +544,7 @@ function renderResults({sessionName,formOrder,ip,pending,blank,submitted}) {
   let html=''; const lines=[];
   function sec(total,flist,bucket,bc,heading,ic){
     if(!flist.length)return;
-    const lbl=bc==='badge-ip'?'P':(bc==='badge-p'?'P':(bc==='badge-s'?'S':'B'));
+    const lbl=bc==='badge-s'?'S':'P';
     html+=`<div class="section animate"><div class="section-header"><span class="section-badge ${bc}">(${lbl})</span><span class="section-title">${heading}</span><span class="section-count">${total} item${total!==1?'s':''}</span></div>`;
     lines.push(`(${lbl}) ${heading}:`);
     for(const f of flist){
@@ -567,9 +558,8 @@ function renderResults({sessionName,formOrder,ip,pending,blank,submitted}) {
   }
   sec(tIP,formOrder.filter(f=>ip[f].length>0),      ip,      'badge-ip','The following photos need corrections and/or additional photos','ip');
   sec(tP, formOrder.filter(f=>pending[f].length>0), pending, 'badge-p', 'The following photos are not yet received as of this review','pending');
-  sec(tB, formOrder.filter(f=>blank[f].length>0),   blank,   'badge-b', 'The following photos have no status set in Swift','blank');
   sec(tS, formOrder.filter(f=>submitted[f].length>0), submitted, 'badge-s', 'The following photos were submitted and are pending approval','submitted');
-  if(!tIP&&!tP&&!tB&&!tS) html='<div class="empty">No in-progress, pending, blank, or submitted items found in this file.</div>';
+  if(!tIP&&!tP&&!tS) html='<div class="empty">No in-progress, pending, or submitted items found in this file.</div>';
   outputEl.innerHTML=html;
   rawText=lines.join('\n');
 }
@@ -626,7 +616,7 @@ function getOverrideMap() {
 }
 
 // ── Excel ─────────────────────────────────────────────────────────────────────
-function generateXlsx({sessionName,formOrder,ip,pending,blank,submitted}){
+function generateXlsx({sessionName,formOrder,ip,pending,submitted}){
   const includeNotes = document.getElementById('chkXlsx').checked;
   const notesMap = includeNotes ? getNotesMap() : {};
   const overrideMap = includeNotes ? getOverrideMap() : {};
@@ -639,7 +629,6 @@ function generateXlsx({sessionName,formOrder,ip,pending,blank,submitted}){
     const fc=overrideMap[f.replace(/"/g,'').trim()]||f.replace(/"/g,'').trim();
     for(const it of ip[f])        rr.push(['P',fc,lbl(it.label),note(it.label)]);
     for(const it of pending[f])   rr.push(['P',fc,lbl(it.label),note(it.label)]);
-    for(const it of blank[f])     rr.push(['B',fc,lbl(it.label),note(it.label)]);
     for(const it of submitted[f]) rr.push(['S',fc,lbl(it.label),note(it.label)]);
   }
   const wsR=XLSX.utils.aoa_to_sheet(rr);
@@ -652,14 +641,14 @@ function generateXlsx({sessionName,formOrder,ip,pending,blank,submitted}){
 function xmlEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');}
 function mkPara(runs,opts={}){const{numId,ilvl,spacing}=opts;let pPr='';if(numId!==undefined)pPr+=`<w:numPr><w:ilvl w:val="${ilvl||0}"/><w:numId w:val="${numId}"/></w:numPr>`;if(spacing)pPr+=`<w:spacing w:before="${spacing.before||0}" w:after="${spacing.after||0}"/>`;const px=pPr?`<w:pPr>${pPr}</w:pPr>`:'';const rx=runs.map(r=>{let rp='';if(r.bold)rp+='<w:b/>';if(r.italic)rp+='<w:i/>';if(r.color)rp+=`<w:color w:val="${r.color}"/>`;if(r.size)rp+=`<w:sz w:val="${r.size}"/><w:szCs w:val="${r.size}"/>`;return`<w:r>${rp?`<w:rPr>${rp}</w:rPr>`:''}<w:t xml:space="preserve">${xmlEsc(r.text)}</w:t></w:r>`;}).join('');return`<w:p>${px}${rx}</w:p>`;}
 
-function generateDocx({sessionName,formOrder,ip,pending,blank,submitted}){
+function generateDocx({sessionName,formOrder,ip,pending,submitted}){
   const includeNotes = document.getElementById('chkDocx').checked;
   const notesMap = includeNotes ? getNotesMap() : {};
   const overrideMap = includeNotes ? getOverrideMap() : {};
 
   const numXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xB7;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr></w:lvl><w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="o"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
   let body='';
-  body+=mkPara([{text:'Swift Rejections Report — TMO STX Mastec',bold:true,size:36,color:'1F3864'}],{spacing:{before:0,after:200}});
+  body+=mkPara([{text:'TMO Swift Requirement List',bold:true,size:36,color:'1F3864'}],{spacing:{before:0,after:200}});
   if(sessionName)body+=mkPara([{text:'File: ',bold:true,size:20,color:'444444'},{text:sessionName,size:20,color:'444444'}],{spacing:{before:0,after:160}});
   body+=mkPara([{text:'Generated: '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}),size:18,color:'888888'}],{spacing:{before:0,after:400}});
   const blt=f=>{
@@ -683,7 +672,6 @@ function generateDocx({sessionName,formOrder,ip,pending,blank,submitted}){
 
   const fIP=formOrder.filter(f=>ip[f].length>0);     if(fIP.length){body+=mkPara([{text:'(P) The following photos need corrections and/or additional photos:',bold:true,size:24,color:'1F5AC9'}],{spacing:{before:200,after:160}});for(const f of fIP){body+=blt(f);for(const it of ip[f])body+=sub(it.label,'1F5AC9');}body+=mkPara([{text:''}],{spacing:{before:0,after:200}});}
   const fP =formOrder.filter(f=>pending[f].length>0);if(fP.length){ body+=mkPara([{text:'(P) The following photos are not yet received as of this review:',bold:true,size:24,color:'B36B00'}],{spacing:{before:200,after:160}});for(const f of fP){body+=blt(f);for(const it of pending[f])body+=sub(it.label,'8A5300');}body+=mkPara([{text:''}],{spacing:{before:0,after:200}});}
-  const fB =formOrder.filter(f=>blank[f].length>0);  if(fB.length){ body+=mkPara([{text:'(B) The following photos have no status set in Swift:',bold:true,size:24,color:'7C3AED'}],{spacing:{before:200,after:160}});for(const f of fB){body+=blt(f);for(const it of blank[f])body+=sub(it.label,'7C3AED');}body+=mkPara([{text:''}],{spacing:{before:0,after:200}});}
   const fS =formOrder.filter(f=>submitted[f].length>0);if(fS.length){body+=mkPara([{text:'(S) The following photos were submitted and are pending approval:',bold:true,size:24,color:'1F9D63'}],{spacing:{before:200,after:160}});for(const f of fS){body+=blt(f);for(const it of submitted[f])body+=sub(it.label,'177A4E');}}
   const docXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
   const zip=new JSZip();
