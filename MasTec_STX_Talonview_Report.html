@@ -55,6 +55,12 @@
     .btn.success{background:var(--green);border-color:var(--green);color:#000;}
     .btn.view-btn{border-color:var(--border);color:var(--text-muted);}
     .btn.view-btn.active{background:var(--accent-blue);border-color:var(--accent-blue);color:#000;font-weight:500;}
+    .block-msg{display:none;color:#ff4d4d;font-size:11px;letter-spacing:.4px;line-height:1.7;margin:-14px 0 20px;}
+    .block-msg.show{display:block;}
+    .gc-warn{color:#ff4d4d;font-size:10px;letter-spacing:.5px;display:none;}
+    .gc-warn.show{display:inline;}
+    .needs-rename{outline:2px solid #ff4d4d;outline-offset:2px;border-radius:4px;}
+    .needs-rename:not(input)::before{content:'● RENAME ';color:#ff4d4d;font-size:10px;font-weight:600;letter-spacing:.5px;}
     .btn.reset-btn{background:rgba(255,77,77,.12);border-color:rgba(255,77,77,.3);color:var(--accent-f);}
     .btn.reset-btn:hover{background:rgba(255,77,77,.2);border-color:var(--accent-f);color:var(--accent-f);}
     /* Notes bar */
@@ -155,6 +161,14 @@
       <button class="btn view-btn" id="btnViewEdited" onclick="switchView('edited')">Edited</button>
     </div>
   </div>
+  <div class="block-msg" id="blockMsg"></div>
+  <!-- GC name bar — goes inside the ( ) of task_description (col D) in the Excel Import tab -->
+  <div class="fr-bar" id="gcBar">
+    <label>GC name (Excel col D):</label>
+    <input type="text" id="gcName" value="" placeholder="MasTec">
+    <span class="gc-warn" id="gcWarn">● Required — Excel download is blocked until filled</span>
+    <span class="fr-status" style="margin-left:0">Used inside the ( ) of the task description</span>
+  </div>
   <!-- Notes checkbox bar — shown only in Edited view -->
   <div class="notes-bar" id="notesBar">
     <span class="notes-label">Do you want to add the notes in:</span>
@@ -204,6 +218,86 @@ function saveCurrentNotes() {
   });
 }
 
+// ── Mandatory rename: "ANTENNA #N" / "RRH #N" ────────────────────────────────
+const RENAME_RE = /\b(ANTENNA|RRH)\s*#\s*\d+/i;
+
+function allItemLabels(rd) {
+  const out = [];
+  for (const f of rd.formOrder) {
+    for (const b of [rd.rejected, rd.pending, rd.submitted]) {
+      for (const it of (b[f] || [])) out.push(it.label);
+    }
+  }
+  return out;
+}
+
+// label → current (possibly edited) text
+function currentTextFor(label) {
+  const data = savedNotesMap[label];
+  if (!data) return label;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = data.innerHTML;
+  return tmp.textContent.trim();
+}
+
+// Labels that originally contain ANTENNA #N / RRH #N and still do
+function getPendingRenames() {
+  if (currentView === 'edited') saveCurrentNotes();
+  return [...new Set(allItemLabels(reportData))]
+    .filter(l => RENAME_RE.test(l) && RENAME_RE.test(currentTextFor(l)));
+}
+
+// Full renamed text for every ANTENNA #N / RRH #N item (used to overwrite in exports)
+function getRenameMap() {
+  if (currentView === 'edited') saveCurrentNotes();
+  const map = {};
+  for (const l of new Set(allItemLabels(reportData))) {
+    if (!RENAME_RE.test(l)) continue;
+    const cur = currentTextFor(l);
+    if (cur && cur !== l) map[l] = cur;
+  }
+  return map;
+}
+
+// Live red mark on every item still containing ANTENNA #N / RRH #N
+function refreshRenameMarks() {
+  document.querySelectorAll('#editedWrap .edited-item-content').forEach(el => {
+    const orig = el.dataset.original || '';
+    const unchanged = RENAME_RE.test(orig) && RENAME_RE.test(el.textContent);
+    el.classList.toggle('needs-rename', unchanged);
+  });
+}
+document.getElementById('editedWrap').addEventListener('input', refreshRenameMarks);
+
+// Red explanation of exactly what is blocking the download(s)
+function updateBlockers() {
+  const msg = document.getElementById('blockMsg');
+  const gcWarn = document.getElementById('gcWarn');
+  if (!reportData) { msg.classList.remove('show'); gcWarn.classList.remove('show'); return; }
+  const gcBlank = !document.getElementById('gcName').value.replace(/[()]/g,'').trim();
+  const pend = getPendingRenames();
+  const lines = [];
+  if (pend.length) lines.push('● Word &amp; Excel blocked: ' + pend.length + ' item' + (pend.length === 1 ? '' : 's') + ' still contain "ANTENNA #N" / "RRH #N" — rename them in the Edited tab (marked in red).');
+  if (gcBlank) lines.push('● Excel blocked: GC name is blank — fill it in below.');
+  msg.innerHTML = lines.join('<br>');
+  msg.classList.toggle('show', lines.length > 0);
+  gcWarn.classList.toggle('show', gcBlank);
+}
+document.getElementById('gcName').addEventListener('input', updateBlockers);
+document.getElementById('editedWrap').addEventListener('input', updateBlockers);
+
+// Returns true if download may proceed; otherwise flags fields and sends user to Edited tab
+function guardRenames() {
+  const pend = getPendingRenames();
+  if (!pend.length) return true;
+  switchView('edited');
+  refreshRenameMarks();
+  const first = document.querySelector('#editedWrap .needs-rename');
+  if (first) first.scrollIntoView({behavior:'smooth', block:'center'});
+  alert(pend.length + ' item' + (pend.length === 1 ? '' : 's') + ' still contain "ANTENNA #N" or "RRH #N".\n\nChange the name (replace the numbering) in the Edited tab before downloading.');
+  return false;
+}
+
 // ── View switcher ─────────────────────────────────────────────────────────────
 function switchView(v) {
   // Save notes before leaving edited view
@@ -225,7 +319,9 @@ function switchView(v) {
     } else {
       restoreSavedNotes();
     }
+    refreshRenameMarks();
   }
+  updateBlockers();
 }
 
 // ── Edited view builder ───────────────────────────────────────────────────────
@@ -334,6 +430,8 @@ function findReplaceAll() {
     if (fieldCount > 0) frReplacedLabels.add(el.dataset.original);
   });
 
+  refreshRenameMarks();
+  updateBlockers();
   statusEl.textContent = totalMatches > 0
     ? `Replaced ${totalMatches} match${totalMatches === 1 ? '' : 'es'} across ${fieldsChanged} field${fieldsChanged === 1 ? '' : 's'}.`
     : 'No matches found.';
@@ -440,17 +538,30 @@ fileInput.addEventListener('change', e => { if (e.target.files.length) handleFil
 btnReset.addEventListener('click', () => {
   outputEl.innerHTML = '';
   document.getElementById('editedWrap').innerHTML = '';
-  statsEl.classList.remove('show'); toolbar.classList.remove('show'); sessionBar.classList.remove('show');
+  statsEl.classList.remove('show'); toolbar.classList.remove('show'); document.getElementById('gcBar').classList.remove('show'); sessionBar.classList.remove('show');
   dropZone.style.display = ''; fileInput.value = '';
   rawText = ''; reportData = null; savedNotesMap = {};
   frReplacedLabels.clear();
+  document.getElementById('gcName').value = '';
+  document.getElementById('blockMsg').classList.remove('show'); document.getElementById('gcWarn').classList.remove('show');
   document.getElementById('frFind').value = ''; document.getElementById('frReplace').value = '';
   document.getElementById('frStatus').textContent = '';
   switchView('report');
 });
 
-btnDocx.addEventListener('click', () => { if (reportData) generateDocx(reportData); });
-btnXlsx.addEventListener('click', () => { if (reportData) generateXlsx(reportData); });
+btnDocx.addEventListener('click', () => { if (reportData && guardRenames()) generateDocx(reportData); });
+btnXlsx.addEventListener('click', () => {
+  if (!reportData) return;
+  const gcEl = document.getElementById('gcName');
+  if (!gcEl.value.replace(/[()]/g,'').trim()) {
+    gcEl.classList.add('needs-rename');
+    gcEl.focus();
+    alert('Enter the GC name first (e.g. MasTec). It goes inside the ( ) of the task description in column D.');
+    return;
+  }
+  if (guardRenames()) generateXlsx(reportData);
+});
+document.getElementById('gcName').addEventListener('input', e => e.target.classList.remove('needs-rename'));
 
 function handleFile(file) {
   dropZone.style.display = 'none';
@@ -574,7 +685,7 @@ function renderResults({sessionName,formOrder,rejected,pending,submitted}) {
   document.getElementById('cntF').textContent=tF;
   document.getElementById('cntP').textContent=tP;
   document.getElementById('cntForms').textContent=aff.size;
-  statsEl.classList.add('show'); toolbar.classList.add('show');
+  statsEl.classList.add('show'); toolbar.classList.add('show'); document.getElementById('gcBar').classList.add('show'); setTimeout(updateBlockers,0);
 
   let html=''; const lines=[];
   function sec(total,flist,bucket,bc,heading,ic){
@@ -660,8 +771,9 @@ function getOverrideMap() {
 function generateXlsx({sessionName,formOrder,rejected,pending,submitted}){
   const includeNotes = document.getElementById('chkXlsx').checked;
   const notesMap = includeNotes ? getNotesMap() : {};
-  const overrideMap = includeNotes ? getOverrideMap() : {};
+  const overrideMap = Object.assign({}, includeNotes ? getOverrideMap() : {}, getRenameMap());
   const lbl  = l => overrideMap[l] || l;
+  const gcName = (document.getElementById('gcName').value || '').replace(/[()]/g,'').trim();
   const note = l => overrideMap[l] ? '' : (notesMap[l] || ''); // overwritten items don't also get an appended note
 
   const wb=XLSX.utils.book_new();
@@ -683,7 +795,7 @@ function generateXlsx({sessionName,formOrder,rejected,pending,submitted}){
     const n = note(it.label);
     // Col L = prefix - label (note) if note exists, else prefix - label
     const rn = (px ? px+' - '+label : label) + (n ? ' '+n : '');
-    return['3. Crew COP Requirements',null,'4. COP Punch Items','(MasTec) Place any materials from a return visit here. If no return visit is required, Ontel will move the status of this task to "Cancelled".',null,false,null,'hours',null,null,'pending',rn,'','file','pending',1,1,false];
+    return['3. Crew COP Requirements',null,'4. COP Punch Items','('+gcName+') Place any materials from a return visit here. If no return visit is required, Ontel will move the status of this task to "Cancelled".',null,false,null,'hours',null,null,'pending',rn,'','file','pending',1,1,false];
   };
   // Submitted items go to Report tab only — excluded from Import tab
   for(const f of formOrder){const px=getFormPrefix(f);for(const it of rejected[f])ir.push(mkR(px,it));for(const it of pending[f])ir.push(mkR(px,it));}
@@ -701,7 +813,7 @@ function mkPara(runs,opts={}){const{numId,ilvl,spacing}=opts;let pPr='';if(numId
 function generateDocx({sessionName,formOrder,rejected,pending,submitted}){
   const includeNotes = document.getElementById('chkDocx').checked;
   const notesMap = includeNotes ? getNotesMap() : {};
-  const overrideMap = includeNotes ? getOverrideMap() : {};
+  const overrideMap = Object.assign({}, includeNotes ? getOverrideMap() : {}, getRenameMap());
 
   const numXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#xB7;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr></w:lvl><w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="o"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="1440" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
   let body='';
